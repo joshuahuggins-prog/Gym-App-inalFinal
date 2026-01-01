@@ -112,7 +112,7 @@ const HomePage = () => {
         id: ex.id,
         name: ex.name,
         repScheme: ex.repScheme,
-        sets: ex.sets || [],
+        sets: ex.setsData || [],
         notes: ex.userNotes || ''
       }))
     };
