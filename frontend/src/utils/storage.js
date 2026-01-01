@@ -5,7 +5,10 @@ const STORAGE_KEYS = {
   SETTINGS: 'gym_settings',
   BODY_WEIGHT: 'gym_body_weight',
   PERSONAL_RECORDS: 'gym_personal_records',
-  VIDEO_LINKS: 'gym_video_links'
+  VIDEO_LINKS: 'gym_video_links',
+  PROGRAMMES: 'gym_programmes',
+  EXERCISES: 'gym_exercises',
+  PROGRESSION_SETTINGS: 'gym_progression_settings'
 };
 
 // Get data from localStorage
@@ -133,7 +136,7 @@ export const updateVideoLink = (exerciseName, url) => {
   return setStorageData(STORAGE_KEYS.VIDEO_LINKS, links);
 };
 
-// Default video links (suggested YouTube videos)
+// Default video links
 const getDefaultVideoLinks = () => ({
   'weighted_dips': 'https://www.youtube.com/watch?v=2z8JmcrW-As',
   'incline_db_bench': 'https://www.youtube.com/watch?v=8iPEnn-ltC8',
@@ -147,6 +150,102 @@ const getDefaultVideoLinks = () => ({
   'incline_hammer_curls': 'https://www.youtube.com/watch?v=zC3nLlEvin4',
   'face_pulls': 'https://www.youtube.com/watch?v=rep-qVOkqgk'
 });
+
+// Programmes Management
+export const getProgrammes = () => {
+  const programmes = getStorageData(STORAGE_KEYS.PROGRAMMES);
+  if (!programmes || programmes.length === 0) {
+    // Initialize with default programmes from workoutData
+    const { WORKOUT_A, WORKOUT_B } = require('../data/workoutData');
+    const defaultProgrammes = [WORKOUT_A, WORKOUT_B];
+    setStorageData(STORAGE_KEYS.PROGRAMMES, defaultProgrammes);
+    return defaultProgrammes;
+  }
+  return programmes;
+};
+
+export const saveProgramme = (programme) => {
+  const programmes = getProgrammes();
+  const existing = programmes.find(p => p.type === programme.type);
+  
+  if (existing) {
+    const updated = programmes.map(p => p.type === programme.type ? programme : p);
+    return setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
+  } else {
+    programmes.push(programme);
+    return setStorageData(STORAGE_KEYS.PROGRAMMES, programmes);
+  }
+};
+
+export const deleteProgramme = (type) => {
+  const programmes = getProgrammes();
+  const filtered = programmes.filter(p => p.type !== type);
+  return setStorageData(STORAGE_KEYS.PROGRAMMES, filtered);
+};
+
+// Exercises Management
+export const getExercises = () => {
+  const exercises = getStorageData(STORAGE_KEYS.EXERCISES);
+  if (!exercises || exercises.length === 0) {
+    // Initialize with default exercises
+    const programmes = getProgrammes();
+    const allExercises = [];
+    
+    programmes.forEach(prog => {
+      prog.exercises.forEach(ex => {
+        if (!allExercises.find(e => e.id === ex.id)) {
+          allExercises.push({
+            ...ex,
+            assignedTo: [prog.type]
+          });
+        } else {
+          const existing = allExercises.find(e => e.id === ex.id);
+          if (!existing.assignedTo.includes(prog.type)) {
+            existing.assignedTo.push(prog.type);
+          }
+        }
+      });
+    });
+    
+    setStorageData(STORAGE_KEYS.EXERCISES, allExercises);
+    return allExercises;
+  }
+  return exercises;
+};
+
+export const saveExercise = (exercise) => {
+  const exercises = getExercises();
+  const existing = exercises.find(e => e.id === exercise.id);
+  
+  if (existing) {
+    const updated = exercises.map(e => e.id === exercise.id ? exercise : e);
+    return setStorageData(STORAGE_KEYS.EXERCISES, updated);
+  } else {
+    exercises.push(exercise);
+    return setStorageData(STORAGE_KEYS.EXERCISES, exercises);
+  }
+};
+
+export const deleteExercise = (id) => {
+  const exercises = getExercises();
+  const filtered = exercises.filter(e => e.id !== id);
+  return setStorageData(STORAGE_KEYS.EXERCISES, filtered);
+};
+
+// Progression Settings
+export const getProgressionSettings = () => {
+  return getStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS) || {
+    globalIncrementLbs: 5,
+    globalIncrementKg: 2.5,
+    rptSet2Percentage: 90,
+    rptSet3Percentage: 80,
+    exerciseSpecific: {}
+  };
+};
+
+export const updateProgressionSettings = (settings) => {
+  return setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, settings);
+};
 
 // Export/Import CSV
 export const exportToCSV = () => {
