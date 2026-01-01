@@ -10,15 +10,52 @@ import SettingsPage from './pages/SettingsPage';
 import ImportExportPage from './pages/ImportExportPage';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { Toaster } from './components/ui/sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
+import { Button } from './components/ui/button';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [hasUnsavedData, setHasUnsavedData] = useState(false);
+  const [showNavigationWarning, setShowNavigationWarning] = useState(false);
+  const [pendingPage, setPendingPage] = useState(null);
+
+  const handleNavigate = (page) => {
+    // If on home page with unsaved data, show warning
+    if (currentPage === 'home' && hasUnsavedData && page !== 'home') {
+      setPendingPage(page);
+      setShowNavigationWarning(true);
+    } else {
+      setCurrentPage(page);
+      if (page !== 'home') {
+        setHasUnsavedData(false);
+      }
+    }
+  };
+
+  const handleConfirmNavigation = () => {
+    setCurrentPage(pendingPage);
+    setHasUnsavedData(false);
+    setShowNavigationWarning(false);
+    setPendingPage(null);
+  };
+
+  const handleCancelNavigation = () => {
+    setShowNavigationWarning(false);
+    setPendingPage(null);
+  };
+
+  const handleWorkoutDataChange = (hasData) => {
+    setHasUnsavedData(hasData);
+  };
+
+  const handleWorkoutSaved = () => {
+    setHasUnsavedData(false);
+  };
 
   const renderPage = () => {
     switch (currentPage) {
       case 'home':
-        return <HomePage />;
+        return <HomePage onDataChange={handleWorkoutDataChange} onSaved={handleWorkoutSaved} />;
       case 'history':
         return <HistoryPage />;
       case 'stats':
@@ -34,7 +71,7 @@ const App = () => {
       case 'import-export':
         return <ImportExportPage />;
       default:
-        return <HomePage />;
+        return <HomePage onDataChange={handleWorkoutDataChange} onSaved={handleWorkoutSaved} />;
     }
   };
 
