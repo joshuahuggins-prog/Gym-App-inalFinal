@@ -67,8 +67,9 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
     
     // Auto-calculate RPT weights for subsequent sets
     if (exercise.repScheme === 'RPT' && setIndex === 0) {
+      const progressionSettings = getProgressionSettings();
       for (let i = 1; i < newSets.length; i++) {
-        newSets[i].weight = calculateRPTWeights(newSets[0].weight, i + 1);
+        newSets[i].weight = calculateRPTWeights(newSets[0].weight, i + 1, progressionSettings);
       }
     }
     
