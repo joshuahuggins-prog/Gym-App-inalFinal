@@ -131,10 +131,15 @@ export const EXERCISE_ALTERNATIVES = {
 };
 
 // Helper functions
-export const calculateRPTWeights = (topSetWeight, setNumber) => {
+export const calculateRPTWeights = (topSetWeight, setNumber, progressionSettings = null) => {
   if (setNumber === 1) return topSetWeight;
-  if (setNumber === 2) return Math.round((topSetWeight * 0.9) / 2.5) * 2.5;
-  if (setNumber === 3) return Math.round((topSetWeight * 0.8) / 2.5) * 2.5;
+  
+  // Use custom progression settings if provided
+  const set2Percentage = progressionSettings?.rptSet2Percentage || 90;
+  const set3Percentage = progressionSettings?.rptSet3Percentage || 80;
+  
+  if (setNumber === 2) return Math.round((topSetWeight * (set2Percentage / 100)) / 2.5) * 2.5;
+  if (setNumber === 3) return Math.round((topSetWeight * (set3Percentage / 100)) / 2.5) * 2.5;
   return topSetWeight;
 };
 
