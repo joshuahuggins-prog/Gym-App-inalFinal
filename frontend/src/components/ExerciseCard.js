@@ -285,12 +285,17 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                   </div>
                 </div>
 
-                {exercise.repScheme === 'RPT' && index === 0 && set.weight > 0 && (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Auto: Set 2 = {calculateRPTWeights(set.weight, 2)}{weightUnit}, 
-                    Set 3 = {calculateRPTWeights(set.weight, 3)}{weightUnit}
-                  </div>
-                )}
+                {exercise.repScheme === 'RPT' && index === 0 && set.weight > 0 && (() => {
+                  const progressionSettings = getProgressionSettings();
+                  const set2Weight = calculateRPTWeights(set.weight, 2, progressionSettings);
+                  const set3Weight = calculateRPTWeights(set.weight, 3, progressionSettings);
+                  return (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Auto: Set 2 = {set2Weight}{weightUnit}, 
+                      Set 3 = {set3Weight}{weightUnit}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
