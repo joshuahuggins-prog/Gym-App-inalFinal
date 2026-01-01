@@ -91,43 +91,43 @@ const App = () => {
                 icon={<Home className="w-5 h-5" />}
                 label="Today"
                 active={currentPage === 'home'}
-                onClick={() => setCurrentPage('home')}
+                onClick={() => handleNavigate('home')}
               />
               <NavButton
                 icon={<History className="w-5 h-5" />}
                 label="History"
                 active={currentPage === 'history'}
-                onClick={() => setCurrentPage('history')}
+                onClick={() => handleNavigate('history')}
               />
               <NavButton
                 icon={<TrendingUp className="w-5 h-5" />}
                 label="Progress"
                 active={currentPage === 'progress'}
-                onClick={() => setCurrentPage('progress')}
+                onClick={() => handleNavigate('progress')}
               />
               <NavButton
                 icon={<FileText className="w-5 h-5" />}
                 label="Programmes"
                 active={currentPage === 'programmes'}
-                onClick={() => setCurrentPage('programmes')}
+                onClick={() => handleNavigate('programmes')}
               />
               <NavButton
                 icon={<Dumbbell className="w-5 h-5" />}
                 label="Exercises"
                 active={currentPage === 'exercises'}
-                onClick={() => setCurrentPage('exercises')}
+                onClick={() => handleNavigate('exercises')}
               />
               <NavButton
                 icon={<Settings className="w-5 h-5" />}
                 label="Settings"
                 active={currentPage === 'settings'}
-                onClick={() => setCurrentPage('settings')}
+                onClick={() => handleNavigate('settings')}
               />
               <NavButton
                 icon={<Download className="w-5 h-5" />}
                 label="Data"
                 active={currentPage === 'import-export'}
-                onClick={() => setCurrentPage('import-export')}
+                onClick={() => handleNavigate('import-export')}
               />
             </div>
           </div>
