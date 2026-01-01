@@ -105,6 +105,9 @@ const StatsPage = () => {
 
   const calendarData = getCalendarData();
     const workouts = getWorkouts();
+  // Calendar Heatmap (12 weeks)
+  const getCalendarData = () => {
+    const workouts = getWorkouts();
     const weeks = [];
     const today = new Date();
     
