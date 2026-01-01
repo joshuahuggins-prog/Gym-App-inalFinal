@@ -1,66 +1,92 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Calendar } from 'lucide-react';
+import { TrendingUp, Calendar, TrendingDown, Award } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Badge } from '../components/ui/badge';
-import { getWorkouts } from '../utils/storage';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { getWorkouts, getExercises } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
 
 const ProgressPage = () => {
   const { weightUnit } = useSettings();
-  const [dipsData, setDipsData] = useState([]);
-  const [chinupsData, setChinupsData] = useState([]);
-  const [timeRange, setTimeRange] = useState('all'); // all, 3m, 6m, 1y
+  const [selectedExercise1, setSelectedExercise1] = useState('weighted_dips');
+  const [selectedExercise2, setSelectedExercise2] = useState('weighted_chinups');
+  const [exerciseData, setExerciseData] = useState({});
+  const [exercises, setExercises] = useState([]);
+  const [timeRange, setTimeRange] = useState('all');
+  const [progressionStats, setProgressionStats] = useState({ most: null, least: null });
 
   useEffect(() => {
-    loadProgressData();
+    loadData();
   }, []);
 
-  const loadProgressData = () => {
+  const loadData = () => {
     const workouts = getWorkouts();
+    const availableExercises = getExercises();
+    setExercises(availableExercises);
     
-    // Extract Weighted Dips data
-    const dips = [];
-    const chinups = [];
-
+    // Extract data for all exercises
+    const dataMap = {};
+    
     workouts.reverse().forEach(workout => {
       const date = new Date(workout.date).toLocaleDateString('en-US', { 
         month: 'short', 
         day: 'numeric' 
       });
 
-      // Find Weighted Dips
-      const dipsExercise = workout.exercises.find(ex => 
-        ex.name.toLowerCase().includes('dips')
-      );
-      if (dipsExercise && dipsExercise.sets && dipsExercise.sets.length > 0) {
-        const maxWeight = Math.max(...dipsExercise.sets.map(s => s.weight || 0));
-        if (maxWeight > 0) {
-          dips.push({
-            date,
-            weight: maxWeight,
-            fullDate: workout.date
-          });
+      workout.exercises.forEach(exercise => {
+        const exerciseKey = exercise.id || exercise.name.toLowerCase().replace(/\s+/g, '_');
+        
+        if (!dataMap[exerciseKey]) {
+          dataMap[exerciseKey] = [];
         }
-      }
+        
+        if (exercise.sets && exercise.sets.length > 0) {
+          const maxWeight = Math.max(...exercise.sets.map(s => s.weight || 0));
+          if (maxWeight > 0) {
+            dataMap[exerciseKey].push({
+              date,
+              weight: maxWeight,
+              fullDate: workout.date
+            });
+          }
+        }
+      });
+    });
+    
+    setExerciseData(dataMap);
+    calculateProgressionStats(dataMap);
+  };
 
-      // Find Weighted Chinups
-      const chinupsExercise = workout.exercises.find(ex => 
-        ex.name.toLowerCase().includes('chinup') || ex.name.toLowerCase().includes('chin-up')
-      );
-      if (chinupsExercise && chinupsExercise.sets && chinupsExercise.sets.length > 0) {
-        const maxWeight = Math.max(...chinupsExercise.sets.map(s => s.weight || 0));
-        if (maxWeight > 0) {
-          chinups.push({
-            date,
-            weight: maxWeight,
-            fullDate: workout.date
-          });
-        }
+  const calculateProgressionStats = (dataMap) => {
+    const progressions = [];
+    
+    Object.keys(dataMap).forEach(exerciseKey => {
+      const data = dataMap[exerciseKey];
+      if (data.length >= 2) {
+        const first = data[0].weight;
+        const last = data[data.length - 1].weight;
+        const change = last - first;
+        const percentChange = ((change / first) * 100);
+        
+        const exercise = exercises.find(ex => ex.id === exerciseKey) || 
+                        { name: exerciseKey.replace(/_/g, ' ') };
+        
+        progressions.push({
+          exerciseKey,
+          name: exercise.name || exerciseKey,
+          change,
+          percentChange,
+          dataPoints: data.length
+        });
       }
     });
-
-    setDipsData(dips);
-    setChinupsData(chinups);
+    
+    progressions.sort((a, b) => b.percentChange - a.percentChange);
+    
+    setProgressionStats({
+      most: progressions[0] || null,
+      least: progressions[progressions.length - 1] || null
+    });
   };
 
   const filterDataByTimeRange = (data) => {
