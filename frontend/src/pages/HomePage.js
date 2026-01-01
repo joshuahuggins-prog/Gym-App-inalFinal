@@ -33,12 +33,21 @@ const HomePage = () => {
       return;
     }
     
+    // Find the last time this workout was done
+    const lastSameWorkout = workouts.find(w => w.type === nextType);
+    
     setCurrentWorkout(workout);
-    setWorkoutData(workout.exercises.map(ex => ({
-      ...ex,
-      userNotes: '',
-      sets: []
-    })));
+    setWorkoutData(workout.exercises.map(ex => {
+      // Find the exercise data from last workout
+      const lastExerciseData = lastSameWorkout?.exercises.find(e => e.id === ex.id || e.name === ex.name);
+      
+      return {
+        ...ex,
+        userNotes: '',
+        sets: [],
+        lastWorkoutData: lastExerciseData || null
+      };
+    }));
   };
 
   const handleSetComplete = (exercise, set, levelUp) => {
