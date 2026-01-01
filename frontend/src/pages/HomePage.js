@@ -261,6 +261,7 @@ const HomePage = () => {
           <ExerciseCard
             key={exercise.id}
             exercise={exercise}
+            lastWorkoutData={exercise.lastWorkoutData}
             onSetComplete={handleSetComplete}
             onWeightChange={handleWeightChange}
             onNotesChange={handleNotesChange}
