@@ -20,10 +20,14 @@ const ImportExportPage = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gym-strength-programme-${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `gym-strength-programme-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = filename;
     a.click();
     window.URL.revokeObjectURL(url);
-    toast.success('Workout data exported!');
+    
+    toast.success('Workout data exported!', {
+      description: `File saved to your Downloads folder as ${filename}`
+    });
   };
 
   const handleImport = async () => {
