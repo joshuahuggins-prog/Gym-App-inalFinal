@@ -321,7 +321,7 @@ const ProgressPage = () => {
             )}
           </div>
 
-          {filteredChinups.length === 0 ? (
+          {filteredData2.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <div className="text-4xl mb-2">📊</div>
               <p>No data yet. Complete workouts to see your progress!</p>
@@ -329,7 +329,7 @@ const ProgressPage = () => {
           ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={filteredChinups}>
+                <LineChart data={filteredData2}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="date" 
@@ -368,35 +368,35 @@ const ProgressPage = () => {
             </div>
           )}
 
-          {filteredChinups.length > 0 && (
+          {filteredData2.length > 0 && (
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-              <span>First: {filteredChinups[0].weight} {weightUnit}</span>
-              <span>Latest: {filteredChinups[filteredChinups.length - 1].weight} {weightUnit}</span>
+              <span>First: {filteredData2[0].weight} {weightUnit}</span>
+              <span>Latest: {filteredData2[filteredData2.length - 1].weight} {weightUnit}</span>
             </div>
           )}
         </div>
 
         {/* Progress Summary */}
-        {(filteredDips.length > 0 || filteredChinups.length > 0) && (
+        {(filteredData1.length > 0 || filteredData2.length > 0) && (
           <div className="bg-primary/10 border border-primary/30 rounded-xl p-6">
             <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-primary" />
               Progress Summary
             </h3>
             <div className="space-y-3">
-              {filteredDips.length > 0 && (
+              {filteredData1.length > 0 && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">Weighted Dips Sessions:</span>
+                  <span className="text-sm text-foreground">{getExerciseName(selectedExercise1)} Sessions:</span>
                   <Badge variant="outline" className="text-primary border-primary/50">
-                    {filteredDips.length} workouts
+                    {filteredData1.length} workouts
                   </Badge>
                 </div>
               )}
-              {filteredChinups.length > 0 && (
+              {filteredData2.length > 0 && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">Weighted Chinups Sessions:</span>
+                  <span className="text-sm text-foreground">{getExerciseName(selectedExercise2)} Sessions:</span>
                   <Badge variant="outline" className="text-primary border-primary/50">
-                    {filteredChinups.length} workouts
+                    {filteredData2.length} workouts
                   </Badge>
                 </div>
               )}
