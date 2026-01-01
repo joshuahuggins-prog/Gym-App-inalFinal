@@ -44,7 +44,7 @@ const HomePage = () => {
       return {
         ...ex,
         userNotes: '',
-        sets: [],
+        setsData: [],
         lastWorkoutData: lastExerciseData || null
       };
     }));
