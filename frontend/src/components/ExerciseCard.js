@@ -6,7 +6,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { calculateRPTWeights, shouldLevelUp, EXERCISE_ALTERNATIVES } from '../data/workoutData';
 import { useSettings } from '../contexts/SettingsContext';
-import { getVideoLinks, updateVideoLink } from '../utils/storage';
+import { getVideoLinks, updateVideoLink, getProgressionSettings } from '../utils/storage';
 import WarmupCalculator from './WarmupCalculator';
 import PlateCalculator from './PlateCalculator';
 
