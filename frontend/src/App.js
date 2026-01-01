@@ -48,49 +48,51 @@ const App = () => {
 
         {/* Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-          <div className="flex items-center justify-around h-16 max-w-4xl mx-auto px-2">
-            <NavButton
-              icon={<Home className="w-4 h-4" />}
-              label="Today"
-              active={currentPage === 'home'}
-              onClick={() => setCurrentPage('home')}
-            />
-            <NavButton
-              icon={<History className="w-4 h-4" />}
-              label="History"
-              active={currentPage === 'history'}
-              onClick={() => setCurrentPage('history')}
-            />
-            <NavButton
-              icon={<TrendingUp className="w-4 h-4" />}
-              label="Progress"
-              active={currentPage === 'progress'}
-              onClick={() => setCurrentPage('progress')}
-            />
-            <NavButton
-              icon={<FileText className="w-4 h-4" />}
-              label="Programmes"
-              active={currentPage === 'programmes'}
-              onClick={() => setCurrentPage('programmes')}
-            />
-            <NavButton
-              icon={<Dumbbell className="w-4 h-4" />}
-              label="Exercises"
-              active={currentPage === 'exercises'}
-              onClick={() => setCurrentPage('exercises')}
-            />
-            <NavButton
-              icon={<Settings className="w-4 h-4" />}
-              label="Settings"
-              active={currentPage === 'settings'}
-              onClick={() => setCurrentPage('settings')}
-            />
-            <NavButton
-              icon={<Download className="w-4 h-4" />}
-              label="Data"
-              active={currentPage === 'import-export'}
-              onClick={() => setCurrentPage('import-export')}
-            />
+          <div className="overflow-x-auto scrollbar-hide">
+            <div className="flex items-center h-16 px-2 min-w-max">
+              <NavButton
+                icon={<Home className="w-5 h-5" />}
+                label="Today"
+                active={currentPage === 'home'}
+                onClick={() => setCurrentPage('home')}
+              />
+              <NavButton
+                icon={<History className="w-5 h-5" />}
+                label="History"
+                active={currentPage === 'history'}
+                onClick={() => setCurrentPage('history')}
+              />
+              <NavButton
+                icon={<TrendingUp className="w-5 h-5" />}
+                label="Progress"
+                active={currentPage === 'progress'}
+                onClick={() => setCurrentPage('progress')}
+              />
+              <NavButton
+                icon={<FileText className="w-5 h-5" />}
+                label="Programmes"
+                active={currentPage === 'programmes'}
+                onClick={() => setCurrentPage('programmes')}
+              />
+              <NavButton
+                icon={<Dumbbell className="w-5 h-5" />}
+                label="Exercises"
+                active={currentPage === 'exercises'}
+                onClick={() => setCurrentPage('exercises')}
+              />
+              <NavButton
+                icon={<Settings className="w-5 h-5" />}
+                label="Settings"
+                active={currentPage === 'settings'}
+                onClick={() => setCurrentPage('settings')}
+              />
+              <NavButton
+                icon={<Download className="w-5 h-5" />}
+                label="Data"
+                active={currentPage === 'import-export'}
+                onClick={() => setCurrentPage('import-export')}
+              />
+            </div>
           </div>
         </nav>
 
