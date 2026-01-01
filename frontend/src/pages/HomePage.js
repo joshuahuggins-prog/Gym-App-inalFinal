@@ -87,10 +87,10 @@ const HomePage = () => {
     }
   };
 
-  const handleWeightChange = (exercise, sets) => {
-    // Update workout data
+  const handleWeightChange = (exercise, setsData) => {
+    // Update workout data - store sets data separately from exercise definition
     const updated = workoutData.map(ex => 
-      ex.id === exercise.id ? { ...ex, sets } : ex
+      ex.id === exercise.id ? { ...ex, setsData } : ex
     );
     setWorkoutData(updated);
   };
