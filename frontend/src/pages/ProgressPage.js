@@ -232,7 +232,7 @@ const ProgressPage = () => {
             )}
           </div>
 
-          {filteredDips.length === 0 ? (
+          {filteredData1.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <div className="text-4xl mb-2">📊</div>
               <p>No data yet. Complete workouts to see your progress!</p>
@@ -240,7 +240,7 @@ const ProgressPage = () => {
           ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={filteredDips}>
+                <LineChart data={filteredData1}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="date" 
@@ -279,35 +279,43 @@ const ProgressPage = () => {
             </div>
           )}
 
-          {filteredDips.length > 0 && (
+          {filteredData1.length > 0 && (
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-              <span>First: {filteredDips[0].weight} {weightUnit}</span>
-              <span>Latest: {filteredDips[filteredDips.length - 1].weight} {weightUnit}</span>
+              <span>First: {filteredData1[0].weight} {weightUnit}</span>
+              <span>Latest: {filteredData1[filteredData1.length - 1].weight} {weightUnit}</span>
             </div>
           )}
         </div>
 
-        {/* Weighted Chinups Chart */}
+        {/* Exercise 2 Chart */}
         <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-foreground mb-1 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                Weighted Chinups
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Track your top set weight progression
-              </p>
+          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm font-medium text-muted-foreground block mb-2">
+                Select Exercise
+              </label>
+              <Select value={selectedExercise2} onValueChange={setSelectedExercise2}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {exercises.map(ex => (
+                    <SelectItem key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {chinupsProgress && (
+            {progress2 && (
               <div className="text-right">
                 <div className={`text-2xl font-bold ${
-                  chinupsProgress.change >= 0 ? 'text-success' : 'text-destructive'
+                  progress2.change >= 0 ? 'text-success' : 'text-destructive'
                 }`}>
-                  {chinupsProgress.change >= 0 ? '+' : ''}{chinupsProgress.change} {weightUnit}
+                  {progress2.change >= 0 ? '+' : ''}{progress2.change} {weightUnit}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {chinupsProgress.percentChange >= 0 ? '+' : ''}{chinupsProgress.percentChange}%
+                  {progress2.percentChange >= 0 ? '+' : ''}{progress2.percentChange}%
                 </div>
               </div>
             )}
