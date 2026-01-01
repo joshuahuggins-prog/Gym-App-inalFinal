@@ -103,53 +103,7 @@ const StatsPage = () => {
     toast.success('Entry deleted');
   };
 
-  const handleExport = () => {
-    const csv = exportToCSV();
-    if (!csv) {
-      toast.error('No workout data to export');
-      return;
-    }
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gym-strength-programme-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    toast.success('Workout data exported!');
-  };
-
-  const handleImport = async () => {
-    if (!importFile) {
-      toast.error('Please select a file');
-      return;
-    }
-
-    try {
-      const text = await importFile.text();
-      const result = importFromCSV(text);
-
-      if (result.success) {
-        toast.success(`Imported ${result.imported} workouts!`);
-        if (result.errors && result.errors.length > 0) {
-          setImportErrors(result.errors);
-        } else {
-          setShowImportDialog(false);
-          setImportFile(null);
-          loadStats();
-        }
-      } else {
-        toast.error(result.error);
-        setImportErrors([result.error]);
-      }
-    } catch (error) {
-      toast.error('Failed to read file');
-    }
-  };
-
-  // Calendar Heatmap (12 weeks)
-  const getCalendarData = () => {
+  const calendarData = getCalendarData();
     const workouts = getWorkouts();
     const weeks = [];
     const today = new Date();
