@@ -304,29 +304,6 @@ const StatsPage = () => {
             </div>
           )}
         </div>
-
-        {/* Export/Import */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <h2 className="text-lg font-bold text-foreground">Data Management</h2>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={handleExport}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setShowImportDialog(true)}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Import CSV
-            </Button>
-          </div>
-        </div>
       </div>
 
       {/* Body Weight Dialog */}
