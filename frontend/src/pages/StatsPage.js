@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, TrendingUp, Dumbbell, Calendar as CalendarIcon, Download, Upload, Weight, Plus, Trash2 } from 'lucide-react';
+import { Trophy, TrendingUp, Dumbbell, Calendar as CalendarIcon, Weight, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { getWorkouts, getPersonalRecords, getBodyWeights, addBodyWeight, deleteBodyWeight, exportToCSV, importFromCSV } from '../utils/storage';
+import { getWorkouts, getPersonalRecords, getBodyWeights, addBodyWeight, deleteBodyWeight } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
 import { toast } from 'sonner';
 
@@ -22,9 +22,6 @@ const StatsPage = () => {
   const [showBodyWeightDialog, setShowBodyWeightDialog] = useState(false);
   const [newBodyWeight, setNewBodyWeight] = useState('');
   const [bodyWeightNote, setBodyWeightNote] = useState('');
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importFile, setImportFile] = useState(null);
-  const [importErrors, setImportErrors] = useState(null);
 
   useEffect(() => {
     loadStats();
