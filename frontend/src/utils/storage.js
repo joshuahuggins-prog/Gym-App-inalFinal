@@ -60,14 +60,9 @@ export const updateWorkout = (id, updates) => {
 };
 
 export const deleteWorkout = (id) => {
-  console.log('deleteWorkout called with id:', id);
   const workouts = getWorkouts();
-  console.log('Current workouts count:', workouts.length);
   const filtered = workouts.filter(w => w.id !== id);
-  console.log('Filtered workouts count:', filtered.length);
-  const result = setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
-  console.log('Storage update result:', result);
-  return result;
+  return setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
 };
 
 // Settings
