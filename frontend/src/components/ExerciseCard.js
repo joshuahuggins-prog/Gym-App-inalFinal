@@ -244,12 +244,20 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    {/* Set Number */}
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center">
-                      <span className="text-lg font-bold text-primary">{index + 1}</span>
-                    </div>
+                    {/* Set Number - Now clickable to complete */}
+                    <button
+                      onClick={() => handleSetComplete(index)}
+                      disabled={!set.weight || !set.reps}
+                      className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-xl transition-all duration-200 ${
+                        set.completed
+                          ? 'bg-primary border-primary text-primary-foreground shadow-lg scale-105'
+                          : 'bg-primary/10 border-primary/50 text-primary hover:bg-primary/20 hover:scale-105'
+                      } ${!set.weight || !set.reps ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      {set.completed ? '✓' : index + 1}
+                    </button>
 
-                    {/* Weight Input */}
+                    {/* Weight Input - Now wider */}
                     <div className="flex-1">
                       <label className="text-xs text-muted-foreground block mb-1">
                         Weight ({weightUnit})
@@ -271,7 +279,7 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                     </div>
 
                     {/* Reps Input */}
-                    <div className="flex-1 min-w-[120px]">
+                    <div className="flex-1">
                       <label className="text-xs text-muted-foreground block mb-1">
                         Reps
                       </label>
@@ -287,19 +295,6 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                         <span className="text-muted-foreground whitespace-nowrap">/ {set.goalReps}</span>
                       </div>
                     </div>
-
-                    {/* Complete Button */}
-                    <button
-                      onClick={() => handleSetComplete(index)}
-                      className="flex-shrink-0 transition-transform hover:scale-110"
-                      disabled={!set.weight || !set.reps}
-                    >
-                      {set.completed ? (
-                        <CheckCircle2 className="w-10 h-10 text-primary" />
-                      ) : (
-                        <Circle className="w-10 h-10 text-muted-foreground" />
-                      )}
-                    </button>
                   </div>
 
                   {exercise.repScheme === 'RPT' && index === 0 && set.weight > 0 && (() => {
