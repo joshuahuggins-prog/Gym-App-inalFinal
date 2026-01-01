@@ -271,7 +271,7 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                     </div>
 
                     {/* Reps Input */}
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-[120px]">
                       <label className="text-xs text-muted-foreground block mb-1">
                         Reps
                       </label>
@@ -281,10 +281,10 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                           value={set.reps || ''}
                           onChange={(e) => handleRepsChange(index, e.target.value)}
                           placeholder={set.goalReps.toString()}
-                          className="h-12 text-center text-lg font-semibold flex-1"
+                          className="h-12 text-center text-lg font-semibold w-16"
                           disabled={set.completed}
                         />
-                        <span className="text-muted-foreground">/ {set.goalReps}</span>
+                        <span className="text-muted-foreground whitespace-nowrap">/ {set.goalReps}</span>
                       </div>
                     </div>
 
