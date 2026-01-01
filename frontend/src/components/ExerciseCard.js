@@ -10,7 +10,7 @@ import { getVideoLinks, updateVideoLink, getProgressionSettings } from '../utils
 import WarmupCalculator from './WarmupCalculator';
 import PlateCalculator from './PlateCalculator';
 
-const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, onRestTimer, isFirst }) => {
+const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, onRestTimer, isFirst, lastWorkoutData }) => {
   const { weightUnit } = useSettings();
   const [expanded, setExpanded] = useState(true);
   const [sets, setSets] = useState(
@@ -29,6 +29,14 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
   const [showAlternatives, setShowAlternatives] = useState(false);
   const [showVideoEdit, setShowVideoEdit] = useState(false);
   const [videoLink, setVideoLink] = useState('');
+  
+  // Get suggested weights from last workout
+  const getSuggestedWeight = (setIndex) => {
+    if (!lastWorkoutData || !lastWorkoutData.sets || !lastWorkoutData.sets[setIndex]) {
+      return null;
+    }
+    return lastWorkoutData.sets[setIndex].weight;
+  };
 
   useEffect(() => {
     const links = getVideoLinks();
