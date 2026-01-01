@@ -10,7 +10,7 @@ import { getWorkouts, saveWorkout, getSettings, updatePersonalRecord, getPersona
 import { useSettings } from '../contexts/SettingsContext';
 import { toast } from 'sonner';
 
-const HomePage = () => {
+const HomePage = ({ onDataChange, onSaved }) => {
   const { weightUnit, toggleWeightUnit } = useSettings();
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [workoutData, setWorkoutData] = useState([]);
@@ -20,6 +20,15 @@ const HomePage = () => {
   useEffect(() => {
     loadTodaysWorkout();
   }, []);
+
+  useEffect(() => {
+    // Check if there's any workout data entered
+    const hasData = workoutData.some(ex => 
+      ex.setsData && ex.setsData.length > 0 && 
+      ex.setsData.some(set => set.weight > 0 || set.reps > 0)
+    );
+    onDataChange?.(hasData);
+  }, [workoutData, onDataChange]);
 
   const loadTodaysWorkout = () => {
     const workouts = getWorkouts();
