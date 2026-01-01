@@ -100,8 +100,12 @@ const ProgressPage = () => {
     return data.filter(item => new Date(item.fullDate) >= cutoffDate);
   };
 
-  const filteredDips = filterDataByTimeRange(dipsData);
-  const filteredChinups = filterDataByTimeRange(chinupsData);
+  const getExerciseData = (exerciseKey) => {
+    return exerciseData[exerciseKey] || [];
+  };
+
+  const filteredData1 = filterDataByTimeRange(getExerciseData(selectedExercise1));
+  const filteredData2 = filterDataByTimeRange(getExerciseData(selectedExercise2));
 
   const calculateProgress = (data) => {
     if (data.length < 2) return null;
@@ -112,8 +116,13 @@ const ProgressPage = () => {
     return { change, percentChange };
   };
 
-  const dipsProgress = calculateProgress(filteredDips);
-  const chinupsProgress = calculateProgress(filteredChinups);
+  const progress1 = calculateProgress(filteredData1);
+  const progress2 = calculateProgress(filteredData2);
+
+  const getExerciseName = (exerciseKey) => {
+    const exercise = exercises.find(ex => ex.id === exerciseKey);
+    return exercise?.name || exerciseKey.replace(/_/g, ' ');
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20">
