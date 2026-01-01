@@ -129,6 +129,18 @@ const ImportExportPage = () => {
           <p className="text-sm text-muted-foreground mb-4">
             Download all your workout history as a CSV file. Use this to backup your data or analyze it in spreadsheet software.
           </p>
+          
+          <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 mb-4">
+            <div className="flex items-start gap-2 text-sm">
+              <span className="text-primary text-lg">💾</span>
+              <div>
+                <div className="font-semibold text-foreground">Download Location:</div>
+                <div className="text-muted-foreground text-xs mt-1">
+                  File will be saved to your browser's <strong>Downloads folder</strong>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="bg-muted/30 rounded-lg p-4 border border-border mb-4">
             <div className="text-sm font-semibold text-foreground mb-2">CSV Format:</div>
