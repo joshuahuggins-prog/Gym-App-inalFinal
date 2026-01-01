@@ -5,8 +5,8 @@ import { Badge } from '../components/ui/badge';
 import ExerciseCard from '../components/ExerciseCard';
 import RestTimer from '../components/RestTimer';
 import PRCelebration from '../components/PRCelebration';
-import { getWorkoutByType, getNextWorkoutType } from '../data/workoutData';
-import { getWorkouts, saveWorkout, getSettings, updatePersonalRecord, getPersonalRecords } from '../utils/storage';
+import { getNextWorkoutType } from '../data/workoutData';
+import { getWorkouts, saveWorkout, getSettings, updatePersonalRecord, getPersonalRecords, getProgrammes, getProgressionSettings } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
 import { toast } from 'sonner';
 
