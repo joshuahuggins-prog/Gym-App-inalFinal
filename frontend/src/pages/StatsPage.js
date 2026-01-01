@@ -352,60 +352,6 @@ const StatsPage = () => {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Import Dialog */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Import Workout Data</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-2">
-                Select CSV file
-              </label>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(e) => setImportFile(e.target.files[0])}
-                className="block w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
-              />
-            </div>
-            
-            {importErrors && (
-              <div className="p-3 bg-destructive/10 border border-destructive/50 rounded-lg">
-                <div className="text-sm font-semibold text-destructive mb-2">Import Errors:</div>
-                <div className="text-xs text-destructive space-y-1 max-h-32 overflow-y-auto">
-                  {importErrors.map((error, index) => (
-                    <div key={index}>• {error}</div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-              <div className="font-semibold mb-1">CSV Format:</div>
-              <div>Date, Workout, Exercise, Set, Weight, Reps, Notes</div>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => {
-                setShowImportDialog(false);
-                setImportFile(null);
-                setImportErrors(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button className="flex-1" onClick={handleImport}>
-              Import
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
