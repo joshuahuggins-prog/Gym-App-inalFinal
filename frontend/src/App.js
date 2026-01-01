@@ -133,6 +133,43 @@ const App = () => {
           </div>
         </nav>
 
+        {/* Navigation Warning Dialog */}
+        <Dialog open={showNavigationWarning} onOpenChange={setShowNavigationWarning}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-foreground">
+                Unsaved Workout Data
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-foreground mb-4">
+                You have unsaved workout data. If you navigate away now, you'll lose your progress.
+              </p>
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+                <p className="text-sm text-destructive font-semibold">
+                  ⚠️ Your sets, weights, and reps will be lost!
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={handleCancelNavigation}
+                className="flex-1"
+              >
+                Go Back
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmNavigation}
+                className="flex-1"
+              >
+                Leave Anyway
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Toaster />
       </div>
     </SettingsProvider>
