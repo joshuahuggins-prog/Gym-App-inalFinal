@@ -131,6 +131,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
       description: `${currentWorkout.name} completed`
     });
 
+    // Notify parent that workout is saved
+    onSaved?.();
+
     // Reset for next workout
     loadTodaysWorkout();
   };
