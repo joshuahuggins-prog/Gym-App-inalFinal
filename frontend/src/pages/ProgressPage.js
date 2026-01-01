@@ -161,27 +161,72 @@ const ProgressPage = () => {
           ))}
         </div>
 
-        {/* Weighted Dips Chart */}
+        {/* Progression Stats Summary */}
+        {(progressionStats.most || progressionStats.least) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {progressionStats.most && (
+              <div className="bg-success/10 border border-success/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="w-5 h-5 text-success" />
+                  <h3 className="font-bold text-foreground">Most Progress</h3>
+                </div>
+                <div className="text-lg font-bold text-success">{progressionStats.most.name}</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  +{progressionStats.most.change.toFixed(1)} {weightUnit} ({progressionStats.most.percentChange >= 0 ? '+' : ''}{progressionStats.most.percentChange.toFixed(1)}%)
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {progressionStats.most.dataPoints} recorded workouts
+                </div>
+              </div>
+            )}
+            
+            {progressionStats.least && progressionStats.least.percentChange < 0 && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingDown className="w-5 h-5 text-destructive" />
+                  <h3 className="font-bold text-foreground">Needs Attention</h3>
+                </div>
+                <div className="text-lg font-bold text-destructive">{progressionStats.least.name}</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  {progressionStats.least.change.toFixed(1)} {weightUnit} ({progressionStats.least.percentChange.toFixed(1)}%)
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {progressionStats.least.dataPoints} recorded workouts
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Exercise 1 Chart */}
         <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-foreground mb-1 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                Weighted Dips
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Track your top set weight progression
-              </p>
+          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm font-medium text-muted-foreground block mb-2">
+                Select Exercise
+              </label>
+              <Select value={selectedExercise1} onValueChange={setSelectedExercise1}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {exercises.map(ex => (
+                    <SelectItem key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {dipsProgress && (
+            {progress1 && (
               <div className="text-right">
                 <div className={`text-2xl font-bold ${
-                  dipsProgress.change >= 0 ? 'text-success' : 'text-destructive'
+                  progress1.change >= 0 ? 'text-success' : 'text-destructive'
                 }`}>
-                  {dipsProgress.change >= 0 ? '+' : ''}{dipsProgress.change} {weightUnit}
+                  {progress1.change >= 0 ? '+' : ''}{progress1.change} {weightUnit}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {dipsProgress.percentChange >= 0 ? '+' : ''}{dipsProgress.percentChange}%
+                  {progress1.percentChange >= 0 ? '+' : ''}{progress1.percentChange}%
                 </div>
               </div>
             )}
