@@ -23,9 +23,15 @@ const HomePage = () => {
 
   const loadTodaysWorkout = () => {
     const workouts = getWorkouts();
+    const programmes = getProgrammes();
     const lastWorkout = workouts[0];
     const nextType = lastWorkout ? getNextWorkoutType(lastWorkout.type) : 'A';
-    const workout = getWorkoutByType(nextType);
+    const workout = programmes.find(p => p.type === nextType) || programmes[0];
+    
+    if (!workout) {
+      toast.error('No programmes found. Please create a programme first.');
+      return;
+    }
     
     setCurrentWorkout(workout);
     setWorkoutData(workout.exercises.map(ex => ({
@@ -36,8 +42,20 @@ const HomePage = () => {
   };
 
   const handleSetComplete = (exercise, set, levelUp) => {
+    const progressionSettings = getProgressionSettings();
+    const exerciseSpecificIncrement = progressionSettings.exerciseSpecific[exercise.id];
+    
+    let suggestedIncrement;
+    if (exerciseSpecificIncrement && exerciseSpecificIncrement > 0) {
+      suggestedIncrement = exerciseSpecificIncrement;
+    } else {
+      suggestedIncrement = weightUnit === 'lbs' 
+        ? progressionSettings.globalIncrementLbs 
+        : progressionSettings.globalIncrementKg;
+    }
+    
     if (levelUp) {
-      const suggestedWeight = set.weight + (weightUnit === 'lbs' ? 5 : 2.5);
+      const suggestedWeight = set.weight + suggestedIncrement;
       toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, {
         duration: 5000
       });
