@@ -20,15 +20,10 @@ const HistoryPage = () => {
   };
 
   const handleDelete = (id) => {
-    console.log('Delete button clicked for workout:', id);
     if (window.confirm('Delete this workout?')) {
-      console.log('User confirmed deletion');
-      const result = deleteWorkout(id);
-      console.log('Delete result:', result);
+      deleteWorkout(id);
       loadWorkouts();
       toast.success('Workout deleted');
-    } else {
-      console.log('User cancelled deletion');
     }
   };
 
