@@ -229,83 +229,92 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
             </div>
           )}
 
-          {/* Sets */}
-          <div className="space-y-3">
-            {sets.map((set, index) => (
-              <div
-                key={index}
-                className={`p-4 rounded-lg border transition-all duration-200 ${
-                  set.completed
-                    ? 'bg-primary/10 border-primary/50'
-                    : 'bg-muted/30 border-border hover:border-primary/30'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => handleSetComplete(index)}
-                    className="flex-shrink-0 transition-transform hover:scale-110"
-                  >
-                    {set.completed ? (
-                      <CheckCircle2 className="w-7 h-7 text-primary" />
-                    ) : (
-                      <Circle className="w-7 h-7 text-muted-foreground" />
-                    )}
-                  </button>
-
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="w-12 text-center">
-                      <div className="text-xs text-muted-foreground">Set {index + 1}</div>
-                      <div className="text-sm font-semibold text-foreground">
-                        {set.goalReps} reps
-                      </div>
+          {/* Sets - Simple Box Layout */}
+          <div className="grid grid-cols-1 gap-3">
+            {sets.map((set, index) => {
+              const suggestedWeight = getSuggestedWeight(index);
+              
+              return (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg border transition-all duration-200 ${
+                    set.completed
+                      ? 'bg-primary/10 border-primary/50'
+                      : 'bg-muted/30 border-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Set Number */}
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center">
+                      <span className="text-lg font-bold text-primary">{index + 1}</span>
                     </div>
 
-                    <div className="flex-1 flex gap-2">
-                      <div className="flex-1">
-                        <label className="text-xs text-muted-foreground block mb-1">
-                          Weight ({weightUnit})
-                        </label>
-                        <Input
-                          type="number"
-                          value={set.weight || ''}
-                          onChange={(e) => handleWeightChange(index, e.target.value)}
-                          placeholder="0"
-                          className="h-10 text-center font-semibold"
-                          disabled={set.completed}
-                          step="2.5"
-                        />
-                      </div>
+                    {/* Weight Input */}
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground block mb-1">
+                        Weight ({weightUnit})
+                      </label>
+                      <Input
+                        type="number"
+                        value={set.weight || ''}
+                        onChange={(e) => handleWeightChange(index, e.target.value)}
+                        placeholder={suggestedWeight ? suggestedWeight.toString() : '0'}
+                        className="h-12 text-center text-lg font-semibold"
+                        disabled={set.completed}
+                        step="2.5"
+                      />
+                      {suggestedWeight && !set.weight && (
+                        <div className="text-xs text-muted-foreground mt-1 text-center">
+                          Last: {suggestedWeight}{weightUnit}
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="flex-1">
-                        <label className="text-xs text-muted-foreground block mb-1">
-                          Reps Done
-                        </label>
+                    {/* Reps Input */}
+                    <div className="flex-1">
+                      <label className="text-xs text-muted-foreground block mb-1">
+                        Reps
+                      </label>
+                      <div className="flex items-center gap-2">
                         <Input
                           type="number"
                           value={set.reps || ''}
                           onChange={(e) => handleRepsChange(index, e.target.value)}
-                          placeholder="0"
-                          className="h-10 text-center font-semibold"
+                          placeholder={set.goalReps.toString()}
+                          className="h-12 text-center text-lg font-semibold flex-1"
                           disabled={set.completed}
                         />
+                        <span className="text-muted-foreground">/ {set.goalReps}</span>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {exercise.repScheme === 'RPT' && index === 0 && set.weight > 0 && (() => {
-                  const progressionSettings = getProgressionSettings();
-                  const set2Weight = calculateRPTWeights(set.weight, 2, progressionSettings);
-                  const set3Weight = calculateRPTWeights(set.weight, 3, progressionSettings);
-                  return (
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      Auto: Set 2 = {set2Weight}{weightUnit}, 
-                      Set 3 = {set3Weight}{weightUnit}
-                    </div>
-                  );
-                })()}
-              </div>
-            ))}
+                    {/* Complete Button */}
+                    <button
+                      onClick={() => handleSetComplete(index)}
+                      className="flex-shrink-0 transition-transform hover:scale-110"
+                      disabled={!set.weight || !set.reps}
+                    >
+                      {set.completed ? (
+                        <CheckCircle2 className="w-10 h-10 text-primary" />
+                      ) : (
+                        <Circle className="w-10 h-10 text-muted-foreground" />
+                      )}
+                    </button>
+                  </div>
+
+                  {exercise.repScheme === 'RPT' && index === 0 && set.weight > 0 && (() => {
+                    const progressionSettings = getProgressionSettings();
+                    const set2Weight = calculateRPTWeights(set.weight, 2, progressionSettings);
+                    const set3Weight = calculateRPTWeights(set.weight, 3, progressionSettings);
+                    return (
+                      <div className="mt-2 text-xs text-muted-foreground text-center">
+                        Auto: Set 2 = {set2Weight}{weightUnit}, Set 3 = {set3Weight}{weightUnit}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
           </div>
 
           {/* Notes */}
