@@ -103,8 +103,6 @@ const StatsPage = () => {
     toast.success('Entry deleted');
   };
 
-  const calendarData = getCalendarData();
-    const workouts = getWorkouts();
   // Calendar Heatmap (12 weeks)
   const getCalendarData = () => {
     const workouts = getWorkouts();
