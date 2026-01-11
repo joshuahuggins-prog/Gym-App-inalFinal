@@ -31,9 +31,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
   const [prCelebration, setPrCelebration] = useState(null);
 
   useEffect(() => {
-    loadTodaysWorkout();
-    // eslint-disable-next-line
-  }, []);
+  loadTodaysWorkout();
+}, []);
 
   // Auto-save workout draft as the user enters data (protects against refresh)
   useEffect(() => {
