@@ -1,8 +1,8 @@
 {
   "name": "Gym Strength Programme",
   "short_name": "Gym App",
-  "start_url": "/Gym-App-inalF/",
-  "scope": "/Gym-App-inalF/",
+  "start_url": "/Gym-App-inalFinal/",
+  "scope": "/Gym-App-inalFinal/",
   "display": "standalone",
   "background_color": "#111624",
   "theme_color": "#111624",
