@@ -264,7 +264,7 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                       </label>
                       <Input
                         type="number"
-                        value={set.weight || ''}
+                        value={set.weight ===0?":set.weight}
                         onChange={(e) => handleWeightChange(index, e.target.value)}
                         placeholder={suggestedWeight ? suggestedWeight.toString() : '0'}
                         className="h-12 text-center text-lg font-semibold"
@@ -286,7 +286,7 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
-                          value={set.reps || ''}
+                          value={set.reps ===set.reps}
                           onChange={(e) => handleRepsChange(index, e.target.value)}
                           placeholder={set.goalReps.toString()}
                           className="h-12 text-center text-lg font-semibold w-16"
