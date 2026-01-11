@@ -282,18 +282,35 @@ export const deleteWorkout = (id) => {
   return setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
 };
 
+// =====================
 // Settings
-export const getSettings = () => {
-  return getStorageData(STORAGE_KEYS.SETTINGS) || {
-    weightUnit: 'lbs',
-    theme: 'dark'
-  };
+// =====================
+const DEFAULT_SETTINGS = {
+  weightUnit: "kg",
+  theme: "dark",
+
+  // ✅ Stats metric toggle
+  // "maxWeight" | "e1rm"
+  statsMetric: "maxWeight",
 };
 
-export const updateSettings = (updates) => {
-  const settings = getSettings();
-  return setStorageData(STORAGE_KEYS.SETTINGS, { ...settings, ...updates });
+export const getSettings = () => {
+  const stored = getStorageData(STORAGE_KEYS.SETTINGS);
+  if (!stored || typeof stored !== "object") return { ...DEFAULT_SETTINGS };
+
+  // merge defaults so older users don't break
+  return { ...DEFAULT_SETTINGS, ...stored };
 };
+
+export const updateSettings = (updates) =>
+  setStorageData(STORAGE_KEYS.SETTINGS, {
+    ...getSettings(),
+    ...updates,
+  });
+
+// Optional convenience helpers (nice for StatsPage later)
+export const getStatsMetric = () => getSettings().statsMetric || "maxWeight";
+export const setStatsMetric = (statsMetric) => updateSettings({ statsMetric });
 
 // Body Weight Tracking
 export const getBodyWeights = () => {
