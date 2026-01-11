@@ -1,95 +1,81 @@
 // src/contexts/SettingsContext.js
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getSettings, updateSettings } from "../utils/storage";
 
-const SettingsContext = React.createContext();
+const SettingsContext = React.createContext(null);
 
 export const useSettings = () => {
-  const context = React.useContext(SettingsContext);
-  if (!context) {
-    throw new Error("useSettings must be used within SettingsProvider");
-  }
-  return context;
+  const ctx = React.useContext(SettingsContext);
+  if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
+  return ctx;
+};
+
+const DEFAULTS = {
+  weightUnit: "kg",          // "kg" | "lbs"
+  theme: "dark",
+  statsMetric: "maxWeight",  // "maxWeight" | "e1rm"
 };
 
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState(() => getSettings());
+  // Load once (merge defaults for backwards compatibility)
+  const [settings, setSettings] = useState(() => {
+    const stored = getSettings() || {};
+    return { ...DEFAULTS, ...stored };
+  });
 
-  // Keep in sync if localStorage changes (e.g. another tab)
+  // If storage changes structure later, keep defaults applied
   useEffect(() => {
-    const onStorage = (e) => {
-      // If any setting changes, just reload all settings
-      // (storage event only fires across tabs, not same tab)
-      if (!e || !e.key) return;
-      // If you want to be more specific, you can check your SETTINGS key.
-      setSettings(getSettings());
-    };
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    setSettings((prev) => ({ ...DEFAULTS, ...prev }));
   }, []);
 
+  const persist = (next) => {
+    setSettings(next);
+    updateSettings(next);
+  };
+
   const updateSetting = (key, value) => {
-    setSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      updateSettings(next);
-      return next;
-    });
+    const next = { ...settings, [key]: value };
+    persist(next);
   };
 
   const toggleWeightUnit = () => {
-    const newUnit = settings.weightUnit === "lbs" ? "kg" : "lbs";
-    updateSetting("weightUnit", newUnit);
+    updateSetting("weightUnit", settings.weightUnit === "lbs" ? "kg" : "lbs");
   };
 
-  // ✅ Stats metric setter (for charts later)
   const setStatsMetric = (metric) => {
-    // allow only known values (safe guard)
-    const safe = metric === "e1rm" ? "e1rm" : "maxWeight";
-    updateSetting("statsMetric", safe);
+    // guard against invalid values
+    const nextMetric = metric === "e1rm" ? "e1rm" : "maxWeight";
+    updateSetting("statsMetric", nextMetric);
   };
 
   const convertWeight = (weight, fromUnit, toUnit) => {
-    if (fromUnit === toUnit) return weight;
+    const w = Number(weight);
+    if (!Number.isFinite(w)) return 0;
+    if (fromUnit === toUnit) return w;
+
     if (fromUnit === "lbs" && toUnit === "kg") {
-      return Math.round((weight / 2.20462) * 10) / 10;
+      return Math.round((w / 2.20462) * 10) / 10;
     }
     if (fromUnit === "kg" && toUnit === "lbs") {
-      return Math.round(weight * 2.20462 * 10) / 10;
+      return Math.round(w * 2.20462 * 10) / 10;
     }
-    return weight;
+    return w;
   };
 
-  return (
-    <SettingsContext.Provider
-      value={{
-        settings,
-        updateSetting,
-
-        // existing
-        toggleWeightUnit,
-        convertWeight,
-        weightUnit: settings.weightUnit,
-
-        // ✅ new
-        statsMetric: settings.statsMetric || "maxWeight",
-        setStatsMetric,
-      }}
-    >
-      {children}
-    </SettingsContext.Provider>
-  );
-};  };
-
-  return (
-    <SettingsContext.Provider value={{
+  const value = useMemo(
+    () => ({
       settings,
       updateSetting,
       toggleWeightUnit,
       convertWeight,
-      weightUnit: settings.weightUnit
-    }}>
-      {children}
-    </SettingsContext.Provider>
+
+      // common shortcuts
+      weightUnit: settings.weightUnit,
+      statsMetric: settings.statsMetric,
+      setStatsMetric,
+    }),
+    [settings]
   );
+
+  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };
