@@ -1,3 +1,4 @@
+// src/pages/HomePage.js
 import React, { useEffect, useRef, useState } from "react";
 import { Calendar, Flame, RotateCcw } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -44,9 +45,106 @@ const HomePage = ({ onDataChange, onSaved }) => {
   // Prevent "dirty" being set during initial hydration
   const didHydrateRef = useRef(false);
 
+  // Option B refs: avoid eslint-disable rule names entirely
+  const loadRef = useRef(null);
+
+  const loadTodaysWorkout = () => {
+    const workouts = getWorkouts();
+    const programmes = getProgrammes();
+
+    const draft = getWorkoutDraft();
+    const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
+
+    // Only programmes with 1+ exercises should be eligible
+    const usableProgrammes = programmes.filter(
+      (p) => Array.isArray(p.exercises) && p.exercises.length > 0
+    );
+
+    if (usableProgrammes.length === 0) {
+      toast.error("No usable programmes found. Add at least 1 exercise to a programme.");
+      return;
+    }
+
+    const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
+
+    const workout =
+      usableProgrammes.find(
+        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
+      ) || usableProgrammes[0];
+
+    if (!workout) {
+      toast.error("No programmes found. Please create a programme first.");
+      return;
+    }
+
+    const lastSameWorkout = workouts.find(
+      (w) => String(w.type).toUpperCase() === String(nextType).toUpperCase()
+    );
+
+    setCurrentWorkout(workout);
+
+    // Restore draft if today + same type
+    if (
+      hasTodaysDraft &&
+      String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
+    ) {
+      const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
+
+      setWorkoutData(
+        workout.exercises.map((ex) => {
+          const lastExerciseData = lastSameWorkout?.exercises.find(
+            (e) => e.id === ex.id || e.name === ex.name
+          );
+          const draftEx = draftById.get(ex.id);
+
+          return {
+            ...ex,
+            userNotes: draftEx?.userNotes || "",
+            setsData: draftEx?.setsData || [],
+            lastWorkoutData: lastExerciseData || null,
+          };
+        })
+      );
+
+      toast.message("Restored unsaved workout", {
+        description: "We loaded your in-progress session after refresh.",
+      });
+
+      // Draft exists -> show as saved (blue) until user edits
+      setDraftSaved(true);
+      setIsDirty(false);
+      setFinishedSaved(false);
+      return;
+    }
+
+    // No draft - start fresh
+    setWorkoutData(
+      workout.exercises.map((ex) => {
+        const lastExerciseData = lastSameWorkout?.exercises.find(
+          (e) => e.id === ex.id || e.name === ex.name
+        );
+        return {
+          ...ex,
+          userNotes: "",
+          setsData: [],
+          lastWorkoutData: lastExerciseData || null,
+        };
+      })
+    );
+
+    setDraftSaved(false);
+    setIsDirty(false);
+    setFinishedSaved(false);
+  };
+
+  // Keep ref updated to latest function
   useEffect(() => {
-    loadTodaysWorkout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadRef.current = loadTodaysWorkout;
+  });
+
+  // Run once on mount (no eslint-disable needed)
+  useEffect(() => {
+    loadRef.current?.();
   }, []);
 
   // When workout type changes, treat next load as hydration (not user edits)
@@ -125,95 +223,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
     );
     onDataChange?.(hasData);
   }, [workoutData, onDataChange]);
-
-  const loadTodaysWorkout = () => {
-    const workouts = getWorkouts();
-    const programmes = getProgrammes();
-
-    const draft = getWorkoutDraft();
-    const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
-
-    // Only programmes with 1+ exercises should be eligible
-    const usableProgrammes = programmes.filter(
-      (p) => Array.isArray(p.exercises) && p.exercises.length > 0
-    );
-
-    if (usableProgrammes.length === 0) {
-      toast.error("No usable programmes found. Add at least 1 exercise to a programme.");
-      return;
-    }
-
-    const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
-
-    const workout =
-      usableProgrammes.find(
-        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
-      ) || usableProgrammes[0];
-
-    if (!workout) {
-      toast.error("No programmes found. Please create a programme first.");
-      return;
-    }
-
-    const lastSameWorkout = workouts.find(
-      (w) => String(w.type).toUpperCase() === String(nextType).toUpperCase()
-    );
-
-    setCurrentWorkout(workout);
-
-    // Restore draft if today + same type
-    if (
-      hasTodaysDraft &&
-      String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
-    ) {
-      const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
-
-      setWorkoutData(
-        workout.exercises.map((ex) => {
-          const lastExerciseData = lastSameWorkout?.exercises.find(
-            (e) => e.id === ex.id || e.name === ex.name
-          );
-          const draftEx = draftById.get(ex.id);
-
-          return {
-            ...ex,
-            userNotes: draftEx?.userNotes || "",
-            setsData: draftEx?.setsData || [],
-            lastWorkoutData: lastExerciseData || null,
-          };
-        })
-      );
-
-      toast.message("Restored unsaved workout", {
-        description: "We loaded your in-progress session after refresh.",
-      });
-
-      // This is okay because the draft already exists
-      setDraftSaved(true);
-      setIsDirty(false);
-      setFinishedSaved(false);
-      return;
-    }
-
-    // No draft - start fresh
-    setWorkoutData(
-      workout.exercises.map((ex) => {
-        const lastExerciseData = lastSameWorkout?.exercises.find(
-          (e) => e.id === ex.id || e.name === ex.name
-        );
-        return {
-          ...ex,
-          userNotes: "",
-          setsData: [],
-          lastWorkoutData: lastExerciseData || null,
-        };
-      })
-    );
-
-    setDraftSaved(false);
-    setIsDirty(false);
-    setFinishedSaved(false);
-  };
 
   const handleSetComplete = (exercise, set, levelUp) => {
     const progressionSettings = getProgressionSettings();
@@ -318,7 +327,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     });
 
     onSaved?.();
-    loadTodaysWorkout();
+    loadRef.current?.(); // reload next workout
   };
 
   const getStreak = () => {
@@ -413,7 +422,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                   {currentWorkout.focus}
                 </Badge>
               </div>
-              <Button variant="ghost" size="sm" onClick={loadTodaysWorkout}>
+              <Button variant="ghost" size="sm" onClick={() => loadRef.current?.()}>
                 <RotateCcw className="w-4 h-4" />
               </Button>
             </div>
