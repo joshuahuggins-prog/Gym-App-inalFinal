@@ -37,7 +37,7 @@ jobs:
       - name: Build
         working-directory: frontend
         env:
-          PUBLIC_URL: /Gym-App-inalF/
+          PUBLIC_URL: /Gym-App-inalFinal/
         run: yarn build
 
       - name: Ensure index.html exists
