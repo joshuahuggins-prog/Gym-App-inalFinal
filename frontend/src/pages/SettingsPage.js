@@ -27,13 +27,11 @@ import {
 } from "../utils/storage";
 
 const SettingsPage = () => {
-  const { weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } =
-    useSettings();
+  const { weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } = useSettings();
 
   const [progressionSettings, setProgressionSettingsState] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
 
-  // Load settings on mount
   useEffect(() => {
     setProgressionSettingsState(getProgressionSettings());
     setWorkoutPatternState(getWorkoutPattern());
@@ -43,20 +41,16 @@ const SettingsPage = () => {
     return statsMetric === "e1rm" ? "Weight + Reps (e1RM)" : "Max Weight";
   }, [statsMetric]);
 
-  // Save progression settings
   const handleSaveProgression = () => {
     updateProgressionSettings(progressionSettings);
     toast.success("Progression settings saved");
   };
 
-  // Save workout pattern
   const handleSavePattern = () => {
     const parsed = parseWorkoutPattern(workoutPattern);
-    const usable = getUsableProgrammes().map((p) =>
-      String(p.type).toUpperCase()
-    );
+    const usableTypes = getUsableProgrammes().map((p) => String(p.type).toUpperCase());
 
-    const valid = parsed.every((p) => usable.includes(String(p).toUpperCase()));
+    const valid = parsed.every((p) => usableTypes.includes(String(p).toUpperCase()));
     if (!valid) {
       toast.error("Workout pattern contains invalid workout letters");
       return;
@@ -67,7 +61,6 @@ const SettingsPage = () => {
     toast.success("Workout pattern saved");
   };
 
-  // 🔥 Force Update (keep data)
   const handleResetWithBackup = async () => {
     const ok = window.confirm(
       "This will back up your data, reset the app storage, then restore the backup.\n\nUse this only if something looks broken after an update.\n\nPlease also export your data manually first in the Data tab.\n\nContinue?"
@@ -77,22 +70,25 @@ const SettingsPage = () => {
     const res = await resetWithBackup({ merge: false });
     if (!res?.success) {
       alert(res?.error || "Reset failed");
-    } else {
-      toast.success("Force Update complete ✅");
+      return;
     }
+
+    toast.success("Force Update complete ✅");
+    // Optional: reload the page so UI re-hydrates cleanly
+    // window.location.reload();
   };
 
   if (!progressionSettings) return null;
 
   return (
     <div className="space-y-8 p-4 max-w-xl mx-auto">
-      {/* ===== Header ===== */}
+      {/* Header */}
       <div className="flex items-center gap-2">
         <SettingsIcon className="h-6 w-6" />
         <h1 className="text-xl font-bold">Settings</h1>
       </div>
 
-      {/* ===== Units ===== */}
+      {/* Units */}
       <div className="space-y-2">
         <h2 className="font-semibold flex items-center gap-2">
           <TrendingUp className="h-4 w-4" />
@@ -103,7 +99,7 @@ const SettingsPage = () => {
         </Button>
       </div>
 
-      {/* ===== Stats Metric ===== */}
+      {/* Stats Metric */}
       <div className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <BarChart3 className="h-4 w-4" />
@@ -150,13 +146,12 @@ const SettingsPage = () => {
           <div className="text-xs text-muted-foreground">
             Current: <span className="font-semibold">{statsMetricLabel}</span>
             <br />
-            e1RM uses the Epley estimate:{" "}
-            <span className="font-mono">weight × (1 + reps/30)</span>
+            e1RM uses Epley: <span className="font-mono">weight × (1 + reps/30)</span>
           </div>
         </div>
       </div>
 
-      {/* ===== Progression Settings ===== */}
+      {/* Progression */}
       <div className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <Save className="h-4 w-4" />
@@ -191,7 +186,7 @@ const SettingsPage = () => {
         <Button onClick={handleSaveProgression}>Save progression</Button>
       </div>
 
-      {/* ===== Workout Pattern ===== */}
+      {/* Workout Pattern */}
       <div className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <ListOrdered className="h-4 w-4" />
@@ -207,7 +202,7 @@ const SettingsPage = () => {
         <Button onClick={handleSavePattern}>Save pattern</Button>
       </div>
 
-      {/* ===== Force Update ===== */}
+      {/* Force Update */}
       <div className="rounded-xl border border-red-500/40 p-4 space-y-3">
         <div className="flex items-center gap-2 text-red-500">
           <AlertTriangle className="h-5 w-5" />
