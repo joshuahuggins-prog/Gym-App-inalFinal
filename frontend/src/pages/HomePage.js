@@ -1,4 +1,3 @@
-// src/pages/HomePage.js
 import React, { useEffect, useRef, useState } from "react";
 import { Calendar, Flame, RotateCcw } from "lucide-react";
 import { Button } from "../components/ui/button";
