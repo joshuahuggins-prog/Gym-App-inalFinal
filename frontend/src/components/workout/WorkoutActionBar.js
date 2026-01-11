@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Save, Zap } from "lucide-react";
+import { Save, ThumbsUp } from "lucide-react";
 import { Button } from "../ui/button";
 
 const cx = (...classes) => classes.filter(Boolean).join(" ");
@@ -19,12 +19,8 @@ export default function WorkoutActionBar({
     let raf = 0;
 
     const getAnyScrollTop = (evtTarget) => {
-      // 1) If scroll event came from a scrollable element, use that
-      if (evtTarget && typeof evtTarget.scrollTop === "number") {
-        return evtTarget.scrollTop;
-      }
+      if (evtTarget && typeof evtTarget.scrollTop === "number") return evtTarget.scrollTop;
 
-      // 2) Otherwise fall back to document/window
       const se = document.scrollingElement;
       return (
         (se && se.scrollTop) ||
@@ -43,7 +39,6 @@ export default function WorkoutActionBar({
       });
     };
 
-    // run once
     handler({ target: document.scrollingElement });
 
     window.addEventListener("scroll", handler, { passive: true });
@@ -57,6 +52,7 @@ export default function WorkoutActionBar({
   }, []);
 
   const draftTone = useMemo(() => {
+    // Blue only when you explicitly saved and nothing has changed since
     if (!isDirty && isDraftSaved) return "saved";
     return "normal";
   }, [isDirty, isDraftSaved]);
@@ -66,22 +62,47 @@ export default function WorkoutActionBar({
     return "normal";
   }, [isDirty, isFinishedSaved]);
 
-  // Above bottom nav (adjust if needed)
+  // Bottom-right, stacked. Adjust 92px if your bottom nav differs.
   const basePos =
-    "fixed right-4 z-50 flex flex-col gap-3 " +
-    "bottom-[calc(env(safe-area-inset-bottom)+84px)]";
+    "fixed right-4 z-50 flex flex-col gap-4 " +
+    "bottom-[calc(env(safe-area-inset-bottom)+92px)]";
 
-  const pillBase =
-    "shadow-lg transition-all duration-200 active:scale-[0.98]";
+  // Slower, smoother transitions (more “pro”)
+  const transition =
+    "transition-all duration-350 ease-out will-change-transform will-change-width will-change-border-radius";
 
+  // ~2x bigger
+  // Pill: tall + wide
+  // Circle: big tap target
   const sizeClass = collapsed
-    ? "h-12 w-12 rounded-full px-0"
-    : "h-12 rounded-2xl px-4";
+    ? "h-16 w-16 rounded-full px-0"
+    : "h-16 w-[220px] rounded-3xl px-6";
 
-  // Explicit dark backgrounds (NOT using theme tokens like bg-foreground)
+  const baseBtn =
+    "shadow-xl active:scale-[0.98] select-none " +
+    transition;
+
+  // Colour system:
+  // - Default = dark navy button with LIGHT border
+  // - Saved = light blue button with DARK border
   const DARK_BG = "!bg-slate-900 !text-white hover:!bg-slate-800";
-  const SAVED_BLUE = "!bg-sky-500 !text-white hover:!bg-sky-400";
-  const SAVED_GREEN = "!bg-emerald-600 !text-white hover:!bg-emerald-500";
+  const DARK_BORDER = "!border-slate-950/80";
+
+  const LIGHT_BG = "!bg-sky-500 !text-white hover:!bg-sky-400";
+  const LIGHT_BORDER = "!border-sky-200/80";
+
+  const draftClass =
+    draftTone === "saved"
+      ? `${LIGHT_BG} ${DARK_BORDER}`
+      : `${DARK_BG} ${LIGHT_BORDER}`;
+
+  const finishClass =
+    finishTone === "saved"
+      ? `!bg-emerald-600 !text-white hover:!bg-emerald-500 ${DARK_BORDER}`
+      : `${DARK_BG} ${LIGHT_BORDER}`;
+
+  // Icon sizing doubled-ish
+  const iconClass = "h-7 w-7";
 
   return (
     <div className={basePos}>
@@ -90,15 +111,16 @@ export default function WorkoutActionBar({
         type="button"
         onClick={onSaveDraft}
         className={cx(
-          pillBase,
+          "border-2",
+          baseBtn,
           sizeClass,
-          draftTone === "saved" ? SAVED_BLUE : DARK_BG
+          draftClass
         )}
         title="Save draft"
         aria-label="Save draft"
       >
-        <Save className={cx("h-5 w-5", collapsed ? "" : "mr-2")} />
-        {!collapsed && <span className="font-semibold">Save draft</span>}
+        <Save className={cx(iconClass, collapsed ? "" : "mr-3")} />
+        {!collapsed && <span className="text-base font-semibold">Save draft</span>}
       </Button>
 
       {/* Save & Finish (BOTTOM) */}
@@ -107,16 +129,17 @@ export default function WorkoutActionBar({
         onClick={onSaveFinish}
         disabled={disableFinish}
         className={cx(
-          pillBase,
+          "border-2",
+          baseBtn,
           sizeClass,
-          finishTone === "saved" ? SAVED_GREEN : DARK_BG,
+          finishClass,
           disableFinish && "!opacity-60"
         )}
         title="Save & finish"
         aria-label="Save & finish"
       >
-        <Zap className={cx("h-5 w-5", collapsed ? "" : "mr-2")} />
-        {!collapsed && <span className="font-semibold">Save &amp; finish</span>}
+        <ThumbsUp className={cx(iconClass, collapsed ? "" : "mr-3")} />
+        {!collapsed && <span className="text-base font-semibold">Save &amp; finish</span>}
       </Button>
     </div>
   );
