@@ -286,7 +286,7 @@ const ExerciseCard = ({ exercise, onSetComplete, onWeightChange, onNotesChange, 
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
-                          value={set.reps ===set.reps}
+                          value={set.reps ===0?":set.reps}
                           onChange={(e) => handleRepsChange(index, e.target.value)}
                           placeholder={set.goalReps.toString()}
                           className="h-12 text-center text-lg font-semibold w-16"
