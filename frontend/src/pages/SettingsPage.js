@@ -31,7 +31,7 @@ import {
 } from "../utils/storage";
 
 const SettingsPage = () => {
-  const { weightUnit, toggleWeightUnit } = useSettings();
+  const { weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } = useSettings();
 
   const [progressionSettings, setProgressionSettingsState] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
