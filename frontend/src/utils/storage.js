@@ -598,7 +598,7 @@ export const exportAllDataToJSON = () => {
   try {
     const payload = {
       meta: {
-        app: "Gym-App-inalF",
+        app: "Gym-App-inalFinal",
         version: 1,
         exportedAt: new Date().toISOString(),
       },
