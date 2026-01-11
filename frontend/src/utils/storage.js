@@ -1,6 +1,7 @@
 // LocalStorage utility functions for workout data
 
-const STORAGE_VERSION = 4; // use integers for migrations
+// ✅ Bump version to match the migration you’re running
+const STORAGE_VERSION = 5; // use integers for migrations
 const STORAGE_VERSION_KEY = "gym_storage_version";
 
 export const initStorage = () => {
@@ -9,6 +10,7 @@ export const initStorage = () => {
     const version = storedVersion ? parseInt(storedVersion, 10) : 0;
 
     // ===== Migration to v5 =====
+    // Runs ONCE for users on v0–v4, then we store version 5 so it won’t repeat.
     if (version < 5) {
       const programmes = JSON.parse(
         localStorage.getItem(STORAGE_KEYS.PROGRAMMES) || "null"
