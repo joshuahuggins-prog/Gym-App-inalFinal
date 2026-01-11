@@ -24,28 +24,19 @@ import {
   getUsableProgrammes,
   setWorkoutPatternIndex,
   resetWithBackup, // ✅ Force Update
-
-  // ✅ Settings storage
-  getSettings,
-  updateSettings,
 } from "../utils/storage";
 
 const SettingsPage = () => {
-  const { weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } = useSettings();
+  const { weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } =
+    useSettings();
 
   const [progressionSettings, setProgressionSettingsState] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
-
-  // ✅ Stats metric toggle (stored in localStorage settings)
-  const [statsMetric, setStatsMetricState] = useState("maxWeight");
 
   // Load settings on mount
   useEffect(() => {
     setProgressionSettingsState(getProgressionSettings());
     setWorkoutPatternState(getWorkoutPattern());
-
-    const s = getSettings();
-    setStatsMetricState(s.statsMetric || "maxWeight");
   }, []);
 
   const statsMetricLabel = useMemo(() => {
@@ -61,7 +52,9 @@ const SettingsPage = () => {
   // Save workout pattern
   const handleSavePattern = () => {
     const parsed = parseWorkoutPattern(workoutPattern);
-    const usable = getUsableProgrammes().map((p) => String(p.type).toUpperCase());
+    const usable = getUsableProgrammes().map((p) =>
+      String(p.type).toUpperCase()
+    );
 
     const valid = parsed.every((p) => usable.includes(String(p).toUpperCase()));
     if (!valid) {
@@ -74,12 +67,6 @@ const SettingsPage = () => {
     toast.success("Workout pattern saved");
   };
 
-  // ✅ Save stats metric (persist)
-  const handleSaveStatsMetric = () => {
-    updateSettings({ statsMetric });
-    toast.success(`Stats metric saved: ${statsMetricLabel}`);
-  };
-
   // 🔥 Force Update (keep data)
   const handleResetWithBackup = async () => {
     const ok = window.confirm(
@@ -90,6 +77,8 @@ const SettingsPage = () => {
     const res = await resetWithBackup({ merge: false });
     if (!res?.success) {
       alert(res?.error || "Reset failed");
+    } else {
+      toast.success("Force Update complete ✅");
     }
   };
 
@@ -129,7 +118,10 @@ const SettingsPage = () => {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setStatsMetricState("maxWeight")}
+              onClick={() => {
+                setStatsMetric("maxWeight");
+                toast.success("Stats metric set: Max Weight");
+              }}
               className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                 statsMetric === "maxWeight"
                   ? "bg-primary text-primary-foreground border-primary"
@@ -141,7 +133,10 @@ const SettingsPage = () => {
 
             <button
               type="button"
-              onClick={() => setStatsMetricState("e1rm")}
+              onClick={() => {
+                setStatsMetric("e1rm");
+                toast.success("Stats metric set: Weight + Reps (e1RM)");
+              }}
               className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                 statsMetric === "e1rm"
                   ? "bg-primary text-primary-foreground border-primary"
@@ -153,12 +148,11 @@ const SettingsPage = () => {
           </div>
 
           <div className="text-xs text-muted-foreground">
-            e1RM uses the Epley estimate: <span className="font-mono">weight × (1 + reps/30)</span>
+            Current: <span className="font-semibold">{statsMetricLabel}</span>
+            <br />
+            e1RM uses the Epley estimate:{" "}
+            <span className="font-mono">weight × (1 + reps/30)</span>
           </div>
-
-          <Button onClick={handleSaveStatsMetric} variant="outline">
-            Save stats metric
-          </Button>
         </div>
       </div>
 
@@ -186,134 +180,6 @@ const SettingsPage = () => {
             value={progressionSettings.globalIncrementLbs}
             onChange={(e) =>
               setProgressionSettingsState({
-                ...progressionSettings,
-                globalIncrementLbs: Number(e.target.value),
-              })
-            }
-            placeholder="Lb increment"
-          />
-        </div>
-
-        <Button onClick={handleSaveProgression}>Save progression</Button>
-      </div>
-
-      {/* ===== Workout Pattern ===== */}
-      <div className="space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <ListOrdered className="h-4 w-4" />
-          Workout pattern
-        </h2>
-
-        <Input
-          value={workoutPattern}
-          onChange={(e) => setWorkoutPatternState(e.target.value)}
-          placeholder="e.g. A,B,A,B"
-        />
-
-        <Button onClick={handleSavePattern}>Save pattern</Button>
-      </div>
-
-      {/* ===== Force Update ===== */}
-      <div className="rounded-xl border border-red-500/40 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-red-500">
-          <AlertTriangle className="h-5 w-5" />
-          <h2 className="font-semibold">Force Update</h2>
-        </div>
-
-        <p className="text-sm opacity-80">
-          Back up your data, reset local storage, then restore the backup.
-          Use this if something looks stuck after an update.
-        </p>
-
-        <Button variant="destructive" onClick={handleResetWithBackup}>
-          Reset app (keep data)
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-export default SettingsPage;
-  // Save progression settings
-  const handleSaveProgression = () => {
-    updateProgressionSettings(progressionSettings);
-    toast.success("Progression settings saved");
-  };
-
-  // Save workout pattern
-  const handleSavePattern = () => {
-    const parsed = parseWorkoutPattern(workoutPattern);
-    const usable = getUsableProgrammes().map((p) => p.type);
-
-    const valid = parsed.every((p) => usable.includes(p));
-    if (!valid) {
-      toast.error("Workout pattern contains invalid workout letters");
-      return;
-    }
-
-    setWorkoutPattern(workoutPattern);
-    setWorkoutPatternIndex(0);
-    toast.success("Workout pattern saved");
-  };
-
-  // 🔥 Force Update (keep data)
-  const handleResetWithBackup = async () => {
-    const ok = window.confirm(
-      "This will back up your data, reset the app storage, then restore the backup.\n\nUse this only if something looks broken after an update.Please backup data manually first using the export button in the data tab. \n\nContinue?"
-    );
-    if (!ok) return;
-
-    const res = await resetWithBackup({ merge: false });
-    if (!res?.success) {
-      alert(res?.error || "Reset failed");
-    }
-  };
-
-  if (!progressionSettings) return null;
-
-  return (
-    <div className="space-y-8 p-4 max-w-xl mx-auto">
-      {/* ===== Header ===== */}
-      <div className="flex items-center gap-2">
-        <SettingsIcon className="h-6 w-6" />
-        <h1 className="text-xl font-bold">Settings</h1>
-      </div>
-
-      {/* ===== Units ===== */}
-      <div className="space-y-2">
-        <h2 className="font-semibold flex items-center gap-2">
-          <TrendingUp className="h-4 w-4" />
-          Units
-        </h2>
-        <Button onClick={toggleWeightUnit}>
-          Switch to {weightUnit === "kg" ? "lbs" : "kg"}
-        </Button>
-      </div>
-
-      {/* ===== Progression Settings ===== */}
-      <div className="space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <Save className="h-4 w-4" />
-          Progression
-        </h2>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Input
-            type="number"
-            value={progressionSettings.globalIncrementKg}
-            onChange={(e) =>
-              setProgressionSettings({
-                ...progressionSettings,
-                globalIncrementKg: Number(e.target.value),
-              })
-            }
-            placeholder="Kg increment"
-          />
-          <Input
-            type="number"
-            value={progressionSettings.globalIncrementLbs}
-            onChange={(e) =>
-              setProgressionSettings({
                 ...progressionSettings,
                 globalIncrementLbs: Number(e.target.value),
               })
