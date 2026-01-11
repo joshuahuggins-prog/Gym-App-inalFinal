@@ -1,5 +1,5 @@
 // src/contexts/SettingsContext.js
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { getSettings, updateSettings } from "../utils/storage";
 
 const SettingsContext = React.createContext(null);
@@ -10,23 +10,8 @@ export const useSettings = () => {
   return ctx;
 };
 
-const DEFAULTS = {
-  weightUnit: "kg",          // "kg" | "lbs"
-  theme: "dark",
-  statsMetric: "maxWeight",  // "maxWeight" | "e1rm"
-};
-
 export const SettingsProvider = ({ children }) => {
-  // Load once (merge defaults for backwards compatibility)
-  const [settings, setSettings] = useState(() => {
-    const stored = getSettings() || {};
-    return { ...DEFAULTS, ...stored };
-  });
-
-  // If storage changes structure later, keep defaults applied
-  useEffect(() => {
-    setSettings((prev) => ({ ...DEFAULTS, ...prev }));
-  }, []);
+  const [settings, setSettings] = useState(() => getSettings());
 
   const persist = (next) => {
     setSettings(next);
@@ -34,7 +19,49 @@ export const SettingsProvider = ({ children }) => {
   };
 
   const updateSetting = (key, value) => {
-    const next = { ...settings, [key]: value };
+    persist({ ...settings, [key]: value });
+  };
+
+  const toggleWeightUnit = () => {
+    updateSetting("weightUnit", settings.weightUnit === "lbs" ? "kg" : "lbs");
+  };
+
+  const setStatsMetric = (metric) => {
+    const safe = metric === "e1rm" ? "e1rm" : "maxWeight";
+    updateSetting("statsMetric", safe);
+  };
+
+  const convertWeight = (weight, fromUnit, toUnit) => {
+    const w = Number(weight);
+    if (!Number.isFinite(w)) return 0;
+    if (fromUnit === toUnit) return w;
+
+    if (fromUnit === "lbs" && toUnit === "kg") {
+      return Math.round((w / 2.20462) * 10) / 10;
+    }
+    if (fromUnit === "kg" && toUnit === "lbs") {
+      return Math.round(w * 2.20462 * 10) / 10;
+    }
+    return w;
+  };
+
+  const value = useMemo(
+    () => ({
+      settings,
+      updateSetting,
+      toggleWeightUnit,
+      convertWeight,
+
+      // shortcuts used throughout app
+      weightUnit: settings.weightUnit,
+      statsMetric: settings.statsMetric || "maxWeight",
+      setStatsMetric,
+    }),
+    [settings]
+  );
+
+  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
+};    const next = { ...settings, [key]: value };
     persist(next);
   };
 
