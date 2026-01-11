@@ -32,7 +32,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
   useEffect(() => {
     loadTodaysWorkout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, []);
 
   // Auto-save workout draft as the user enters data (protects against refresh)
