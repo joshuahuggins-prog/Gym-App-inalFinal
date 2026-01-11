@@ -14,27 +14,43 @@ export default function WorkoutActionBar({
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
-  // Collapse after user scrolls down a bit (works even if scrolling happens in a nested container)
+  // Collapse after user scrolls down a bit — works for window + nested scroll containers
   useEffect(() => {
-    const getScrollY = () =>
-      window.scrollY ||
-      document.documentElement.scrollTop ||
-      document.body.scrollTop ||
-      0;
+    let raf = 0;
 
-    const handler = () => {
-      setCollapsed(getScrollY() > 80);
+    const getAnyScrollTop = (evtTarget) => {
+      // 1) If scroll event came from a scrollable element, use that
+      if (evtTarget && typeof evtTarget.scrollTop === "number") {
+        return evtTarget.scrollTop;
+      }
+
+      // 2) Otherwise fall back to document/window
+      const se = document.scrollingElement;
+      return (
+        (se && se.scrollTop) ||
+        document.documentElement.scrollTop ||
+        document.body.scrollTop ||
+        window.scrollY ||
+        0
+      );
     };
 
-    handler();
+    const handler = (e) => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const y = getAnyScrollTop(e?.target);
+        setCollapsed(y > 80);
+      });
+    };
 
-    // window scroll (normal)
+    // run once
+    handler({ target: document.scrollingElement });
+
     window.addEventListener("scroll", handler, { passive: true });
-
-    // capture scroll events from nested scroll containers (PWA/mobile layouts)
     document.addEventListener("scroll", handler, { passive: true, capture: true });
 
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("scroll", handler);
       document.removeEventListener("scroll", handler, { capture: true });
     };
@@ -50,8 +66,7 @@ export default function WorkoutActionBar({
     return "normal";
   }, [isDirty, isFinishedSaved]);
 
-  // Put the stack ABOVE your bottom nav
-  // (adjust 84px if your nav is taller/shorter)
+  // Above bottom nav (adjust if needed)
   const basePos =
     "fixed right-4 z-50 flex flex-col gap-3 " +
     "bottom-[calc(env(safe-area-inset-bottom)+84px)]";
@@ -63,6 +78,11 @@ export default function WorkoutActionBar({
     ? "h-12 w-12 rounded-full px-0"
     : "h-12 rounded-2xl px-4";
 
+  // Explicit dark backgrounds (NOT using theme tokens like bg-foreground)
+  const DARK_BG = "!bg-slate-900 !text-white hover:!bg-slate-800";
+  const SAVED_BLUE = "!bg-sky-500 !text-white hover:!bg-sky-400";
+  const SAVED_GREEN = "!bg-emerald-600 !text-white hover:!bg-emerald-500";
+
   return (
     <div className={basePos}>
       {/* Save Draft (TOP) */}
@@ -72,11 +92,7 @@ export default function WorkoutActionBar({
         className={cx(
           pillBase,
           sizeClass,
-          // Force colours (override shadcn variant styles)
-          draftTone === "normal" &&
-            "!bg-foreground !text-background hover:!bg-foreground/90",
-          draftTone === "saved" &&
-            "!bg-sky-500 !text-white hover:!bg-sky-500/90"
+          draftTone === "saved" ? SAVED_BLUE : DARK_BG
         )}
         title="Save draft"
         aria-label="Save draft"
@@ -93,11 +109,7 @@ export default function WorkoutActionBar({
         className={cx(
           pillBase,
           sizeClass,
-          finishTone === "normal" &&
-            "!bg-foreground !text-background hover:!bg-foreground/90",
-          // Optional: green when "saved and not dirty"
-          finishTone === "saved" &&
-            "!bg-emerald-600 !text-white hover:!bg-emerald-600/90",
+          finishTone === "saved" ? SAVED_GREEN : DARK_BG,
           disableFinish && "!opacity-60"
         )}
         title="Save & finish"
