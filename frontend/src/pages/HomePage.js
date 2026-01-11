@@ -22,6 +22,7 @@ import {
   clearWorkoutDraft,
   isWorkoutDraftForToday,
 } from "../utils/storage";
+
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
@@ -46,7 +47,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
   useEffect(() => {
     loadTodaysWorkout();
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // When workout type changes, treat next load as hydration (not user edits)
@@ -69,9 +70,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setIsDirty(true);
     setDraftSaved(false);
     setFinishedSaved(false);
-  }, [workoutData, currentWorkout]);
+  }, [workoutData, currentWorkout?.type]);
 
   // Auto-save workout draft as the user enters data (protects against refresh)
+  // IMPORTANT: this MUST NOT change button UI state.
   useEffect(() => {
     if (!currentWorkout) return;
 
@@ -88,9 +90,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     draftSaveTimerRef.current = setTimeout(() => {
       if (!hasMeaningfulData) {
+        // If user cleared everything, remove draft
         clearWorkoutDraft();
-        setDraftSaved(false);
-        setIsDirty(false);
         return;
       }
 
@@ -107,8 +108,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
         })),
       });
 
-      setDraftSaved(true);
-      setIsDirty(false);
+      // ❌ DO NOT setDraftSaved(true) here
+      // ❌ DO NOT setIsDirty(false) here
     }, 400);
 
     return () => {
@@ -133,6 +134,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     const draft = getWorkoutDraft();
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
 
+    // Only programmes with 1+ exercises should be eligible
     const usableProgrammes = programmes.filter(
       (p) => Array.isArray(p.exercises) && p.exercises.length > 0
     );
@@ -160,6 +162,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     setCurrentWorkout(workout);
 
+    // Restore draft if today + same type
     if (
       hasTodaysDraft &&
       String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
@@ -186,12 +189,14 @@ const HomePage = ({ onDataChange, onSaved }) => {
         description: "We loaded your in-progress session after refresh.",
       });
 
+      // This is okay because the draft already exists
       setDraftSaved(true);
       setIsDirty(false);
-
+      setFinishedSaved(false);
       return;
     }
 
+    // No draft - start fresh
     setWorkoutData(
       workout.exercises.map((ex) => {
         const lastExerciseData = lastSameWorkout?.exercises.find(
@@ -208,11 +213,12 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     setDraftSaved(false);
     setIsDirty(false);
+    setFinishedSaved(false);
   };
 
   const handleSetComplete = (exercise, set, levelUp) => {
     const progressionSettings = getProgressionSettings();
-    const exerciseSpecificIncrement = progressionSettings.exerciseSpecific[exercise.id];
+    const exerciseSpecificIncrement = progressionSettings.exerciseSpecific?.[exercise.id];
 
     const suggestedIncrement =
       exerciseSpecificIncrement && exerciseSpecificIncrement > 0
@@ -228,12 +234,12 @@ const HomePage = ({ onDataChange, onSaved }) => {
       });
     }
 
+    // PR check
     const prs = getPersonalRecords();
-    const exerciseKey = exercise.id;
-    const currentPR = prs[exerciseKey];
+    const currentPR = prs?.[exercise.id];
 
     if (!currentPR || (set.weight ?? 0) > (currentPR.weight ?? 0)) {
-      const wasNew = updatePersonalRecord(exercise.name, set.weight, set.reps);
+      const wasNew = updatePersonalRecord(exercise.id, set.weight, set.reps);
       if (wasNew) {
         setPrCelebration({
           exercise: exercise.name,
@@ -245,34 +251,30 @@ const HomePage = ({ onDataChange, onSaved }) => {
   };
 
   const handleWeightChange = (exercise, setsData) => {
-    const updated = workoutData.map((ex) =>
-      ex.id === exercise.id ? { ...ex, setsData } : ex
+    setWorkoutData((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
     );
-    setWorkoutData(updated);
   };
 
   const handleNotesChange = (exercise, notes) => {
-    const updated = workoutData.map((ex) =>
-      ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
+    setWorkoutData((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
     );
-    setWorkoutData(updated);
   };
 
-  const buildWorkoutPayload = () => {
-    return {
-      type: currentWorkout.type,
-      name: currentWorkout.name,
-      focus: currentWorkout.focus,
-      date: new Date().toISOString(),
-      exercises: workoutData.map((ex) => ({
-        id: ex.id,
-        name: ex.name,
-        repScheme: ex.repScheme,
-        sets: ex.setsData || [],
-        notes: ex.userNotes || "",
-      })),
-    };
-  };
+  const buildWorkoutPayload = () => ({
+    type: currentWorkout.type,
+    name: currentWorkout.name,
+    focus: currentWorkout.focus,
+    date: new Date().toISOString(),
+    exercises: workoutData.map((ex) => ({
+      id: ex.id,
+      name: ex.name,
+      repScheme: ex.repScheme,
+      sets: ex.setsData || [],
+      notes: ex.userNotes || "",
+    })),
+  });
 
   const handleSaveDraft = () => {
     if (!currentWorkout) return;
@@ -292,6 +294,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     setDraftSaved(true);
     setIsDirty(false);
+    setFinishedSaved(false);
 
     toast.success("Workout saved as draft ✅", {
       description: "You can refresh without losing your entries.",
@@ -302,20 +305,20 @@ const HomePage = ({ onDataChange, onSaved }) => {
     if (!currentWorkout) return;
 
     const workout = buildWorkoutPayload();
-
     saveWorkout(workout);
+
     clearWorkoutDraft();
     advanceWorkoutPatternIndex();
 
     setFinishedSaved(true);
     setIsDirty(false);
+    setDraftSaved(false);
 
     toast.success("Workout saved! Great job! 💪", {
       description: `${currentWorkout.name} completed`,
     });
 
     onSaved?.();
-
     loadTodaysWorkout();
   };
 
@@ -335,7 +338,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
       if (daysDiff <= 1 + i) streak++;
       else break;
     }
-
     return streak;
   };
 
@@ -401,26 +403,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
             </div>
           </div>
 
-          {/* Rest Day Alert */}
-          {daysSince !== null && daysSince >= 2 && (
-            <div
-              className={`p-4 rounded-lg border ${
-                daysSince >= 4
-                  ? "bg-destructive/10 border-destructive/50 text-destructive"
-                  : "bg-primary/10 border-primary/50 text-primary"
-              }`}
-            >
-              <div className="font-semibold">
-                {daysSince >= 4 ? "⚠️ Time to get back!" : "💪 Rest day over soon"}
-              </div>
-              <div className="text-sm opacity-90 mt-1">
-                {daysSince >= 4
-                  ? `It's been ${daysSince} days. Let's crush this workout!`
-                  : "Muscles recovered. Ready for the next session!"}
-              </div>
-            </div>
-          )}
-
           {/* Workout Info */}
           <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
             <div className="flex items-start justify-between">
@@ -456,7 +438,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         ))}
       </div>
 
-      {/* Floating Save Buttons (bottom-right) */}
+      {/* Floating Save Buttons */}
       <WorkoutActionBar
         isDirty={isDirty}
         isDraftSaved={draftSaved}
