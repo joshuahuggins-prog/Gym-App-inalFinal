@@ -1,3 +1,4 @@
+// src/pages/HomePage.js
 import React, { useEffect, useRef, useState } from "react";
 import { Calendar, Flame, RotateCcw } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -74,7 +75,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
   useEffect(() => {
     if (!currentWorkout) return;
 
-    // Determine if there's any meaningful data to save
     const hasMeaningfulData = workoutData.some(
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
@@ -84,14 +84,12 @@ const HomePage = ({ onDataChange, onSaved }) => {
           ))
     );
 
-    // Debounce draft saves to avoid hammering localStorage
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
 
     draftSaveTimerRef.current = setTimeout(() => {
       if (!hasMeaningfulData) {
         clearWorkoutDraft();
         setDraftSaved(false);
-        // If there's no meaningful draft, treat as "not dirty"
         setIsDirty(false);
         return;
       }
@@ -109,7 +107,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
         })),
       });
 
-      // Autosave succeeded => not dirty anymore + show "saved" styling
       setDraftSaved(true);
       setIsDirty(false);
     }, 400);
@@ -136,7 +133,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
     const draft = getWorkoutDraft();
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
 
-    // Only programmes with 1+ exercises should be eligible
     const usableProgrammes = programmes.filter(
       (p) => Array.isArray(p.exercises) && p.exercises.length > 0
     );
@@ -146,9 +142,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       return;
     }
 
-    const nextType = hasTodaysDraft
-      ? draft.workoutType
-      : peekNextWorkoutTypeFromPattern();
+    const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
 
     const workout =
       usableProgrammes.find(
@@ -166,7 +160,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     setCurrentWorkout(workout);
 
-    // Restore draft if it exists for today + same workout type
     if (
       hasTodaysDraft &&
       String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
@@ -193,14 +186,12 @@ const HomePage = ({ onDataChange, onSaved }) => {
         description: "We loaded your in-progress session after refresh.",
       });
 
-      // When we restore a draft, treat it as saved & not dirty initially
       setDraftSaved(true);
       setIsDirty(false);
 
       return;
     }
 
-    // No draft - start fresh
     setWorkoutData(
       workout.exercises.map((ex) => {
         const lastExerciseData = lastSameWorkout?.exercises.find(
@@ -215,7 +206,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
       })
     );
 
-    // Fresh state
     setDraftSaved(false);
     setIsDirty(false);
   };
@@ -238,7 +228,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
       });
     }
 
-    // Check for PR
     const prs = getPersonalRecords();
     const exerciseKey = exercise.id;
     const currentPR = prs[exerciseKey];
@@ -342,10 +331,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       const workoutDate = new Date(workouts[i].date);
       workoutDate.setHours(0, 0, 0, 0);
 
-      const daysDiff = Math.floor(
-        (today - workoutDate) / (1000 * 60 * 60 * 24)
-      );
-
+      const daysDiff = Math.floor((today - workoutDate) / (1000 * 60 * 60 * 24));
       if (daysDiff <= 1 + i) streak++;
       else break;
     }
@@ -359,11 +345,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     const lastWorkout = new Date(workouts[0].date);
     const today = new Date();
-    const daysDiff = Math.floor(
-      (today - lastWorkout) / (1000 * 60 * 60 * 24)
-    );
-
-    return daysDiff;
+    return Math.floor((today - lastWorkout) / (1000 * 60 * 60 * 24));
   };
 
   const streak = getStreak();
@@ -372,7 +354,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
   if (!currentWorkout) return null;
 
   return (
-    <div className="min-h-screen bg-background pb-40">
+    <div className="min-h-screen bg-background pb-28">
       {/* Header */}
       <div className="bg-gradient-to-b from-card to-background border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -414,11 +396,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                 <span className="text-xs text-muted-foreground">Last Trained</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
-                {daysSince === null
-                  ? "Never"
-                  : daysSince === 0
-                  ? "Today"
-                  : `${daysSince}d ago`}
+                {daysSince === null ? "Never" : daysSince === 0 ? "Today" : `${daysSince}d ago`}
               </div>
             </div>
           </div>
@@ -478,7 +456,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         ))}
       </div>
 
-      {/* Floating Save Controls */}
+      {/* Floating Save Buttons (bottom-right) */}
       <WorkoutActionBar
         isDirty={isDirty}
         isDraftSaved={draftSaved}
