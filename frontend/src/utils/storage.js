@@ -1,7 +1,8 @@
 // LocalStorage utility functions for workout data
 
-// ✅ Bump version to match the migration you’re running
-const STORAGE_VERSION = 5; // use integers for migrations
+// ✅ No existing users, so migrations are not needed right now.
+// Keep a version key so you can add migrations later if you ever need them.
+const STORAGE_VERSION = 1; // integers only
 const STORAGE_VERSION_KEY = "gym_storage_version";
 
 export const initStorage = () => {
@@ -9,89 +10,16 @@ export const initStorage = () => {
     const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
     const version = storedVersion ? parseInt(storedVersion, 10) : 0;
 
-    // ===== Migration to v5 =====
-    // Runs ONCE for users on v0–v4, then we store version 5 so it won’t repeat.
-    if (version < 5) {
-      const programmes = JSON.parse(
-        localStorage.getItem(STORAGE_KEYS.PROGRAMMES) || "null"
-      );
-      const exercises = JSON.parse(
-        localStorage.getItem(STORAGE_KEYS.EXERCISES) || "null"
-      );
+    // Future migrations go here:
+    // if (version < 2) { ... }
 
-      // Only run if both exist
-      if (Array.isArray(programmes) && Array.isArray(exercises)) {
-        const deadliftId = "db_romanian_deadlifts";
-
-        // 1) Replace seated cable rows -> deadlifts in programmes
-        const updatedProgrammes = replaceExerciseInProgrammes(
-          programmes,
-          "seated_cable_rows",
-          {
-            id: deadliftId,
-            name: "DB Romanian Deadlifts",
-            notes: "Hip hinge, dumbbells, slight knee bend",
-          }
-        );
-
-        localStorage.setItem(
-          STORAGE_KEYS.PROGRAMMES,
-          JSON.stringify(updatedProgrammes)
-        );
-
-        // 2) Ensure deadlifts exists in exercise catalogue
-        const hasDeadlifts = exercises.some((e) => e?.id === deadliftId);
-        let updatedExercises = exercises;
-
-        if (!hasDeadlifts) {
-          updatedExercises = [
-            ...exercises,
-            {
-              id: deadliftId,
-              name: "DB Romanian Deadlifts",
-              sets: 3,
-              repScheme: "RPT",
-              goalReps: [6, 8, 10],
-              restTime: 120,
-              notes: "Hip hinge, dumbbells, slight knee bend",
-              assignedTo: ["B"],
-              hidden: false,
-            },
-          ];
-        }
-
-        // 3) Auto-hide unused exercises AFTER replacement
-        const migrated = autoHideUnusedCatalogueExercises({
-          programmes: updatedProgrammes,
-          exercises: updatedExercises,
-        });
-
-        localStorage.setItem(
-          STORAGE_KEYS.EXERCISES,
-          JSON.stringify(migrated.exercises)
-        );
-
-        // 4) Ensure video link exists (optional)
-        const videoLinks =
-          JSON.parse(localStorage.getItem(STORAGE_KEYS.VIDEO_LINKS) || "null") ||
-          {};
-        if (!videoLinks[deadliftId]) {
-          videoLinks[deadliftId] =
-            "https://www.youtube.com/watch?v=hQgFixeXdZo";
-          localStorage.setItem(
-            STORAGE_KEYS.VIDEO_LINKS,
-            JSON.stringify(videoLinks)
-          );
-        }
-      }
-    }
-
-    // Save current version
-    localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION.toString());
+    // Always persist current version so init is idempotent
+    localStorage.setItem(STORAGE_VERSION_KEY, String(STORAGE_VERSION));
   } catch (e) {
     console.error("Storage init failed", e);
   }
 };
+
 
 const STORAGE_KEYS = {
   WORKOUTS: 'gym_workouts',
