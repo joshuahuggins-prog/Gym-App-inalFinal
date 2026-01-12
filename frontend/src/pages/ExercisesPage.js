@@ -1,6 +1,6 @@
 // src/pages/ExercisesPage.js
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Edit2, Trash2, Search, Save, Video } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -29,15 +29,17 @@ import {
 } from "../utils/storage";
 import { toast } from "sonner";
 
-const MAX_SETS = 8; // ✅ limit number of sets (and therefore rep boxes)
+const MAX_SETS = 8;
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
+const norm = (s) => String(s || "").trim().toLowerCase();
 
 const ExercisesPage = () => {
   const [exercises, setExercises] = useState([]);
   const [programmes, setProgrammes] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterProgramme, setFilterProgramme] = useState("all");
+
   const [editingExercise, setEditingExercise] = useState(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
 
@@ -49,13 +51,33 @@ const ExercisesPage = () => {
   }, []);
 
   const loadData = () => {
-    setExercises(getExercises());
-    setProgrammes(getProgrammes());
+    setExercises(getExercises() || []);
+    setProgrammes(getProgrammes() || []);
   };
+
+  /**
+   * programmeUsageMap: exerciseId -> array of programme objects that contain that id
+   */
+  const programmeUsageMap = useMemo(() => {
+    const map = new Map();
+
+    (programmes || []).forEach((p) => {
+      const list = Array.isArray(p?.exercises) ? p.exercises : [];
+      list.forEach((ex) => {
+        const id = norm(ex?.id);
+        if (!id) return;
+        if (!map.has(id)) map.set(id, []);
+        map.get(id).push(p);
+      });
+    });
+
+    return map;
+  }, [programmes]);
 
   const handleCreateExercise = () => {
     const sets = 3;
-    const goalReps = [8, 10, 12]; // one per set
+    const goalReps = [8, 10, 12];
+
     setEditingExercise({
       id: `exercise_${Date.now()}`,
       name: "",
@@ -64,15 +86,15 @@ const ExercisesPage = () => {
       goalReps,
       restTime: 120,
       notes: "",
-      assignedTo: [],
       videoUrl: "",
     });
+
     setSetsDraft(String(sets));
     setShowEditDialog(true);
   };
 
   const handleEditExercise = (exercise) => {
-    const videoLinks = getVideoLinks();
+    const videoLinks = getVideoLinks() || {};
     const videoUrl = videoLinks[exercise.id] || "";
 
     const sets = Number.isFinite(Number(exercise.sets)) ? Number(exercise.sets) : 3;
@@ -83,7 +105,10 @@ const ExercisesPage = () => {
 
     // Ensure goalReps length matches sets (pad/trim)
     if (goalReps.length < safeSets) {
-      goalReps = [...goalReps, ...Array.from({ length: safeSets - goalReps.length }, () => 8)];
+      goalReps = [
+        ...goalReps,
+        ...Array.from({ length: safeSets - goalReps.length }, () => 8),
+      ];
     } else if (goalReps.length > safeSets) {
       goalReps = goalReps.slice(0, safeSets);
     }
@@ -93,78 +118,13 @@ const ExercisesPage = () => {
     setShowEditDialog(true);
   };
 
-  const handleSaveExercise = () => {
-    if (!editingExercise?.name) {
-      toast.error("Please enter exercise name");
-      return;
-    }
-
-    const { videoUrl, ...exerciseData } = editingExercise;
-
-    // ✅ Clean sets (1..MAX_SETS)
-    const setsNum = Number(exerciseData.sets);
-    const sets = Number.isFinite(setsNum) ? clampInt(setsNum, 1, MAX_SETS) : 3;
-    exerciseData.sets = sets;
-
-    // ✅ Clean goalReps to match sets (allow blanks while editing)
-    const rawGoalReps = Array.isArray(exerciseData.goalReps) ? exerciseData.goalReps : [];
-    let cleaned = rawGoalReps.map((x) => {
-      if (x === "" || x == null) return 8; // default if left blank
-      const n = Number(x);
-      if (!Number.isFinite(n) || n <= 0) return 8;
-      return clampInt(n, 1, 200); // reps "open", just keep sane
-    });
-
-    // enforce length == sets
-    if (cleaned.length < sets) {
-      cleaned = [...cleaned, ...Array.from({ length: sets - cleaned.length }, () => 8)];
-    } else if (cleaned.length > sets) {
-      cleaned = cleaned.slice(0, sets);
-    }
-
-    exerciseData.goalReps = cleaned.length > 0 ? cleaned : [8];
-
-    // ✅ Clean rest time
-    const restNum = Number(exerciseData.restTime);
-    exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
-
-    saveExercise(exerciseData);
-
-    if (videoUrl) {
-      updateVideoLink(exerciseData.id, videoUrl);
-    }
-
-    loadData();
-    setShowEditDialog(false);
-    setEditingExercise(null);
-    setSetsDraft("");
-    toast.success("Exercise saved!");
-  };
-
-  const handleDeleteExercise = (id, name) => {
-    if (window.confirm(`Delete "${name}"? This will remove it from all programmes.`)) {
-      deleteExercise(id);
-      loadData();
-      toast.success("Exercise deleted");
-    }
-  };
-
-  const handleToggleProgramme = (programmeType) => {
-    const assignedTo = editingExercise.assignedTo || [];
-    const isAssigned = assignedTo.includes(programmeType);
-
-    setEditingExercise({
-      ...editingExercise,
-      assignedTo: isAssigned
-        ? assignedTo.filter((p) => p !== programmeType)
-        : [...assignedTo, programmeType],
-    });
-  };
-
   const setSetsAndSyncGoalReps = (nextSets) => {
     const sets = clampInt(nextSets, 1, MAX_SETS);
 
-    const current = Array.isArray(editingExercise.goalReps) ? [...editingExercise.goalReps] : [];
+    const current = Array.isArray(editingExercise.goalReps)
+      ? [...editingExercise.goalReps]
+      : [];
+
     let nextGoalReps = current;
 
     if (nextGoalReps.length < sets) {
@@ -179,13 +139,103 @@ const ExercisesPage = () => {
     setEditingExercise({ ...editingExercise, sets, goalReps: nextGoalReps });
   };
 
-  const filteredExercises = exercises.filter((ex) => {
-    const matchesSearch = ex.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesProgramme =
-      filterProgramme === "all" ||
-      (ex.assignedTo && ex.assignedTo.includes(filterProgramme));
-    return matchesSearch && matchesProgramme;
-  });
+  const handleSaveExercise = () => {
+    if (!editingExercise?.name || !editingExercise.name.trim()) {
+      toast.error("Please enter exercise name");
+      return;
+    }
+
+    const { videoUrl, ...exerciseData } = editingExercise;
+
+    // Clean sets (1..MAX_SETS)
+    const setsNum = Number(exerciseData.sets);
+    const sets = Number.isFinite(setsNum) ? clampInt(setsNum, 1, MAX_SETS) : 3;
+    exerciseData.sets = sets;
+
+    // Clean goalReps to match sets
+    const rawGoalReps = Array.isArray(exerciseData.goalReps) ? exerciseData.goalReps : [];
+    let cleaned = rawGoalReps.map((x) => {
+      if (x === "" || x == null) return 8;
+      const n = Number(x);
+      if (!Number.isFinite(n) || n <= 0) return 8;
+      return clampInt(n, 1, 200);
+    });
+
+    if (cleaned.length < sets) {
+      cleaned = [...cleaned, ...Array.from({ length: sets - cleaned.length }, () => 8)];
+    } else if (cleaned.length > sets) {
+      cleaned = cleaned.slice(0, sets);
+    }
+
+    exerciseData.goalReps = cleaned.length > 0 ? cleaned : [8];
+
+    // Rest time
+    const restNum = Number(exerciseData.restTime);
+    exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
+
+    // ✅ Save exercise details ONLY (no assignedTo here)
+    const ok = saveExercise(exerciseData);
+
+    if (!ok) {
+      toast.error("Failed to save exercise");
+      return;
+    }
+
+    if (videoUrl && videoUrl.trim()) {
+      updateVideoLink(exerciseData.id, videoUrl.trim());
+    }
+
+    loadData();
+    setShowEditDialog(false);
+    setEditingExercise(null);
+    setSetsDraft("");
+    toast.success("Exercise saved!");
+  };
+
+  const handleDeleteExercise = (id, name) => {
+    const usedBy = programmeUsageMap.get(norm(id)) || [];
+    const usedNames = usedBy.map((p) => p?.name || p?.type).filter(Boolean);
+
+    const msg =
+      usedNames.length > 0
+        ? `Delete "${name}"?\n\nIt is currently used in: ${usedNames.join(", ")}.\n\nDeleting may break those programmes unless you remove it from them too.`
+        : `Delete "${name}"?`;
+
+    if (window.confirm(msg)) {
+      const ok = deleteExercise(id);
+      if (!ok) {
+        toast.error("Failed to delete exercise");
+        return;
+      }
+      loadData();
+      toast.success("Exercise deleted");
+    }
+  };
+
+  const filteredExercises = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+
+    // Build set of IDs that are in the selected programme (if filtering)
+    let allowedIds = null;
+    if (filterProgramme !== "all") {
+      const prog = (programmes || []).find((p) => String(p?.type) === String(filterProgramme));
+      const ids = new Set(
+        (prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean)
+      );
+      allowedIds = ids;
+    }
+
+    return (exercises || []).filter((ex) => {
+      const name = String(ex?.name || "");
+      const matchesSearch = !search || name.toLowerCase().includes(search);
+
+      const id = norm(ex?.id);
+      const matchesProgramme =
+        filterProgramme === "all" ? true : allowedIds?.has(id);
+
+      return matchesSearch && matchesProgramme;
+    });
+  }, [exercises, programmes, searchTerm, filterProgramme]);
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -199,6 +249,9 @@ const ExercisesPage = () => {
               </h1>
               <p className="text-sm text-muted-foreground">
                 {exercises.length} total exercises
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tip: To add/remove exercises from workouts, edit the programme (not here).
               </p>
             </div>
             <Button onClick={handleCreateExercise}>
@@ -224,7 +277,7 @@ const ExercisesPage = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Programmes</SelectItem>
-                {programmes.map((prog) => (
+                {(programmes || []).map((prog) => (
                   <SelectItem key={prog.type} value={prog.type}>
                     {prog.name}
                   </SelectItem>
@@ -251,81 +304,86 @@ const ExercisesPage = () => {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {filteredExercises.map((exercise) => (
-              <div
-                key={exercise.id}
-                className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-foreground mb-1">
-                      {exercise.name}
-                    </h3>
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {exercise.assignedTo && exercise.assignedTo.length > 0 ? (
-                        exercise.assignedTo.map((prog) => (
-                          <Badge key={prog} variant="outline" className="text-xs">
-                            {programmes.find((p) => p.type === prog)?.name || prog}
+            {filteredExercises.map((exercise) => {
+              const usedBy = programmeUsageMap.get(norm(exercise.id)) || [];
+              return (
+                <div
+                  key={exercise.id}
+                  className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-bold text-foreground mb-1 truncate">
+                        {exercise.name}
+                      </h3>
+
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {usedBy.length > 0 ? (
+                          usedBy.map((prog) => (
+                            <Badge key={prog.type} variant="outline" className="text-xs">
+                              {prog.name || prog.type}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            Not in any programme
                           </Badge>
-                        ))
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
-                          Unassigned
-                        </Badge>
-                      )}
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditExercise(exercise)}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteExercise(exercise.id, exercise.name)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEditExercise(exercise)}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteExercise(exercise.id, exercise.name)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
 
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Sets:</span>
-                    <span className="text-foreground font-semibold">{exercise.sets}</span>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Sets:</span>
+                      <span className="text-foreground font-semibold">{exercise.sets}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Reps:</span>
+                      <span className="text-foreground font-semibold">
+                        {(exercise.goalReps || []).join(", ")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Rest:</span>
+                      <span className="text-foreground font-semibold">
+                        {exercise.restTime}s
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Scheme:</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {exercise.repScheme}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Reps:</span>
-                    <span className="text-foreground font-semibold">
-                      {(exercise.goalReps || []).join(", ")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Rest:</span>
-                    <span className="text-foreground font-semibold">
-                      {exercise.restTime}s
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Scheme:</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {exercise.repScheme}
-                    </Badge>
-                  </div>
-                </div>
 
-                {exercise.notes && (
-                  <div className="mt-3 text-xs text-muted-foreground p-2 bg-muted/30 rounded border border-border">
-                    {exercise.notes}
-                  </div>
-                )}
-              </div>
-            ))}
+                  {exercise.notes ? (
+                    <div className="mt-3 text-xs text-muted-foreground p-2 bg-muted/30 rounded border border-border">
+                      {exercise.notes}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -350,7 +408,7 @@ const ExercisesPage = () => {
             </DialogTitle>
           </DialogHeader>
 
-          {editingExercise && (
+          {editingExercise ? (
             <div className="space-y-4 py-4">
               {/* Name */}
               <div>
@@ -381,7 +439,7 @@ const ExercisesPage = () => {
                       const raw = e.target.value;
                       setSetsDraft(raw);
 
-                      // allow blank while typing (prevents "stuck" input)
+                      // allow blank while typing
                       if (raw === "") return;
 
                       const n = Number(raw);
@@ -397,7 +455,6 @@ const ExercisesPage = () => {
                       }
                     }}
                   />
-
                   <div className="text-xs text-muted-foreground mt-1">
                     This controls how many rep boxes appear (one per set).
                   </div>
@@ -429,15 +486,13 @@ const ExercisesPage = () => {
               {/* Rep boxes */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-foreground block">
-                  Add goal reps for each set (one box per set)
+                  Goal reps for each set (one box per set)
                 </label>
 
                 <div className="grid grid-cols-4 gap-2">
                   {(editingExercise.goalReps || []).map((rep, idx) => (
                     <div key={idx} className="space-y-1">
-                      <div className="text-[11px] text-muted-foreground">
-                        Set {idx + 1}
-                      </div>
+                      <div className="text-[11px] text-muted-foreground">Set {idx + 1}</div>
                       <Input
                         type="number"
                         min="1"
@@ -513,7 +568,7 @@ const ExercisesPage = () => {
                     }
                     placeholder="https://youtube.com/..."
                   />
-                  {editingExercise.videoUrl && (
+                  {editingExercise.videoUrl ? (
                     <Button
                       variant="outline"
                       size="sm"
@@ -521,7 +576,7 @@ const ExercisesPage = () => {
                     >
                       <Video className="w-4 h-4" />
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -531,7 +586,7 @@ const ExercisesPage = () => {
                   Notes / Instructions
                 </label>
                 <Textarea
-                  value={editingExercise.notes}
+                  value={editingExercise.notes || ""}
                   onChange={(e) =>
                     setEditingExercise({ ...editingExercise, notes: e.target.value })
                   }
@@ -540,35 +595,13 @@ const ExercisesPage = () => {
                 />
               </div>
 
-              {/* Assign to Programmes */}
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-2">
-                  Assigned to Programmes
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {programmes.map((prog) => {
-                    const isAssigned =
-                      editingExercise.assignedTo &&
-                      editingExercise.assignedTo.includes(prog.type);
-                    return (
-                      <button
-                        type="button"
-                        key={prog.type}
-                        onClick={() => handleToggleProgramme(prog.type)}
-                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                          isAssigned
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
-                      >
-                        {prog.name}
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Usage hint */}
+              <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Programme membership:</span>{" "}
+                This is controlled in the Programme editor. This page edits the exercise details only.
               </div>
             </div>
-          )}
+          ) : null}
 
           <div className="flex gap-3">
             <Button
