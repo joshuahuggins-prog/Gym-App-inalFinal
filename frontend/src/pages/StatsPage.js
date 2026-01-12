@@ -220,7 +220,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   const metricLabel = statsMetric === "e1rm" ? "e1RM" : "Max";
 
   // Collapse state
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   // Selected exercise
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id || "");
