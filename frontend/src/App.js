@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useState } from "react";
 import {
   Home,
@@ -16,7 +17,7 @@ import ProgrammesPage from "./pages/ProgrammesPage";
 import ExercisesPage from "./pages/ExercisesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ImportExportPage from "./pages/ImportExportPage";
-import EditWorkoutPage from "./pages/EditWorkoutPage"; // ✅ ADD THIS
+import EditWorkoutPage from "./pages/EditWorkoutPage";
 
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
@@ -31,26 +32,42 @@ import { Button } from "./components/ui/button";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");
-  const [editingWorkoutId, setEditingWorkoutId] = useState(null); // ✅ NEW
+
+  // Edit workout page state
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
+
+  // Unsaved workout protection (Home only)
   const [hasUnsavedData, setHasUnsavedData] = useState(false);
   const [showNavigationWarning, setShowNavigationWarning] = useState(false);
   const [pendingPage, setPendingPage] = useState(null);
 
+  const isEditMode = currentPage === "edit-workout";
+
   const handleNavigate = (page) => {
+    // Block leaving Home if unsaved workout data
     if (currentPage === "home" && hasUnsavedData && page !== "home") {
       setPendingPage(page);
       setShowNavigationWarning(true);
-    } else {
-      setCurrentPage(page);
-      if (page !== "home") setHasUnsavedData(false);
+      return;
     }
+
+    setCurrentPage(page);
+
+    // Reset unsaved state when leaving Home
+    if (page !== "home") setHasUnsavedData(false);
+
+    // If navigating away from edit screen, clear selected workout
+    if (page !== "edit-workout") setEditingWorkoutId(null);
   };
 
   const handleConfirmNavigation = () => {
-    setCurrentPage(pendingPage);
+    const next = pendingPage || "home";
+    setCurrentPage(next);
     setHasUnsavedData(false);
     setShowNavigationWarning(false);
     setPendingPage(null);
+
+    if (next !== "edit-workout") setEditingWorkoutId(null);
   };
 
   const handleCancelNavigation = () => {
@@ -59,18 +76,16 @@ const App = () => {
   };
 
   const handleWorkoutDataChange = (hasData) => {
-    setHasUnsavedData(hasData);
+    setHasUnsavedData(!!hasData);
   };
 
   const handleWorkoutSaved = () => {
     setHasUnsavedData(false);
   };
 
-  /* ------------------------------------
-     EDIT WORKOUT NAVIGATION
-  ------------------------------------ */
-
+  // Called by HistoryPage pencil button
   const openEditWorkout = (workoutId) => {
+    if (!workoutId) return;
     setEditingWorkoutId(workoutId);
     setCurrentPage("edit-workout");
   };
@@ -79,10 +94,6 @@ const App = () => {
     setEditingWorkoutId(null);
     setCurrentPage("history");
   };
-
-  /* ------------------------------------
-     Page rendering
-  ------------------------------------ */
 
   const renderPage = () => {
     switch (currentPage) {
@@ -134,12 +145,12 @@ const App = () => {
     <SettingsProvider>
       <div className="flex flex-col h-full bg-background text-foreground">
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pb-20">
+        <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
           {renderPage()}
         </main>
 
-        {/* Bottom Navigation */}
-        {currentPage !== "edit-workout" && ( // ✅ HIDE NAV IN EDIT MODE
+        {/* Bottom Navigation (hidden while editing a workout) */}
+        {!isEditMode && (
           <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
             <div className="overflow-x-auto scrollbar-hide">
               <div className="flex items-center h-16 px-2 min-w-max">
@@ -190,11 +201,8 @@ const App = () => {
           </nav>
         )}
 
-        {/* Unsaved Workout Warning */}
-        <Dialog
-          open={showNavigationWarning}
-          onOpenChange={setShowNavigationWarning}
-        >
+        {/* Unsaved Workout Warning (Home only) */}
+        <Dialog open={showNavigationWarning} onOpenChange={setShowNavigationWarning}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">
@@ -204,8 +212,7 @@ const App = () => {
 
             <div className="py-4 space-y-3">
               <p>
-                You have unsaved workout data. Leaving now will discard your
-                progress.
+                You have unsaved workout data. Leaving now will discard your progress.
               </p>
               <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                 <p className="text-sm text-destructive font-semibold">
