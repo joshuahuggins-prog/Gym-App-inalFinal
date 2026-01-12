@@ -21,9 +21,11 @@ import {
   saveWorkoutDraft,
   clearWorkoutDraft,
   isWorkoutDraftForToday,
-  setDraftWorkoutType, // ✅ add
+  setDraftWorkoutType, // ✅ manual switch support (draft pins workoutType)
+  getExercises, // ✅ catalogue (local overrides) used for template set counts
 } from "../utils/storage";
 
+import { buildWorkoutExerciseRows } from "../utils/workoutBuilder"; // ✅ shared builder
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
@@ -60,6 +62,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
   const loadTodaysWorkout = () => {
     const workouts = getWorkouts();
     const usableProgrammes = getUsableProgrammes();
+    const catalogue = getExercises(); // ✅ local overrides / stock fallback (per your storage design)
 
     const draft = getWorkoutDraft();
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
@@ -88,6 +91,15 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setCurrentWorkout(workout);
     setManualWorkoutType(workout.type);
 
+    // ✅ Build template rows (guarantees full set count from programme/catalogue)
+    const baseRows = buildWorkoutExerciseRows({
+      workoutType: workout.type,
+      programme: workout,
+      catalogueExercises: catalogue,
+      savedWorkout: null,
+      lastSameWorkout,
+    });
+
     // Restore draft if today + same type
     if (
       hasTodaysDraft &&
@@ -95,21 +107,33 @@ const HomePage = ({ onDataChange, onSaved }) => {
     ) {
       const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
 
-      setWorkoutData(
-        workout.exercises.map((ex) => {
-          const lastExerciseData = lastSameWorkout?.exercises.find(
-            (e) => e.id === ex.id || e.name === ex.name
-          );
-          const draftEx = draftById.get(ex.id);
+      const merged = baseRows.map((row) => {
+        const draftEx = draftById.get(row.id);
+
+        // If draftEx has fewer sets than template, pad out to template length
+        const draftSets = Array.isArray(draftEx?.setsData) ? draftEx.setsData : [];
+
+        const paddedSets = row.setsData.map((templateSet, idx) => {
+          const s = draftSets[idx];
+          if (!s) return templateSet; // keep default (0/0/false)
 
           return {
-            ...ex,
-            userNotes: draftEx?.userNotes || "",
-            setsData: draftEx?.setsData || [],
-            lastWorkoutData: lastExerciseData || null,
+            ...templateSet,
+            setNumber: templateSet.setNumber ?? idx + 1,
+            weight: s.weight ?? templateSet.weight ?? 0,
+            reps: s.reps ?? templateSet.reps ?? 0,
+            completed: !!s.completed,
           };
-        })
-      );
+        });
+
+        return {
+          ...row,
+          userNotes: draftEx?.userNotes || "",
+          setsData: paddedSets,
+        };
+      });
+
+      setWorkoutData(merged);
 
       toast.message("Restored unsaved workout", {
         description: "We loaded your in-progress session after refresh.",
@@ -121,19 +145,18 @@ const HomePage = ({ onDataChange, onSaved }) => {
       return;
     }
 
-    // No draft - start fresh
+    // No draft - start fresh with template sets shown
     setWorkoutData(
-      workout.exercises.map((ex) => {
-        const lastExerciseData = lastSameWorkout?.exercises.find(
-          (e) => e.id === ex.id || e.name === ex.name
-        );
-        return {
-          ...ex,
-          userNotes: "",
-          setsData: [],
-          lastWorkoutData: lastExerciseData || null,
-        };
-      })
+      baseRows.map((row) => ({
+        ...row,
+        userNotes: "",
+        setsData: row.setsData.map((s) => ({
+          ...s,
+          weight: 0,
+          reps: 0,
+          completed: false,
+        })),
+      }))
     );
 
     setDraftSaved(false);
@@ -236,7 +259,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       });
     }
 
-    // PR check (NOTE: this compares raw number; if you later want "best assisted" PR separately, we can)
+    // PR check
     const prs = getPersonalRecords();
     const currentPR = prs?.[exercise.id];
 
@@ -253,11 +276,15 @@ const HomePage = ({ onDataChange, onSaved }) => {
   };
 
   const handleWeightChange = (exercise, setsData) => {
-    setWorkoutData((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex)));
+    setWorkoutData((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
+    );
   };
 
   const handleNotesChange = (exercise, notes) => {
-    setWorkoutData((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex)));
+    setWorkoutData((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+    );
   };
 
   const buildWorkoutPayload = () => ({
@@ -344,7 +371,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     // ✅ lock “today’s” workout to the chosen type via the draft
     setDraftWorkoutType(picked.type);
-
     loadRef.current?.();
 
     toast.message("Switched workout", {
@@ -404,7 +430,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gradient-primary">Gym Strength Programme</h1>
+              <h1 className="text-3xl font-bold text-gradient-primary">
+                Gym Strength Programme
+              </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
@@ -413,7 +441,12 @@ const HomePage = ({ onDataChange, onSaved }) => {
                 })}
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={toggleWeightUnit} className="font-semibold">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggleWeightUnit}
+              className="font-semibold"
+            >
               {weightUnit}
             </Button>
           </div>
@@ -480,7 +513,11 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                      disabled={!manualWorkoutType || manualWorkoutType === currentWorkout.type}
+                      disabled={
+                        !manualWorkoutType ||
+                        String(manualWorkoutType).toUpperCase() ===
+                          String(currentWorkout.type).toUpperCase()
+                      }
                       className="shrink-0"
                     >
                       Switch
@@ -490,7 +527,11 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       variant="outline"
                       size="sm"
                       onClick={handleReturnToSequence}
-                      disabled={!nextInSequence || String(nextInSequence).toUpperCase() === String(currentWorkout.type).toUpperCase()}
+                      disabled={
+                        !nextInSequence ||
+                        String(nextInSequence).toUpperCase() ===
+                          String(currentWorkout.type).toUpperCase()
+                      }
                       className="shrink-0"
                     >
                       Next
