@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useState } from "react";
 import {
   Home,
@@ -17,9 +16,7 @@ import ProgrammesPage from "./pages/ProgrammesPage";
 import ExercisesPage from "./pages/ExercisesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ImportExportPage from "./pages/ImportExportPage";
-
-// ✅ NEW (create this file next)
-import EditWorkoutPage from "./pages/EditWorkoutPage";
+import EditWorkoutPage from "./pages/EditWorkoutPage"; // ✅ ADD THIS
 
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
@@ -34,15 +31,13 @@ import { Button } from "./components/ui/button";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null); // ✅ NEW
+
   const [hasUnsavedData, setHasUnsavedData] = useState(false);
   const [showNavigationWarning, setShowNavigationWarning] = useState(false);
   const [pendingPage, setPendingPage] = useState(null);
 
-  // ✅ NEW: edit-workout page state
-  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
-
   const handleNavigate = (page) => {
-    // Optional: if you ever want to protect the edit page too, extend this condition
     if (currentPage === "home" && hasUnsavedData && page !== "home") {
       setPendingPage(page);
       setShowNavigationWarning(true);
@@ -72,7 +67,10 @@ const App = () => {
     setHasUnsavedData(false);
   };
 
-  // ✅ NEW: open the edit screen from History
+  /* ------------------------------------
+     EDIT WORKOUT NAVIGATION
+  ------------------------------------ */
+
   const openEditWorkout = (workoutId) => {
     setEditingWorkoutId(workoutId);
     setCurrentPage("edit-workout");
@@ -82,6 +80,10 @@ const App = () => {
     setEditingWorkoutId(null);
     setCurrentPage("history");
   };
+
+  /* ------------------------------------
+     Page rendering
+  ------------------------------------ */
 
   const renderPage = () => {
     switch (currentPage) {
@@ -94,16 +96,13 @@ const App = () => {
         );
 
       case "history":
-        // ✅ pass handler down so pencil can open edit screen
         return <HistoryPage onEditWorkout={openEditWorkout} />;
 
       case "edit-workout":
-        // ✅ NEW: hidden page (not in nav)
         return (
           <EditWorkoutPage
             workoutId={editingWorkoutId}
             onClose={closeEditWorkout}
-            onSaved={closeEditWorkout}
           />
         );
 
@@ -136,60 +135,67 @@ const App = () => {
     <SettingsProvider>
       <div className="flex flex-col h-full bg-background text-foreground">
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pb-20">{renderPage()}</main>
+        <main className="flex-1 overflow-y-auto pb-20">
+          {renderPage()}
+        </main>
 
         {/* Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-          <div className="overflow-x-auto scrollbar-hide">
-            <div className="flex items-center h-16 px-2 min-w-max">
-              <NavButton
-                icon={<Home className="w-5 h-5" />}
-                label="Today"
-                active={currentPage === "home"}
-                onClick={() => handleNavigate("home")}
-              />
-              <NavButton
-                icon={<History className="w-5 h-5" />}
-                label="History"
-                active={currentPage === "history"}
-                onClick={() => handleNavigate("history")}
-              />
-              <NavButton
-                icon={<TrendingUp className="w-5 h-5" />}
-                label="Progress"
-                active={currentPage === "progress"}
-                onClick={() => handleNavigate("progress")}
-              />
-              <NavButton
-                icon={<FileText className="w-5 h-5" />}
-                label="Programmes"
-                active={currentPage === "programmes"}
-                onClick={() => handleNavigate("programmes")}
-              />
-              <NavButton
-                icon={<Dumbbell className="w-5 h-5" />}
-                label="Exercises"
-                active={currentPage === "exercises"}
-                onClick={() => handleNavigate("exercises")}
-              />
-              <NavButton
-                icon={<Settings className="w-5 h-5" />}
-                label="Settings"
-                active={currentPage === "settings"}
-                onClick={() => handleNavigate("settings")}
-              />
-              <NavButton
-                icon={<Download className="w-5 h-5" />}
-                label="Data"
-                active={currentPage === "import-export"}
-                onClick={() => handleNavigate("import-export")}
-              />
+        {currentPage !== "edit-workout" && ( // ✅ HIDE NAV IN EDIT MODE
+          <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
+            <div className="overflow-x-auto scrollbar-hide">
+              <div className="flex items-center h-16 px-2 min-w-max">
+                <NavButton
+                  icon={<Home className="w-5 h-5" />}
+                  label="Today"
+                  active={currentPage === "home"}
+                  onClick={() => handleNavigate("home")}
+                />
+                <NavButton
+                  icon={<History className="w-5 h-5" />}
+                  label="History"
+                  active={currentPage === "history"}
+                  onClick={() => handleNavigate("history")}
+                />
+                <NavButton
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Progress"
+                  active={currentPage === "progress"}
+                  onClick={() => handleNavigate("progress")}
+                />
+                <NavButton
+                  icon={<FileText className="w-5 h-5" />}
+                  label="Programmes"
+                  active={currentPage === "programmes"}
+                  onClick={() => handleNavigate("programmes")}
+                />
+                <NavButton
+                  icon={<Dumbbell className="w-5 h-5" />}
+                  label="Exercises"
+                  active={currentPage === "exercises"}
+                  onClick={() => handleNavigate("exercises")}
+                />
+                <NavButton
+                  icon={<Settings className="w-5 h-5" />}
+                  label="Settings"
+                  active={currentPage === "settings"}
+                  onClick={() => handleNavigate("settings")}
+                />
+                <NavButton
+                  icon={<Download className="w-5 h-5" />}
+                  label="Data"
+                  active={currentPage === "import-export"}
+                  onClick={() => handleNavigate("import-export")}
+                />
+              </div>
             </div>
-          </div>
-        </nav>
+          </nav>
+        )}
 
         {/* Unsaved Workout Warning */}
-        <Dialog open={showNavigationWarning} onOpenChange={setShowNavigationWarning}>
+        <Dialog
+          open={showNavigationWarning}
+          onOpenChange={setShowNavigationWarning}
+        >
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">
@@ -198,7 +204,10 @@ const App = () => {
             </DialogHeader>
 
             <div className="py-4 space-y-3">
-              <p>You have unsaved workout data. Leaving now will discard your progress.</p>
+              <p>
+                You have unsaved workout data. Leaving now will discard your
+                progress.
+              </p>
               <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                 <p className="text-sm text-destructive font-semibold">
                   ⚠️ Sets, weights, and reps will be lost.
