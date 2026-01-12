@@ -6,7 +6,6 @@ import { Badge } from "../components/ui/badge";
 import { getWorkouts, deleteWorkout } from "../utils/storage";
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -30,20 +29,33 @@ const safeFormat = (dateValue, locale, options, fallback = "Unknown date") => {
   }
 };
 
+const publicBase = () => {
+  // CRA / GH Pages safe base
+  const base = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
+  return base;
+};
+
+const goToEditWorkout = (id) => {
+  // If you use BrowserRouter on GH Pages, PUBLIC_URL matters
+  // If you use HashRouter, change this to `#` routing.
+  window.location.assign(`${publicBase()}/edit-workout/${id}`);
+};
+
 const HistoryPage = () => {
   const { weightUnit } = useSettings();
   const [workouts, setWorkouts] = useState([]);
   const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
-  const navigate = useNavigate();
 
   useEffect(() => {
     setWorkouts(getWorkouts() || []);
   }, []);
 
+  const loadWorkouts = () => setWorkouts(getWorkouts() || []);
+
   const handleDelete = (id) => {
     if (window.confirm("Delete this workout?")) {
       deleteWorkout(id);
-      setWorkouts(getWorkouts() || []);
+      loadWorkouts();
       toast.success("Workout deleted");
     }
   };
@@ -63,13 +75,13 @@ const HistoryPage = () => {
       const d = safeDate(workout?.date);
       const year = d ? d.getFullYear() : 9999;
       const month = d ? d.getMonth() + 1 : 12;
+      const key = `${year}-${pad2(month)}`;
 
-      const monthKey = String(year) + "-" + pad2(month);
-      if (!grouped[monthKey]) grouped[monthKey] = [];
-      grouped[monthKey].push(workout);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(workout);
     });
 
-    // Sort months descending (latest first)
+    // newest months first
     const ordered = {};
     Object.keys(grouped)
       .sort((a, b) => (a < b ? 1 : -1))
@@ -106,9 +118,9 @@ const HistoryPage = () => {
           </div>
         ) : (
           Object.entries(groupedWorkouts).map(([monthKey, monthWorkouts]) => {
-            const parts = String(monthKey).split("-");
-            const year = Number(parts[0]);
-            const month = Number(parts[1]);
+            const [yearStr, monthStr] = monthKey.split("-");
+            const year = Number(yearStr);
+            const month = Number(monthStr);
 
             const monthName =
               Number.isFinite(year) && Number.isFinite(month)
@@ -146,7 +158,7 @@ const HistoryPage = () => {
 
                   return (
                     <div
-                      key={workout?.id || Math.random().toString(36)}
+                      key={workout?.id || `${workout?.date}_${workout?.name}`}
                       className="bg-card border border-border rounded-xl overflow-hidden shadow-lg"
                     >
                       {/* Workout Header */}
@@ -182,7 +194,7 @@ const HistoryPage = () => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (!workout?.id) return;
-                                navigate("/edit-workout/" + workout.id);
+                                goToEditWorkout(workout.id);
                               }}
                               className="text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10"
                               title="Edit workout"
@@ -223,7 +235,6 @@ const HistoryPage = () => {
                         <div className="px-4 pb-4 space-y-3 animate-fadeIn">
                           {exercises.map((exercise, exIndex) => {
                             const sets = Array.isArray(exercise?.sets) ? exercise.sets : [];
-
                             return (
                               <div
                                 key={exercise?.id || exIndex}
