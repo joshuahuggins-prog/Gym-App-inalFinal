@@ -62,10 +62,11 @@ const App = () => {
 
   const handleConfirmNavigation = () => {
     const next = pendingPage || "home";
-    setCurrentPage(next);
-    setHasUnsavedData(false);
     setShowNavigationWarning(false);
     setPendingPage(null);
+
+    setCurrentPage(next);
+    setHasUnsavedData(false);
 
     if (next !== "edit-workout") setEditingWorkoutId(null);
   };
@@ -109,12 +110,9 @@ const App = () => {
         return <HistoryPage onEditWorkout={openEditWorkout} />;
 
       case "edit-workout":
-        return (
-          <EditWorkoutPage
-            workoutId={editingWorkoutId}
-            onClose={closeEditWorkout}
-          />
-        );
+        // Safety: if somehow opened without an id, bounce to history
+        if (!editingWorkoutId) return <HistoryPage onEditWorkout={openEditWorkout} />;
+        return <EditWorkoutPage workoutId={editingWorkoutId} onClose={closeEditWorkout} />;
 
       case "progress":
         return <StatsPage />;
@@ -222,18 +220,10 @@ const App = () => {
             </div>
 
             <DialogFooter className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={handleCancelNavigation}
-                className="flex-1"
-              >
+              <Button variant="outline" onClick={handleCancelNavigation} className="flex-1">
                 Go Back
               </Button>
-              <Button
-                variant="destructive"
-                onClick={handleConfirmNavigation}
-                className="flex-1"
-              >
+              <Button variant="destructive" onClick={handleConfirmNavigation} className="flex-1">
                 Leave Anyway
               </Button>
             </DialogFooter>
