@@ -25,6 +25,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
 
 /**
@@ -59,57 +60,65 @@ const formatDateLong = (iso) => {
   }
 };
 
+// e1RM only makes sense for positive weight + reps
 const calcE1RM = (weight, reps) => {
   const w = Number(weight);
   const r = Number(reps);
-  if (!Number.isFinite(w) || !Number.isFinite(r) || w <= 0 || r <= 0) return 0;
+  if (!Number.isFinite(w) || !Number.isFinite(r) || w <= 0 || r <= 0) return null;
   return w * (1 + r / 30); // Epley
 };
 
+/**
+ * “Best value” for a workout exercise entry:
+ * - maxWeight: allow negatives (assisted). "Best" = highest number (e.g. -5 better than -20)
+ * - e1rm: only for positive weights/reps
+ */
 const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
   const sets = Array.isArray(exerciseEntry?.sets) ? exerciseEntry.sets : [];
-  if (sets.length === 0) return 0;
+  if (sets.length === 0) return null;
 
   if (statsMetric === "e1rm") {
-    let best = 0;
+    let best = null;
     for (const s of sets) {
       const v = calcE1RM(s?.weight, s?.reps);
-      if (v > best) best = v;
+      if (v == null) continue;
+      if (best == null || v > best) best = v;
     }
     return best;
   }
 
-  // maxWeight
-  let best = 0;
+  // maxWeight (allow negative/zero)
+  let best = null;
   for (const s of sets) {
     const w = Number(s?.weight);
-    if (Number.isFinite(w) && w > best) best = w;
+    if (!Number.isFinite(w)) continue;
+    if (best == null || w > best) best = w;
   }
   return best;
 };
 
 const getBestE1RMSetDetails = (exerciseEntry) => {
   const sets = Array.isArray(exerciseEntry?.sets) ? exerciseEntry.sets : [];
-  let best = 0;
+  let best = null;
   let bestWeight = 0;
   let bestReps = 0;
 
   for (const s of sets) {
     const v = calcE1RM(s?.weight, s?.reps);
-    if (v > best) {
+    if (v == null) continue;
+    if (best == null || v > best) {
       best = v;
       bestWeight = Number(s?.weight) || 0;
       bestReps = Number(s?.reps) || 0;
     }
   }
 
-  return best > 0 ? { bestWeight, bestReps, bestE1RM: best } : null;
+  return best == null ? null : { bestWeight, bestReps, bestE1RM: best };
 };
 
 const buildSeries = (workouts, programmeType, exerciseId, statsMetric) => {
   const type = safeUpper(programmeType);
   const id = String(exerciseId || "");
-
   const points = [];
 
   const filtered = (workouts || [])
@@ -122,7 +131,7 @@ const buildSeries = (workouts, programmeType, exerciseId, statsMetric) => {
     if (!entry) continue;
 
     const value = getExerciseBestForWorkoutEntry(entry, statsMetric);
-    if (value <= 0) continue;
+    if (value == null || !Number.isFinite(value)) continue;
 
     const e1 = statsMetric === "e1rm" ? getBestE1RMSetDetails(entry) : null;
 
@@ -151,23 +160,39 @@ const computeProgressScore = (series, lookback = 4) => {
 
 const getPRFromSeries = (series) => {
   if (!Array.isArray(series) || series.length === 0) return null;
-  let best = -Infinity;
+
+  let best = null;
   let bestDate = null;
 
   for (const p of series) {
-    if (Number.isFinite(p.value) && p.value > best) {
+    if (!Number.isFinite(p.value)) continue;
+    if (best == null || p.value > best) {
       best = p.value;
       bestDate = p.date;
     }
   }
 
-  return best > 0 ? { value: best, date: bestDate } : null;
+  return best == null ? null : { value: best, date: bestDate };
 };
 
 const getLastTrainedFromSeries = (series) => {
   if (!Array.isArray(series) || series.length === 0) return null;
   const last = series[series.length - 1];
   return last?.date ? last.date : null;
+};
+
+const getMinMax = (series) => {
+  if (!Array.isArray(series) || series.length === 0) return null;
+  let min = null;
+  let max = null;
+  for (const p of series) {
+    const v = Number(p?.value);
+    if (!Number.isFinite(v)) continue;
+    if (min == null || v < min) min = v;
+    if (max == null || v > max) max = v;
+  }
+  if (min == null || max == null) return null;
+  return { min, max };
 };
 
 /**
@@ -183,6 +208,7 @@ const TooltipContent = ({ active, payload, label, unit, statsMetric }) => {
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 shadow">
       <div className="text-sm font-semibold text-foreground">{label}</div>
+
       <div className="text-sm text-muted-foreground">
         {statsMetric === "e1rm" ? "e1RM" : "Max"}:{" "}
         <span className="font-semibold text-foreground">
@@ -221,22 +247,25 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   const exercises = Array.isArray(programme?.exercises) ? programme.exercises : [];
   const metricLabel = statsMetric === "e1rm" ? "e1RM" : "Max";
 
-  // ✅ collapse should hide EVERYTHING except header
+  // Collapse hides EVERYTHING except header
   const [collapsed, setCollapsed] = useState(true);
 
-  // Selected exercise
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id || "");
-
-  // Ref for scrolling to chart section when user taps an exercise from the list
   const chartRef = useRef(null);
 
-  // Keep selected id valid
+  // Stable key for deps without needing any eslint-disable
+  const exercisesKey = useMemo(
+    () => exercises.map((e) => e?.id).filter(Boolean).join("|"),
+    [exercises]
+  );
+
+  // Keep selected id valid when programme/exercises change
   useEffect(() => {
     setSelectedExerciseId((prev) => {
       const stillValid = exercises.some((e) => e?.id === prev);
       return stillValid ? prev : exercises[0]?.id || "";
     });
-  }, [programme?.type, exercises.length]);
+  }, [programme?.type, exercisesKey]);
 
   const selectedExercise = useMemo(() => {
     return exercises.find((e) => e?.id === selectedExerciseId) || exercises[0] || null;
@@ -259,7 +288,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
         hasData: Array.isArray(series) && series.length > 0,
       };
     });
-  }, [exercises, workouts, programme.type, statsMetric]);
+  }, [exercisesKey, workouts, programme.type, statsMetric]);
 
   const insights = useMemo(() => {
     const withScore = perExercise.filter((x) => x.score != null);
@@ -284,11 +313,14 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   }, [perExercise, selectedExercise]);
 
   const chartEmpty = selectedData.length === 0;
+  const minMax = useMemo(() => getMinMax(selectedData), [selectedData]);
+  const showZeroLine =
+    statsMetric === "maxWeight" && minMax && minMax.min < 0 && minMax.max > 0;
 
   const onPickExerciseFromList = (id) => {
     setSelectedExerciseId(id);
 
-    // ✅ If the programme is collapsed, expand the whole container first
+    // If collapsed, expand whole container then scroll to chart
     if (collapsed) {
       setCollapsed(false);
       requestAnimationFrame(() => {
@@ -426,7 +458,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
         </Button>
       </div>
 
-      {/* ✅ Everything below collapses */}
+      {/* Everything below collapses */}
       {collapsed ? null : (
         <>
           {/* Mini sparkline list */}
@@ -512,6 +544,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                 <div className="text-xs text-muted-foreground">
                   Showing:{" "}
                   <span className="font-semibold text-foreground">{metricLabel}</span>
+                  {statsMetric === "maxWeight" ? " (assisted can be negative)" : ""}
                 </div>
               )}
             </div>
@@ -543,6 +576,9 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} />
+                      {showZeroLine && (
+                        <ReferenceLine y={0} strokeDasharray="4 4" />
+                      )}
                       <Tooltip
                         content={
                           <TooltipContent unit={unit} statsMetric={statsMetric} />
@@ -667,3 +703,4 @@ const StatsPage = () => {
 };
 
 export default StatsPage;
+```0
