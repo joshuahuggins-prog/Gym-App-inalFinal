@@ -66,7 +66,6 @@ const calcE1RM = (weight, reps) => {
   return w * (1 + r / 30); // Epley
 };
 
-// “Best value” for a given workout exercise entry
 const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
   const sets = Array.isArray(exerciseEntry?.sets) ? exerciseEntry.sets : [];
   if (sets.length === 0) return 0;
@@ -89,7 +88,6 @@ const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
   return best;
 };
 
-// Also return details for tooltip: which set produced best e1rm (optional)
 const getBestE1RMSetDetails = (exerciseEntry) => {
   const sets = Array.isArray(exerciseEntry?.sets) ? exerciseEntry.sets : [];
   let best = 0;
@@ -197,7 +195,6 @@ const TooltipContent = ({ active, payload, label, unit, statsMetric }) => {
   );
 };
 
-// Tiny sparkline (no axes)
 const Sparkline = ({ data }) => {
   if (!Array.isArray(data) || data.length < 2) {
     return <div className="h-10 rounded-md bg-muted/30 border border-border" />;
@@ -224,22 +221,21 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   // Selected exercise
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id || "");
 
-  // ✅ Chart wrapper ref (for smooth scroll on pick)
+  // Chart wrapper ref (for smooth scroll on pick)
   const chartRef = useRef(null);
 
-  // Keep selected id valid
+  // Keep selected id valid (avoid using the array itself as a dep)
   useEffect(() => {
-  setSelectedExerciseId((prev) => {
-    const stillValid = exercises.some((e) => e?.id === prev);
-    return stillValid ? prev : (exercises[0]?.id || "");
-  });
-}, [programme?.type, exercises]);
+    setSelectedExerciseId((prev) => {
+      const stillValid = exercises.some((e) => e?.id === prev);
+      return stillValid ? prev : exercises[0]?.id || "";
+    });
+  }, [programme?.type, exercises.length]);
 
   const selectedExercise = useMemo(() => {
     return exercises.find((e) => e?.id === selectedExerciseId) || exercises[0] || null;
   }, [exercises, selectedExerciseId]);
 
-  // Precompute per-exercise stats
   const perExercise = useMemo(() => {
     return exercises.map((ex) => {
       const series = buildSeries(workouts, programme.type, ex.id, statsMetric);
@@ -259,7 +255,6 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
     });
   }, [exercises, workouts, programme.type, statsMetric]);
 
-  // Insights (best + worst)
   const insights = useMemo(() => {
     const withScore = perExercise.filter((x) => x.score != null);
     const best = withScore.length
@@ -276,7 +271,6 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
     return { best, worst };
   }, [perExercise]);
 
-  // ✅ Selected chart data (still driven by statsMetric)
   const selectedData = useMemo(() => {
     if (!selectedExercise?.id) return [];
     const row = perExercise.find((x) => x.id === selectedExercise.id);
@@ -285,7 +279,6 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
 
   const chartEmpty = selectedData.length === 0;
 
-  // ✅ New behavior: open (if collapsed) + smooth scroll to chart
   const onPickExerciseFromList = (id) => {
     setSelectedExerciseId(id);
 
@@ -303,7 +296,6 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
 
   const InsightCard = ({ title, icon, tone, item }) => {
     const has = !!item;
-
     const scoreText =
       item?.score == null
         ? "—"
@@ -406,7 +398,9 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
           </div>
         </div>
 
+        {/* IMPORTANT: force Button to be a non-submit button */}
         <Button
+          type="button"
           variant="outline"
           size="sm"
           onClick={() => setCollapsed((v) => !v)}
@@ -482,129 +476,124 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
         />
       </div>
 
-      {/* Collapsible content */}
-      {!collapsed && (
-        <>
-          {/* ✅ WRAP dropdown + chart together so scroll lands correctly */}
-          <div ref={chartRef} className="space-y-3">
-            {/* Dropdown (only exercises in this programme) */}
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-foreground">Exercise chart</div>
+      {/* Collapsible content: use CSS hide/show for bulletproof collapse */}
+      <div ref={chartRef} className={collapsed ? "hidden" : "block"}>
+        <div className="space-y-3">
+          {/* Dropdown */}
+          <div className="space-y-2">
+            <div className="text-sm font-semibold text-foreground">Exercise chart</div>
 
-              <select
-                value={selectedExerciseId}
-                onChange={(e) => setSelectedExerciseId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
-              >
-                {exercises.map((ex) => (
-                  <option key={ex.id} value={ex.id}>
-                    {ex.name}
-                  </option>
-                ))}
-              </select>
+            <select
+              value={selectedExerciseId}
+              onChange={(e) => setSelectedExerciseId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {exercises.map((ex) => (
+                <option key={ex.id} value={ex.id}>
+                  {ex.name}
+                </option>
+              ))}
+            </select>
 
-              {selectedExerciseId && (
-                <div className="text-xs text-muted-foreground">
-                  Showing: <span className="font-semibold text-foreground">{metricLabel}</span>
+            {selectedExerciseId && (
+              <div className="text-xs text-muted-foreground">
+                Showing: <span className="font-semibold text-foreground">{metricLabel}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Main chart */}
+          <div className="rounded-xl border border-border bg-background/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-foreground truncate">
+                {selectedExercise?.name || "Exercise"}
+              </div>
+              <Badge variant="outline" className="text-muted-foreground">
+                {metricLabel}
+              </Badge>
+            </div>
+
+            <div className="h-56 mt-3">
+              {chartEmpty ? (
+                <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
+                  <div className="text-sm font-semibold">No data yet</div>
+                  <div className="text-xs mt-1">
+                    Log this exercise in your workout to see a chart here.
+                  </div>
                 </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={selectedData}
+                    margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<TooltipContent unit={unit} statsMetric={statsMetric} />} />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               )}
             </div>
 
-            {/* Main chart */}
-            <div className="rounded-xl border border-border bg-background/40 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-semibold text-foreground truncate">
-                  {selectedExercise?.name || "Exercise"}
+            {/* Selected exercise PR/Last summary */}
+            {(() => {
+              const row = perExercise.find((x) => x.id === selectedExerciseId);
+              if (!row) return null;
+              return (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div className="rounded-lg border border-border bg-card/40 p-2">
+                    <div className="font-semibold text-foreground flex items-center gap-1">
+                      <Trophy className="w-3.5 h-3.5 text-primary" />
+                      PR
+                    </div>
+                    <div className="mt-1">
+                      {row.pr ? (
+                        <>
+                          <span className="font-semibold text-foreground">
+                            {row.pr.value}
+                            {unit}
+                          </span>
+                          <div className="opacity-80">{formatDateLong(row.pr.date)}</div>
+                        </>
+                      ) : (
+                        <span className="opacity-80">—</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-card/40 p-2">
+                    <div className="font-semibold text-foreground flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-primary" />
+                      Last trained
+                    </div>
+                    <div className="mt-1">
+                      {row.lastTrained ? (
+                        <span className="opacity-80">{formatDateLong(row.lastTrained)}</span>
+                      ) : (
+                        <span className="opacity-80">—</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-muted-foreground">
-                  {metricLabel}
-                </Badge>
-              </div>
-
-              <div className="h-56 mt-3">
-                {chartEmpty ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
-                    <div className="text-sm font-semibold">No data yet</div>
-                    <div className="text-xs mt-1">
-                      Log this exercise in your workout to see a chart here.
-                    </div>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={selectedData}
-                      margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip
-                        content={<TooltipContent unit={unit} statsMetric={statsMetric} />}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        strokeWidth={3}
-                        dot={{ r: 3 }}
-                        activeDot={{ r: 5 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-
-              {/* Selected exercise PR/Last summary */}
-              {(() => {
-                const row = perExercise.find((x) => x.id === selectedExerciseId);
-                if (!row) return null;
-                return (
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <div className="rounded-lg border border-border bg-card/40 p-2">
-                      <div className="font-semibold text-foreground flex items-center gap-1">
-                        <Trophy className="w-3.5 h-3.5 text-primary" />
-                        PR
-                      </div>
-                      <div className="mt-1">
-                        {row.pr ? (
-                          <>
-                            <span className="font-semibold text-foreground">
-                              {row.pr.value}
-                              {unit}
-                            </span>
-                            <div className="opacity-80">{formatDateLong(row.pr.date)}</div>
-                          </>
-                        ) : (
-                          <span className="opacity-80">—</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-border bg-card/40 p-2">
-                      <div className="font-semibold text-foreground flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-primary" />
-                        Last trained
-                      </div>
-                      <div className="mt-1">
-                        {row.lastTrained ? (
-                          <span className="opacity-80">{formatDateLong(row.lastTrained)}</span>
-                        ) : (
-                          <span className="opacity-80">—</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+              );
+            })()}
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 };
 
 const StatsPage = () => {
-  // ✅ supports either { settings } or direct values depending on your context
+  // supports either { settings } or direct values depending on your context
   const ctx = useSettings();
   const weightUnit = ctx?.weightUnit || ctx?.settings?.weightUnit || "kg";
   const statsMetric = ctx?.statsMetric || ctx?.settings?.statsMetric || "maxWeight";
@@ -643,6 +632,7 @@ const StatsPage = () => {
           </div>
 
           <Button
+            type="button"
             variant="outline"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
