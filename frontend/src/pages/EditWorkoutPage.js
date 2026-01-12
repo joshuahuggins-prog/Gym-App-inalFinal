@@ -1,24 +1,28 @@
 // src/pages/EditWorkoutPage.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Save, AlertTriangle } from "lucide-react";
-import { toast } from "sonner";
-
+import { Button } from "../components/ui/button";
 import ExerciseCard from "../components/ExerciseCard";
 import RestTimer from "../components/RestTimer";
+import PRCelebration from "../components/PRCelebration";
 
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
+import { toast } from "sonner";
+import {
+  getWorkouts,
+  updateWorkout,
+  getProgrammes,
+  getExercises,
+} from "../utils/storage";
 
-import { useSettings } from "../contexts/SettingsContext";
-import { getWorkouts, updateWorkout, getProgrammes, getExercises } from "../utils/storage";
-
-const safeArr = (v) => (Array.isArray(v) ? v : []);
-const norm = (s) => String(s || "").trim().toLowerCase();
-const upper = (s) => String(s || "").trim().toUpperCase();
+import {
+  buildWorkoutExerciseRows,
+  serializeWorkoutExercisesFromRows,
+} from "../utils/workoutBuilder";
 
 const formatDateLong = (iso) => {
   try {
-    return new Date(iso).toLocaleDateString("en-GB", {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", {
       weekday: "short",
       day: "2-digit",
       month: "short",
@@ -29,285 +33,159 @@ const formatDateLong = (iso) => {
   }
 };
 
-// Build setsData with template length, filling from saved sets by index
-const buildSetsFromTemplate = (templateExercise, savedExercise) => {
-  const templateSetsCount = Number(templateExercise?.sets ?? 0);
-  const desiredCount = Number.isFinite(templateSetsCount) && templateSetsCount > 0 ? templateSetsCount : 3;
-
-  const savedSets = safeArr(savedExercise?.sets);
-
-  // Fill up to desiredCount from saved, otherwise empty rows
-  const base = Array.from({ length: desiredCount }, (_, i) => {
-    const s = savedSets[i];
-    return {
-      weight: s?.weight ?? 0,
-      reps: s?.reps ?? 0,
-      completed: !!s?.completed,
-    };
-  });
-
-  // If saved workout has MORE sets than template, keep extras too
-  if (savedSets.length > desiredCount) {
-    const extras = savedSets.slice(desiredCount).map((s) => ({
-      weight: s?.weight ?? 0,
-      reps: s?.reps ?? 0,
-      completed: !!s?.completed,
-    }));
-    return [...base, ...extras];
-  }
-
-  return base;
-};
-
-const pickTemplateExercisesForWorkout = (workout, programmes, catalogue) => {
-  // Priority:
-  // 1) Programme for workout.type (A/B) → defines which exercises & sets count
-  // 2) If missing, fall back to catalogue lookup by id
-  const type = upper(workout?.type);
-  const programme = safeArr(programmes).find((p) => upper(p?.type) === type);
-
-  if (programme && safeArr(programme.exercises).length > 0) {
-    return safeArr(programme.exercises).map((ex) => {
-      // If catalogue has an updated version, we still want the programme order,
-      // but we can enrich details (notes/repScheme/etc) from catalogue.
-      const cat = safeArr(catalogue).find((c) => norm(c?.id) === norm(ex?.id));
-      return { ...ex, ...(cat || {}) };
-    });
-  }
-
-  // Fallback: use workout.exercises order, with catalogue enrichment
-  return safeArr(workout?.exercises).map((ex) => {
-    const cat = safeArr(catalogue).find((c) => norm(c?.id) === norm(ex?.id));
-    return { ...(cat || {}), ...ex };
-  });
-};
-
 const EditWorkoutPage = ({ workoutId, onClose }) => {
-  const { weightUnit } = useSettings();
-
   const [originalWorkout, setOriginalWorkout] = useState(null);
-  const [workoutData, setWorkoutData] = useState([]); // HomePage-like (setsData + userNotes)
+  const [rows, setRows] = useState([]);
   const [restTimer, setRestTimer] = useState(null);
+  const [prCelebration, setPrCelebration] = useState(null); // optional, keep if ExerciseCard triggers it
 
   const [isDirty, setIsDirty] = useState(false);
   const didHydrateRef = useRef(false);
 
+  // Load once when workoutId changes
   useEffect(() => {
+    didHydrateRef.current = false;
+    setIsDirty(false);
+
     const all = getWorkouts();
-    const w = all.find((x) => String(x?.id) === String(workoutId));
+    const w = all.find((x) => x.id === workoutId) || null;
+    setOriginalWorkout(w);
 
     if (!w) {
-      setOriginalWorkout(null);
-      setWorkoutData([]);
+      toast.error("Workout not found");
       return;
     }
 
-    const programmes = getProgrammes() || [];
-    const catalogue = getExercises() || [];
+    const programmes = getProgrammes();
+    const programme =
+      programmes.find(
+        (p) => String(p?.type || "").toUpperCase() === String(w?.type || "").toUpperCase()
+      ) || null;
 
-    // Template list defines which exercises appear + how many sets to render
-    const templateExercises = pickTemplateExercisesForWorkout(w, programmes, catalogue);
+    const catalogue = getExercises();
 
-    // Saved data map by id for quick fill
-    const savedById = new Map(safeArr(w.exercises).map((ex) => [norm(ex?.id), ex]));
-
-    const merged = templateExercises.map((tpl) => {
-      const saved = savedById.get(norm(tpl?.id));
-
-      return {
-        id: tpl.id,
-        name: tpl.name,
-        repScheme: tpl.repScheme ?? saved?.repScheme,
-        // ✅ render template set count, fill saved values into boxes + ticks
-        setsData: buildSetsFromTemplate(tpl, saved),
-        userNotes: saved?.notes ?? "",
-        lastWorkoutData: null,
-        // Keep any template bits ExerciseCard may display
-        goalReps: tpl.goalReps,
-        restTime: tpl.restTime,
-        notes: tpl.notes,
-      };
+    const built = buildWorkoutExerciseRows({
+      workoutType: w.type,
+      programme,
+      catalogueExercises: catalogue,
+      savedWorkout: w,
+      lastSameWorkout: null,
     });
 
-    // Also include any exercises that exist in the saved workout but are NOT in the current template
-    // (so you can still edit legacy workouts fully)
-    const templateIds = new Set(templateExercises.map((e) => norm(e?.id)));
-    const legacyExtras = safeArr(w.exercises)
-      .filter((ex) => ex?.id && !templateIds.has(norm(ex.id)))
-      .map((ex) => {
-        const cat = safeArr(catalogue).find((c) => norm(c?.id) === norm(ex?.id));
-        const tpl = { ...(cat || {}), ...ex, sets: cat?.sets ?? ex?.sets?.length ?? 3 };
-
-        return {
-          id: ex.id,
-          name: ex.name,
-          repScheme: ex.repScheme,
-          setsData: buildSetsFromTemplate(tpl, ex),
-          userNotes: ex?.notes ?? "",
-          lastWorkoutData: null,
-          goalReps: tpl.goalReps,
-          restTime: tpl.restTime,
-          notes: tpl.notes,
-        };
-      });
-
-    didHydrateRef.current = false;
-    setIsDirty(false);
-    setOriginalWorkout(w);
-    setWorkoutData([...merged, ...legacyExtras]);
+    setRows(built);
   }, [workoutId]);
 
+  // Dirty tracking (ignore initial hydration)
   useEffect(() => {
     if (!originalWorkout) return;
-
     if (!didHydrateRef.current) {
       didHydrateRef.current = true;
       return;
     }
     setIsDirty(true);
-  }, [workoutData, originalWorkout]);
+  }, [rows, originalWorkout]);
 
   const headerTitle = useMemo(() => {
     if (!originalWorkout) return "Edit Workout";
-    const type = originalWorkout?.type ? upper(originalWorkout.type) : "";
-    const date = originalWorkout?.date ? formatDateLong(originalWorkout.date) : "";
-    return `Edit Workout ${type}${date ? ` • ${date}` : ""}`;
+    const type = String(originalWorkout.type || "").toUpperCase();
+    const date = formatDateLong(originalWorkout.date);
+    return `Edit Workout ${type}${date ? ` — ${date}` : ""}`;
   }, [originalWorkout]);
 
   const handleWeightChange = (exercise, setsData) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) => (norm(ex.id) === norm(exercise.id) ? { ...ex, setsData } : ex))
+    setRows((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
     );
   };
 
   const handleNotesChange = (exercise, notes) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) => (norm(ex.id) === norm(exercise.id) ? { ...ex, userNotes: notes } : ex))
+    setRows((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
     );
   };
 
-  // ExerciseCard may call this; in edit mode we don’t need PR logic
-  const handleSetComplete = () => {};
+  const handleSave = () => {
+    if (!originalWorkout) return;
 
-  const buildUpdatedWorkout = () => {
-    if (!originalWorkout) return null;
+    const nextExercises = serializeWorkoutExercisesFromRows(rows);
 
-    return {
+    const ok = updateWorkout(originalWorkout.id, {
+      // keep identity + date
       ...originalWorkout,
-      exercises: workoutData.map((ex) => ({
-        id: ex.id,
-        name: ex.name,
-        repScheme: ex.repScheme,
-        sets: safeArr(ex.setsData).map((s) => ({
-          weight: Number(s?.weight ?? 0),
-          reps: Number(s?.reps ?? 0),
-          completed: !!s?.completed,
-        })),
-        notes: ex.userNotes || "",
-      })),
-    };
-  };
-
-  const handleSaveAndClose = () => {
-    if (!originalWorkout) {
-      toast.error("Workout not found.");
-      return;
-    }
-
-    const updated = buildUpdatedWorkout();
-    const ok = updateWorkout(originalWorkout.id, updated);
+      exercises: nextExercises,
+    });
 
     if (!ok) {
-      toast.error("Failed to save changes.");
+      toast.error("Failed to save changes");
       return;
     }
 
-    toast.success("Workout updated ✅");
+    toast.success("Workout updated ✅", {
+      description: "Your history has been updated.",
+    });
+
     setIsDirty(false);
     onClose?.();
   };
 
   const handleCancel = () => {
     if (isDirty) {
-      const leave = window.confirm("Discard your edits?");
-      if (!leave) return;
+      const sure = window.confirm("Discard your changes?");
+      if (!sure) return;
     }
     onClose?.();
   };
 
-  if (!workoutId) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="max-w-md w-full rounded-2xl border border-border bg-card p-5">
-          <div className="flex items-center gap-2 text-foreground font-bold">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
-            Missing workout id
-          </div>
-          <div className="text-sm text-muted-foreground mt-2">
-            Close and try again from History.
-          </div>
-          <Button className="mt-4 w-full" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   if (!originalWorkout) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="max-w-md w-full rounded-2xl border border-border bg-card p-5">
-          <div className="text-foreground font-bold">Workout not found</div>
-          <div className="text-sm text-muted-foreground mt-2">
-            It may have been deleted.
+      <div className="min-h-screen bg-background">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <AlertTriangle className="w-4 h-4" />
+              Loading workout…
+            </div>
           </div>
-          <Button className="mt-4 w-full" onClick={onClose}>
-            Back to History
-          </Button>
         </div>
       </div>
     );
   }
 
+  // Theme: dark gray + yellow accents
   return (
-    <div className="min-h-screen pb-24 bg-[#0f1115] text-foreground">
-      {/* Header (dark grey + bright yellow theme) */}
-      <div className="border-b border-border bg-[#12151b]">
-        <div className="max-w-2xl mx-auto px-4 py-5 space-y-3">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 pb-24">
+      {/* Header */}
+      <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+        <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-xl font-extrabold text-[#ffd84d] truncate">
+              <div className="text-sm text-zinc-400">Editing</div>
+              <h1 className="text-lg font-bold text-yellow-300 truncate">
                 {headerTitle}
               </h1>
-              <div className="mt-1 flex items-center gap-2 flex-wrap">
-                <Badge className="bg-[#ffd84d]/15 text-[#ffd84d] border border-[#ffd84d]/30">
-                  Edit mode
-                </Badge>
-                <Badge variant="outline" className="text-muted-foreground">
-                  Unit: {weightUnit}
-                </Badge>
-                {isDirty ? (
-                  <Badge className="bg-[#ffd84d]/15 text-[#ffd84d] border border-[#ffd84d]/30">
-                    Unsaved changes
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Saved
-                  </Badge>
-                )}
+              <div className="text-xs text-zinc-400 mt-1">
+                Save changes to update your history.
               </div>
             </div>
 
-            <Button variant="ghost" size="sm" onClick={handleCancel} title="Close">
-              <X className="w-5 h-5" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
             </Button>
           </div>
 
+          {/* Action row */}
           <div className="flex gap-2">
             <Button
-              onClick={handleSaveAndClose}
-              className="flex-1 bg-[#ffd84d] text-black hover:bg-[#ffd84d]/90"
+              onClick={handleSave}
+              className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-300"
+              disabled={!isDirty}
+              title={!isDirty ? "No changes to save" : "Save changes"}
             >
               <Save className="w-4 h-4 mr-2" />
               Save & Close
@@ -315,7 +193,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             <Button
               variant="outline"
               onClick={handleCancel}
-              className="flex-1 border-[#ffd84d]/30 text-[#ffd84d] hover:bg-[#ffd84d]/10"
+              className="flex-1 border-zinc-700 text-zinc-200 hover:bg-zinc-900"
             >
               Cancel
             </Button>
@@ -323,19 +201,26 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
         </div>
       </div>
 
-      {/* Exercise cards (same component as Home) */}
+      {/* Body */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {workoutData.map((exercise, index) => (
-          <ExerciseCard
-            key={exercise.id}
-            exercise={exercise}
-            lastWorkoutData={null}
-            onSetComplete={handleSetComplete}
-            onWeightChange={handleWeightChange}
-            onNotesChange={handleNotesChange}
-            onRestTimer={(duration) => setRestTimer(duration)}
-            isFirst={index === 0}
-          />
+        {rows.map((exercise, idx) => (
+          <div
+            key={exercise.id || `${exercise.name}-${idx}`}
+            className="rounded-2xl border border-zinc-800 bg-zinc-900/30"
+          >
+            {/* Reuse existing Home UI card */}
+            <ExerciseCard
+              exercise={exercise}
+              lastWorkoutData={exercise.lastWorkoutData}
+              onSetComplete={() => {
+                // Optional: if your ExerciseCard calls this, keep it harmless
+              }}
+              onWeightChange={handleWeightChange}
+              onNotesChange={handleNotesChange}
+              onRestTimer={(duration) => setRestTimer(duration)}
+              isFirst={idx === 0}
+            />
+          </div>
         ))}
       </div>
 
@@ -349,6 +234,11 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
           }}
           onClose={() => setRestTimer(null)}
         />
+      )}
+
+      {/* PR Celebration (optional) */}
+      {prCelebration && (
+        <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />
       )}
     </div>
   );
