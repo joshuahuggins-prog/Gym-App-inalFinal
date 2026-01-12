@@ -81,7 +81,7 @@ const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
     return best;
   }
 
-  // maxWeight: allow negatives. Best = highest number.
+  // maxWeight: allow negatives. "Best" = highest number.
   let best = null;
   for (const s of sets) {
     const w = Number(s?.weight);
@@ -184,14 +184,43 @@ const getMinMax = (series) => {
   for (const point of series) {
     const value = Number(point?.value);
     if (!Number.isFinite(value)) continue;
-
     if (value < min) min = value;
     if (value > max) max = value;
   }
 
   if (min === Infinity || max === -Infinity) return null;
-
   return { min, max };
+};
+
+// ✅ key fix: compute a nice Y domain that supports negatives properly
+const getNiceDomain = (minMax, statsMetric) => {
+  if (!minMax) return ["auto", "auto"];
+
+  let { min, max } = minMax;
+
+  // e1RM is always positive, but keep it safe
+  if (statsMetric === "e1rm") {
+    if (min < 0) min = 0;
+  }
+
+  // Add padding so the line isn't pinned to edges
+  const span = Math.max(1, max - min);
+  const pad = span * 0.12;
+
+  let dMin = min - pad;
+  let dMax = max + pad;
+
+  // If the data crosses 0, include 0 in domain (nice visual)
+  if (min < 0 && max > 0) {
+    dMin = Math.min(dMin, 0);
+    dMax = Math.max(dMax, 0);
+  }
+
+  // If all values are negative, DO NOT force 0 into view
+  // If all values are positive, DO NOT force 0 either (unless you want it)
+  // (So assisted-only charts sit below zero, and normal charts sit above)
+
+  return [round1(dMin), round1(dMax)];
 };
 
 /**
@@ -307,7 +336,12 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   }, [perExercise, selectedExercise]);
 
   const chartEmpty = selectedData.length === 0;
+
   const minMax = useMemo(() => getMinMax(selectedData), [selectedData]);
+
+  // ✅ THIS is what you were missing
+  const yDomain = useMemo(() => getNiceDomain(minMax, statsMetric), [minMax, statsMetric]);
+
   const showZeroLine =
     statsMetric === "maxWeight" && minMax && minMax.min < 0 && minMax.max > 0;
 
@@ -318,17 +352,13 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
       setCollapsed(false);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (chartRef.current) {
-            chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
+          chartRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       });
       return;
     }
 
-    if (chartRef.current) {
-      chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    chartRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const InsightCard = ({ title, icon, tone, item }) => {
@@ -567,11 +597,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                     <LineChart data={selectedData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis
-                       tick={{ fontSize: 12 }}
-                       domain={yDomain}
-                       allowDataOverflow
-                       />
+                      <YAxis tick={{ fontSize: 12 }} domain={yDomain} allowDataOverflow />
                       {showZeroLine ? <ReferenceLine y={0} strokeDasharray="4 4" /> : null}
                       <Tooltip content={<TooltipContent unit={unit} statsMetric={statsMetric} />} />
                       <Line type="monotone" dataKey="value" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
