@@ -32,7 +32,7 @@ import { Button } from "./components/ui/button";
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");
   const [editingWorkoutId, setEditingWorkoutId] = useState(null); // ✅ NEW
-
+const [editingWorkoutId, setEditingWorkoutId] = useState(null);
   const [hasUnsavedData, setHasUnsavedData] = useState(false);
   const [showNavigationWarning, setShowNavigationWarning] = useState(false);
   const [pendingPage, setPendingPage] = useState(null);
