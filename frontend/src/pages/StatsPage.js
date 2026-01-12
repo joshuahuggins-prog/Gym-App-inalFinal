@@ -221,6 +221,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
 
   // Collapse state
   const [collapsed, setCollapsed] = useState(true);
+  const expand = () => setCollapsed(false);
 
   // Selected exercise
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id || "");
