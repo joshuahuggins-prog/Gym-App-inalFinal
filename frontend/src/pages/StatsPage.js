@@ -60,19 +60,13 @@ const formatDateLong = (iso) => {
   }
 };
 
-// e1RM only makes sense for positive weight + reps
 const calcE1RM = (weight, reps) => {
   const w = Number(weight);
   const r = Number(reps);
   if (!Number.isFinite(w) || !Number.isFinite(r) || w <= 0 || r <= 0) return null;
-  return w * (1 + r / 30); // Epley
+  return w * (1 + r / 30);
 };
 
-/**
- * “Best value” for a workout exercise entry:
- * - maxWeight: allow negatives (assisted). "Best" = highest number (e.g. -5 better than -20)
- * - e1rm: only for positive weights/reps
- */
 const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
   const sets = Array.isArray(exerciseEntry?.sets) ? exerciseEntry.sets : [];
   if (sets.length === 0) return null;
@@ -87,7 +81,7 @@ const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
     return best;
   }
 
-  // maxWeight (allow negative/zero)
+  // maxWeight: allow negatives. Best = highest number.
   let best = null;
   for (const s of sets) {
     const w = Number(s?.weight);
@@ -208,7 +202,6 @@ const TooltipContent = ({ active, payload, label, unit, statsMetric }) => {
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 shadow">
       <div className="text-sm font-semibold text-foreground">{label}</div>
-
       <div className="text-sm text-muted-foreground">
         {statsMetric === "e1rm" ? "e1RM" : "Max"}:{" "}
         <span className="font-semibold text-foreground">
@@ -217,12 +210,12 @@ const TooltipContent = ({ active, payload, label, unit, statsMetric }) => {
         </span>
       </div>
 
-      {statsMetric === "e1rm" && p?._e1?.bestWeight > 0 && (
+      {statsMetric === "e1rm" && p?._e1?.bestWeight > 0 ? (
         <div className="text-xs text-muted-foreground mt-1">
           Based on {p._e1.bestWeight}
           {unit} × {p._e1.bestReps}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -247,19 +240,15 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   const exercises = Array.isArray(programme?.exercises) ? programme.exercises : [];
   const metricLabel = statsMetric === "e1rm" ? "e1RM" : "Max";
 
-  // Collapse hides EVERYTHING except header
   const [collapsed, setCollapsed] = useState(true);
-
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id || "");
   const chartRef = useRef(null);
 
-  // Stable key for deps without needing any eslint-disable
   const exercisesKey = useMemo(
     () => exercises.map((e) => e?.id).filter(Boolean).join("|"),
     [exercises]
   );
 
-  // Keep selected id valid when programme/exercises change
   useEffect(() => {
     setSelectedExerciseId((prev) => {
       const stillValid = exercises.some((e) => e?.id === prev);
@@ -320,18 +309,21 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
   const onPickExerciseFromList = (id) => {
     setSelectedExerciseId(id);
 
-    // If collapsed, expand whole container then scroll to chart
     if (collapsed) {
       setCollapsed(false);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          chartRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          if (chartRef.current) {
+            chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
         });
       });
       return;
     }
 
-    chartRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (chartRef.current) {
+      chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
 
   const InsightCard = ({ title, icon, tone, item }) => {
@@ -458,7 +450,6 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
         </Button>
       </div>
 
-      {/* Everything below collapses */}
       {collapsed ? null : (
         <>
           {/* Mini sparkline list */}
@@ -478,11 +469,12 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                     key={x.id}
                     type="button"
                     onClick={() => onPickExerciseFromList(x.id)}
-                    className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
-                      active
+                    className={
+                      "w-full text-left rounded-lg border px-3 py-2 transition-colors " +
+                      (active
                         ? "border-primary bg-primary/10"
-                        : "border-border bg-background hover:bg-muted/30"
-                    }`}
+                        : "border-border bg-background hover:bg-muted/30")
+                    }
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -540,13 +532,11 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                 ))}
               </select>
 
-              {selectedExerciseId && (
+              {selectedExerciseId ? (
                 <div className="text-xs text-muted-foreground">
-                  Showing:{" "}
-                  <span className="font-semibold text-foreground">{metricLabel}</span>
-                  {statsMetric === "maxWeight" ? " (assisted can be negative)" : ""}
+                  Showing: <span className="font-semibold text-foreground">{metricLabel}</span>
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-border bg-background/40 p-3">
@@ -569,28 +559,13 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={selectedData}
-                      margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
-                    >
+                    <LineChart data={selectedData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} />
-                      {showZeroLine && (
-                        <ReferenceLine y={0} strokeDasharray="4 4" />
-                      )}
-                      <Tooltip
-                        content={
-                          <TooltipContent unit={unit} statsMetric={statsMetric} />
-                        }
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        strokeWidth={3}
-                        dot={{ r: 3 }}
-                        activeDot={{ r: 5 }}
-                      />
+                      {showZeroLine ? <ReferenceLine y={0} strokeDasharray="4 4" /> : null}
+                      <Tooltip content={<TooltipContent unit={unit} statsMetric={statsMetric} />} />
+                      <Line type="monotone" dataKey="value" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -599,6 +574,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
               {(() => {
                 const row = perExercise.find((x) => x.id === selectedExerciseId);
                 if (!row) return null;
+
                 return (
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                     <div className="rounded-lg border border-border bg-card/40 p-2">
@@ -613,9 +589,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                               {row.pr.value}
                               {unit}
                             </span>
-                            <div className="opacity-80">
-                              {formatDateLong(row.pr.date)}
-                            </div>
+                            <div className="opacity-80">{formatDateLong(row.pr.date)}</div>
                           </>
                         ) : (
                           <span className="opacity-80">—</span>
@@ -630,9 +604,7 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                       </div>
                       <div className="mt-1">
                         {row.lastTrained ? (
-                          <span className="opacity-80">
-                            {formatDateLong(row.lastTrained)}
-                          </span>
+                          <span className="opacity-80">{formatDateLong(row.lastTrained)}</span>
                         ) : (
                           <span className="opacity-80">—</span>
                         )}
@@ -658,9 +630,7 @@ const StatsPage = () => {
   const programmes = useMemo(() => getProgrammes() || [], []);
 
   const usableProgrammes = useMemo(() => {
-    return (programmes || []).filter(
-      (p) => Array.isArray(p?.exercises) && p.exercises.length > 0
-    );
+    return (programmes || []).filter((p) => Array.isArray(p?.exercises) && p.exercises.length > 0);
   }, [programmes]);
 
   useEffect(() => {
@@ -703,4 +673,3 @@ const StatsPage = () => {
 };
 
 export default StatsPage;
-```0
