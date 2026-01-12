@@ -177,15 +177,20 @@ const getLastTrainedFromSeries = (series) => {
 
 const getMinMax = (series) => {
   if (!Array.isArray(series) || series.length === 0) return null;
-  let min = null;
-  let max = null;
-  for (const p of series) {
-    const v = Number(p?.value);
-    if (!Number.isFinite(v)) continue;
-    if (min == null || v < min) min = v;
-    if (max == null || v > max) max = v;
+
+  let min = Infinity;
+  let max = -Infinity;
+
+  for (const point of series) {
+    const value = Number(point?.value);
+    if (!Number.isFinite(value)) continue;
+
+    if (value < min) min = value;
+    if (value > max) max = value;
   }
-  if (min == null || max == null) return null;
+
+  if (min === Infinity || max === -Infinity) return null;
+
   return { min, max };
 };
 
