@@ -10,7 +10,11 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 
 import { useSettings } from "../contexts/SettingsContext";
-import { getWorkouts, updateWorkout } from "../utils/storage";
+import { getWorkouts, updateWorkout, getProgrammes, getExercises } from "../utils/storage";
+
+const safeArr = (v) => (Array.isArray(v) ? v : []);
+const norm = (s) => String(s || "").trim().toLowerCase();
+const upper = (s) => String(s || "").trim().toUpperCase();
 
 const formatDateLong = (iso) => {
   try {
@@ -25,19 +29,69 @@ const formatDateLong = (iso) => {
   }
 };
 
-const safeArr = (v) => (Array.isArray(v) ? v : []);
+// Build setsData with template length, filling from saved sets by index
+const buildSetsFromTemplate = (templateExercise, savedExercise) => {
+  const templateSetsCount = Number(templateExercise?.sets ?? 0);
+  const desiredCount = Number.isFinite(templateSetsCount) && templateSetsCount > 0 ? templateSetsCount : 3;
+
+  const savedSets = safeArr(savedExercise?.sets);
+
+  // Fill up to desiredCount from saved, otherwise empty rows
+  const base = Array.from({ length: desiredCount }, (_, i) => {
+    const s = savedSets[i];
+    return {
+      weight: s?.weight ?? 0,
+      reps: s?.reps ?? 0,
+      completed: !!s?.completed,
+    };
+  });
+
+  // If saved workout has MORE sets than template, keep extras too
+  if (savedSets.length > desiredCount) {
+    const extras = savedSets.slice(desiredCount).map((s) => ({
+      weight: s?.weight ?? 0,
+      reps: s?.reps ?? 0,
+      completed: !!s?.completed,
+    }));
+    return [...base, ...extras];
+  }
+
+  return base;
+};
+
+const pickTemplateExercisesForWorkout = (workout, programmes, catalogue) => {
+  // Priority:
+  // 1) Programme for workout.type (A/B) → defines which exercises & sets count
+  // 2) If missing, fall back to catalogue lookup by id
+  const type = upper(workout?.type);
+  const programme = safeArr(programmes).find((p) => upper(p?.type) === type);
+
+  if (programme && safeArr(programme.exercises).length > 0) {
+    return safeArr(programme.exercises).map((ex) => {
+      // If catalogue has an updated version, we still want the programme order,
+      // but we can enrich details (notes/repScheme/etc) from catalogue.
+      const cat = safeArr(catalogue).find((c) => norm(c?.id) === norm(ex?.id));
+      return { ...ex, ...(cat || {}) };
+    });
+  }
+
+  // Fallback: use workout.exercises order, with catalogue enrichment
+  return safeArr(workout?.exercises).map((ex) => {
+    const cat = safeArr(catalogue).find((c) => norm(c?.id) === norm(ex?.id));
+    return { ...(cat || {}), ...ex };
+  });
+};
 
 const EditWorkoutPage = ({ workoutId, onClose }) => {
   const { weightUnit } = useSettings();
 
   const [originalWorkout, setOriginalWorkout] = useState(null);
-  const [workoutData, setWorkoutData] = useState([]); // HomePage-like shape
+  const [workoutData, setWorkoutData] = useState([]); // HomePage-like (setsData + userNotes)
   const [restTimer, setRestTimer] = useState(null);
 
   const [isDirty, setIsDirty] = useState(false);
   const didHydrateRef = useRef(false);
 
-  // Load workout
   useEffect(() => {
     const all = getWorkouts();
     const w = all.find((x) => String(x?.id) === String(workoutId));
@@ -48,31 +102,61 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       return;
     }
 
-    setOriginalWorkout(w);
+    const programmes = getProgrammes() || [];
+    const catalogue = getExercises() || [];
 
-    // Convert saved workout shape -> HomePage editing shape
-    const mapped = safeArr(w.exercises).map((ex) => ({
-      id: ex.id,
-      name: ex.name,
-      repScheme: ex.repScheme,
-      // ExerciseCard in HomePage expects:
-      setsData: safeArr(ex.sets).map((s) => ({
-        weight: s?.weight ?? 0,
-        reps: s?.reps ?? 0,
-        completed: !!s?.completed,
-        // keep any extra fields if you ever add them
-        ...s,
-      })),
-      userNotes: ex?.notes ?? "",
-      lastWorkoutData: null, // optional; not needed in edit mode
-    }));
+    // Template list defines which exercises appear + how many sets to render
+    const templateExercises = pickTemplateExercisesForWorkout(w, programmes, catalogue);
+
+    // Saved data map by id for quick fill
+    const savedById = new Map(safeArr(w.exercises).map((ex) => [norm(ex?.id), ex]));
+
+    const merged = templateExercises.map((tpl) => {
+      const saved = savedById.get(norm(tpl?.id));
+
+      return {
+        id: tpl.id,
+        name: tpl.name,
+        repScheme: tpl.repScheme ?? saved?.repScheme,
+        // ✅ render template set count, fill saved values into boxes + ticks
+        setsData: buildSetsFromTemplate(tpl, saved),
+        userNotes: saved?.notes ?? "",
+        lastWorkoutData: null,
+        // Keep any template bits ExerciseCard may display
+        goalReps: tpl.goalReps,
+        restTime: tpl.restTime,
+        notes: tpl.notes,
+      };
+    });
+
+    // Also include any exercises that exist in the saved workout but are NOT in the current template
+    // (so you can still edit legacy workouts fully)
+    const templateIds = new Set(templateExercises.map((e) => norm(e?.id)));
+    const legacyExtras = safeArr(w.exercises)
+      .filter((ex) => ex?.id && !templateIds.has(norm(ex.id)))
+      .map((ex) => {
+        const cat = safeArr(catalogue).find((c) => norm(c?.id) === norm(ex?.id));
+        const tpl = { ...(cat || {}), ...ex, sets: cat?.sets ?? ex?.sets?.length ?? 3 };
+
+        return {
+          id: ex.id,
+          name: ex.name,
+          repScheme: ex.repScheme,
+          setsData: buildSetsFromTemplate(tpl, ex),
+          userNotes: ex?.notes ?? "",
+          lastWorkoutData: null,
+          goalReps: tpl.goalReps,
+          restTime: tpl.restTime,
+          notes: tpl.notes,
+        };
+      });
 
     didHydrateRef.current = false;
     setIsDirty(false);
-    setWorkoutData(mapped);
+    setOriginalWorkout(w);
+    setWorkoutData([...merged, ...legacyExtras]);
   }, [workoutId]);
 
-  // Mark dirty on edits (but not on first hydration)
   useEffect(() => {
     if (!originalWorkout) return;
 
@@ -80,30 +164,29 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       didHydrateRef.current = true;
       return;
     }
-
     setIsDirty(true);
   }, [workoutData, originalWorkout]);
 
   const headerTitle = useMemo(() => {
     if (!originalWorkout) return "Edit Workout";
-    const type = originalWorkout?.type ? String(originalWorkout.type).toUpperCase() : "";
+    const type = originalWorkout?.type ? upper(originalWorkout.type) : "";
     const date = originalWorkout?.date ? formatDateLong(originalWorkout.date) : "";
-    return `Edit Workout ${type ? type : ""}${date ? ` • ${date}` : ""}`.trim();
+    return `Edit Workout ${type}${date ? ` • ${date}` : ""}`;
   }, [originalWorkout]);
 
   const handleWeightChange = (exercise, setsData) => {
     setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
+      prev.map((ex) => (norm(ex.id) === norm(exercise.id) ? { ...ex, setsData } : ex))
     );
   };
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+      prev.map((ex) => (norm(ex.id) === norm(exercise.id) ? { ...ex, userNotes: notes } : ex))
     );
   };
 
-  // In edit mode we don’t need PR logic, but ExerciseCard may call this.
+  // ExerciseCard may call this; in edit mode we don’t need PR logic
   const handleSetComplete = () => {};
 
   const buildUpdatedWorkout = () => {
@@ -111,7 +194,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
     return {
       ...originalWorkout,
-      // keep same id & date
       exercises: workoutData.map((ex) => ({
         id: ex.id,
         name: ex.name,
@@ -133,9 +215,8 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     }
 
     const updated = buildUpdatedWorkout();
-    if (!updated) return;
-
     const ok = updateWorkout(originalWorkout.id, updated);
+
     if (!ok) {
       toast.error("Failed to save changes.");
       return;
@@ -258,7 +339,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
         ))}
       </div>
 
-      {/* Rest Timer (optional but keeps same UX) */}
+      {/* Rest Timer */}
       {restTimer && (
         <RestTimer
           duration={restTimer}
