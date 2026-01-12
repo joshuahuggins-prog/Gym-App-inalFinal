@@ -1,56 +1,29 @@
-// src/pages/HistoryPage.js
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Trash2, Calendar, Pencil } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Calendar,
+  Pencil,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { getWorkouts, deleteWorkout } from "../utils/storage";
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
-const pad2 = (n) => String(n).padStart(2, "0");
-
-const safeDate = (value) => {
-  try {
-    const d = new Date(value);
-    if (!Number.isFinite(d.getTime())) return null;
-    return d;
-  } catch {
-    return null;
-  }
-};
-
-const safeFormat = (dateValue, locale, options, fallback = "Unknown date") => {
-  const d = safeDate(dateValue);
-  if (!d) return fallback;
-  try {
-    return d.toLocaleDateString(locale, options);
-  } catch {
-    return fallback;
-  }
-};
-
-const publicBase = () => {
-  // CRA / GH Pages safe base
-  const base = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
-  return base;
-};
-
-const goToEditWorkout = (id) => {
-  // If you use BrowserRouter on GH Pages, PUBLIC_URL matters
-  // If you use HashRouter, change this to `#` routing.
-  window.location.assign(`${publicBase()}/edit-workout/${id}`);
-};
-
-const HistoryPage = () => {
+const HistoryPage = ({ onEditWorkout }) => {
   const { weightUnit } = useSettings();
   const [workouts, setWorkouts] = useState([]);
   const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
 
   useEffect(() => {
-    setWorkouts(getWorkouts() || []);
+    loadWorkouts();
   }, []);
 
-  const loadWorkouts = () => setWorkouts(getWorkouts() || []);
+  const loadWorkouts = () => {
+    setWorkouts(getWorkouts());
+  };
 
   const handleDelete = (id) => {
     if (window.confirm("Delete this workout?")) {
@@ -63,34 +36,26 @@ const HistoryPage = () => {
   const toggleExpand = (id) => {
     setExpandedWorkouts((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
-  const groupedWorkouts = useMemo(() => {
+  const groupByMonth = (items) => {
     const grouped = {};
-    (workouts || []).forEach((workout) => {
-      const d = safeDate(workout?.date);
-      const year = d ? d.getFullYear() : 9999;
-      const month = d ? d.getMonth() + 1 : 12;
-      const key = `${year}-${pad2(month)}`;
-
+    items.forEach((workout) => {
+      const d = new Date(workout.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}`;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(workout);
     });
+    return grouped;
+  };
 
-    // newest months first
-    const ordered = {};
-    Object.keys(grouped)
-      .sort((a, b) => (a < b ? 1 : -1))
-      .forEach((k) => {
-        ordered[k] = grouped[k];
-      });
-
-    return ordered;
-  }, [workouts]);
+  const groupedWorkouts = groupByMonth(workouts);
 
   return (
     <div className="min-h-screen bg-background">
@@ -111,26 +76,20 @@ const HistoryPage = () => {
         {workouts.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">💪</div>
-            <p className="text-lg text-muted-foreground mb-2">No workouts yet</p>
-            <p className="text-sm text-muted-foreground">
-              Complete your first workout to see it here!
+            <p className="text-lg text-muted-foreground mb-2">
+              No workouts yet
             </p>
           </div>
         ) : (
           Object.entries(groupedWorkouts).map(([monthKey, monthWorkouts]) => {
-            const [yearStr, monthStr] = monthKey.split("-");
-            const year = Number(yearStr);
-            const month = Number(monthStr);
-
-            const monthName =
-              Number.isFinite(year) && Number.isFinite(month)
-                ? safeFormat(
-                    new Date(year, month - 1, 1).toISOString(),
-                    "en-US",
-                    { month: "long", year: "numeric" },
-                    "Unknown month"
-                  )
-                : "Unknown month";
+            const [year, month] = monthKey.split("-");
+            const monthName = new Date(
+              Number(year),
+              Number(month) - 1
+            ).toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            });
 
             return (
               <div key={monthKey} className="space-y-3">
@@ -139,45 +98,43 @@ const HistoryPage = () => {
                   {monthName}
                 </h2>
 
-                {(monthWorkouts || []).map((workout) => {
-                  const isExpanded = expandedWorkouts.has(workout?.id);
-
-                  const exercises = Array.isArray(workout?.exercises)
-                    ? workout.exercises
-                    : [];
-
-                  const completedSets = exercises.reduce((sum, ex) => {
-                    const sets = Array.isArray(ex?.sets) ? ex.sets : [];
-                    return sum + sets.filter((s) => !!s?.completed).length;
-                  }, 0);
-
-                  const totalSets = exercises.reduce((sum, ex) => {
-                    const sets = Array.isArray(ex?.sets) ? ex.sets : [];
-                    return sum + sets.length;
-                  }, 0);
+                {monthWorkouts.map((workout) => {
+                  const isExpanded = expandedWorkouts.has(workout.id);
+                  const completedSets = workout.exercises.reduce(
+                    (sum, ex) =>
+                      sum + ex.sets.filter((s) => s.completed).length,
+                    0
+                  );
+                  const totalSets = workout.exercises.reduce(
+                    (sum, ex) => sum + ex.sets.length,
+                    0
+                  );
 
                   return (
                     <div
-                      key={workout?.id || `${workout?.date}_${workout?.name}`}
-                      className="bg-card border border-border rounded-xl overflow-hidden shadow-lg"
+                      key={workout.id}
+                      className="bg-card border border-border rounded-xl overflow-hidden"
                     >
                       {/* Workout Header */}
                       <div
                         className="p-4 cursor-pointer select-none"
-                        onClick={() => workout?.id && toggleExpand(workout.id)}
+                        onClick={() => toggleExpand(workout.id)}
                       >
                         <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-bold text-foreground mb-1 truncate">
-                              {workout?.name || "Workout"}
+                          <div className="flex-1">
+                            <h3 className="text-lg font-bold text-foreground mb-1">
+                              {workout.name}
                             </h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>
-                                {safeFormat(workout?.date, "en-US", {
-                                  weekday: "short",
-                                  month: "short",
-                                  day: "numeric",
-                                })}
+                                {new Date(workout.date).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    weekday: "short",
+                                    month: "short",
+                                    day: "numeric",
+                                  }
+                                )}
                               </span>
                               <span>•</span>
                               <span>
@@ -187,32 +144,28 @@ const HistoryPage = () => {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {/* Edit */}
+                            {/* ✏️ Edit */}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!workout?.id) return;
-                                goToEditWorkout(workout.id);
+                                onEditWorkout?.(workout.id);
                               }}
-                              className="text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10"
                               title="Edit workout"
                             >
                               <Pencil className="w-4 h-4" />
                             </Button>
 
-                            {/* Delete */}
+                            {/* 🗑 Delete */}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!workout?.id) return;
                                 handleDelete(workout.id);
                               }}
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              title="Delete workout"
+                              className="text-destructive hover:bg-destructive/10"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -226,51 +179,47 @@ const HistoryPage = () => {
                         </div>
 
                         <Badge className="bg-primary/20 text-primary border-primary/50">
-                          {workout?.focus || "—"}
+                          {workout.focus}
                         </Badge>
                       </div>
 
                       {/* Expanded Details */}
-                      {isExpanded ? (
+                      {isExpanded && (
                         <div className="px-4 pb-4 space-y-3 animate-fadeIn">
-                          {exercises.map((exercise, exIndex) => {
-                            const sets = Array.isArray(exercise?.sets) ? exercise.sets : [];
-                            return (
-                              <div
-                                key={exercise?.id || exIndex}
-                                className="bg-muted/30 rounded-lg p-3 border border-border"
-                              >
-                                <div className="font-semibold text-foreground mb-2">
-                                  {exercise?.name || "Exercise"}
-                                </div>
-
-                                <div className="space-y-2">
-                                  {sets.map((set, setIndex) => (
-                                    <div
-                                      key={setIndex}
-                                      className="flex items-center justify-between text-sm"
-                                    >
-                                      <span className="text-muted-foreground">
-                                        Set {setIndex + 1}
-                                      </span>
-                                      <span className="font-semibold text-foreground">
-                                        {Number(set?.weight ?? 0)} {weightUnit} ×{" "}
-                                        {Number(set?.reps ?? 0)} reps
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                {exercise?.notes ? (
-                                  <div className="mt-2 text-xs text-muted-foreground p-2 bg-card rounded border border-border">
-                                    {exercise.notes}
-                                  </div>
-                                ) : null}
+                          {workout.exercises.map((exercise, exIndex) => (
+                            <div
+                              key={exIndex}
+                              className="bg-muted/30 rounded-lg p-3 border border-border"
+                            >
+                              <div className="font-semibold text-foreground mb-2">
+                                {exercise.name}
                               </div>
-                            );
-                          })}
+
+                              <div className="space-y-2">
+                                {exercise.sets.map((set, setIndex) => (
+                                  <div
+                                    key={setIndex}
+                                    className="flex justify-between text-sm"
+                                  >
+                                    <span className="text-muted-foreground">
+                                      Set {setIndex + 1}
+                                    </span>
+                                    <span className="font-semibold text-foreground">
+                                      {set.weight} {weightUnit} × {set.reps}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {exercise.notes && (
+                                <div className="mt-2 text-xs text-muted-foreground p-2 bg-card rounded border border-border">
+                                  {exercise.notes}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ) : null}
+                      )}
                     </div>
                   );
                 })}
