@@ -496,3 +496,4 @@ const ExerciseCard = ({
 };
 
 export default ExerciseCard;
+```0
