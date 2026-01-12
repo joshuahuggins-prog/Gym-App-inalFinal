@@ -1,294 +1,136 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Save,
-  Trash2,
-  RotateCcw,
-} from "lucide-react";
+// src/pages/EditWorkoutPage.js
+import React, { useEffect, useState } from "react";
+import { ArrowLeft, Save } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import ExerciseCard from "../components/ExerciseCard";
-import RestTimer from "../components/RestTimer";
+import { getWorkouts, updateWorkout } from "../utils/storage";
 import { toast } from "sonner";
 
-import { getWorkouts, updateWorkout } from "../utils/storage";
-
-/* ---------------------------------------
-   Utilities
---------------------------------------- */
-
-const deepClone = (x) => JSON.parse(JSON.stringify(x));
-
-const isDifferent = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
-
-/* ---------------------------------------
-   Component
---------------------------------------- */
-
 const EditWorkoutPage = ({ workoutId, onClose }) => {
-  const [originalWorkout, setOriginalWorkout] = useState(null);
-  const [workoutData, setWorkoutData] = useState([]);
-  const [restTimer, setRestTimer] = useState(null);
-  const [isDirty, setIsDirty] = useState(false);
+  const [workout, setWorkout] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const originalRef = useRef(null);
-  const didHydrateRef = useRef(false);
-
-  /* ---------------------------------------
+  /* -----------------------------
      Load workout
-  --------------------------------------- */
-
+  ----------------------------- */
   useEffect(() => {
-    const workout = getWorkouts().find((w) => w.id === workoutId);
+    console.log("[EditWorkoutPage] workoutId =", workoutId);
 
-    if (!workout) {
-      toast.error("Workout not found");
-      onClose?.();
+    if (!workoutId) {
+      setLoading(false);
       return;
     }
 
-    const hydrated = workout.exercises.map((ex) => ({
-      ...ex,
-      setsData: deepClone(ex.sets || []),
-      userNotes: ex.notes || "",
-      lastWorkoutData: null,
-    }));
+    const all = getWorkouts();
+    const found = all.find((w) => w.id === workoutId);
 
-    setOriginalWorkout(workout);
-    setWorkoutData(hydrated);
-    originalRef.current = deepClone(hydrated);
-  }, [workoutId, onClose]);
-
-  /* ---------------------------------------
-     Dirty tracking
-  --------------------------------------- */
-
-  useEffect(() => {
-    if (!originalWorkout) return;
-
-    if (!didHydrateRef.current) {
-      didHydrateRef.current = true;
-      return;
+    if (!found) {
+      console.error("[EditWorkoutPage] Workout not found");
     }
 
-    setIsDirty(isDifferent(workoutData, originalRef.current));
-  }, [workoutData, originalWorkout]);
+    setWorkout(found || null);
+    setLoading(false);
+  }, [workoutId]);
 
-  /* ---------------------------------------
-     Warn before unload
-  --------------------------------------- */
+  /* -----------------------------
+     Guards (NEVER return null)
+  ----------------------------- */
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (!isDirty) return;
-      e.preventDefault();
-      e.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty]);
-
-  /* ---------------------------------------
-     Handlers
-  --------------------------------------- */
-
-  const handleWeightChange = (exercise, setsData) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) =>
-        ex.id === exercise.id ? { ...ex, setsData } : ex
-      )
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-900 flex items-center justify-center text-white">
+        Loading workout…
+      </div>
     );
-  };
+  }
 
-  const handleNotesChange = (exercise, notes) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) =>
-        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
-      )
+  if (!workout) {
+    return (
+      <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center text-white gap-4">
+        <div className="text-xl font-bold">Workout not found</div>
+        <Button variant="outline" onClick={onClose}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to History
+        </Button>
+      </div>
     );
-  };
+  }
 
-  const handleDeleteSet = (exerciseId, index) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) => {
-        if (ex.id !== exerciseId) return ex;
-        const next = [...(ex.setsData || [])];
-        next.splice(index, 1);
-        return { ...ex, setsData: next };
-      })
-    );
-  };
-
-  const resetExercise = (exerciseId) => {
-    const original = originalRef.current.find((e) => e.id === exerciseId);
-    if (!original) return;
-
-    setWorkoutData((prev) =>
-      prev.map((ex) =>
-        ex.id === exerciseId ? deepClone(original) : ex
-      )
-    );
-
-    toast.message("Exercise reset");
-  };
-
-  const resetAll = () => {
-    if (!window.confirm("Reset ALL changes?")) return;
-    setWorkoutData(deepClone(originalRef.current));
-    toast.message("Workout reset");
-  };
+  /* -----------------------------
+     Save
+  ----------------------------- */
 
   const handleSave = () => {
-    const payload = {
-      ...originalWorkout,
-      exercises: workoutData.map((ex) => ({
-        id: ex.id,
-        name: ex.name,
-        repScheme: ex.repScheme,
-        sets: ex.setsData || [],
-        notes: ex.userNotes || "",
-      })),
-    };
-
-    updateWorkout(originalWorkout.id, payload);
+    updateWorkout(workout.id, workout);
     toast.success("Workout updated");
-    onClose?.();
+    onClose();
   };
 
-  const handleCancel = () => {
-    if (isDirty) {
-      const ok = window.confirm("Discard changes?");
-      if (!ok) return;
-    }
-    onClose?.();
-  };
-
-  if (!originalWorkout) return null;
-
-  /* ---------------------------------------
-     Render
-  --------------------------------------- */
+  /* -----------------------------
+     UI
+  ----------------------------- */
 
   return (
-    <div className="min-h-screen bg-zinc-900 pb-28">
+    <div className="min-h-screen bg-neutral-900 text-white pb-24">
       {/* Header */}
-      <div className="bg-zinc-950 border-b border-yellow-500/30">
-        <div className="max-w-2xl mx-auto px-4 py-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-yellow-400">
-                Edit Workout {originalWorkout.type}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {new Date(originalWorkout.date).toLocaleDateString()}
-              </p>
-            </div>
+      <div className="border-b border-yellow-500/30 bg-neutral-950">
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
 
-            <Badge className="bg-yellow-400/20 text-yellow-300 border-yellow-400/50">
-              EDIT MODE
-            </Badge>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-yellow-400">
+              Edit Workout {workout.type}
+            </h1>
+            <p className="text-xs text-neutral-400">
+              {new Date(workout.date).toLocaleDateString()}
+            </p>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={resetAll}
-            className="border-yellow-500/50 text-yellow-300"
-          >
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset All
-          </Button>
+          <Badge className="bg-yellow-400 text-black">EDIT MODE</Badge>
         </div>
       </div>
 
-      {/* Exercises */}
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {workoutData.map((exercise, index) => {
-          const original = originalRef.current.find(
-            (e) => e.id === exercise.id
-          );
-          const changed = isDifferent(exercise, original);
+      {/* Body (placeholder – will mirror HomePage later) */}
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+        {workout.exercises.map((ex, i) => (
+          <div
+            key={i}
+            className="bg-neutral-800 border border-neutral-700 rounded-lg p-4"
+          >
+            <div className="font-semibold mb-2">{ex.name}</div>
 
-          return (
-            <div
-              key={exercise.id}
-              className={`rounded-xl ${
-                changed
-                  ? "ring-2 ring-yellow-400/50"
-                  : ""
-              }`}
-            >
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-yellow-300 font-semibold">
-                  {exercise.name}
+            {ex.sets.map((set, idx) => (
+              <div
+                key={idx}
+                className="flex justify-between text-sm text-neutral-300"
+              >
+                <span>Set {idx + 1}</span>
+                <span>
+                  {set.weight} × {set.reps}
                 </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => resetExercise(exercise.id)}
-                  className="text-yellow-300"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
               </div>
-
-              <ExerciseCard
-                exercise={exercise}
-                lastWorkoutData={null}
-                isFirst={index === 0}
-                disablePRs
-                disableProgression
-                onWeightChange={handleWeightChange}
-                onNotesChange={handleNotesChange}
-                onRestTimer={(d) => setRestTimer(d)}
-                renderSetActions={(setIndex) => (
-                  <button
-                    onClick={() =>
-                      handleDeleteSet(exercise.id, setIndex)
-                    }
-                    className="text-destructive hover:scale-110"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              />
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        ))}
       </div>
 
-      {/* Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-yellow-500/30">
+      {/* Footer */}
+      <div className="fixed bottom-0 left-0 right-0 bg-neutral-950 border-t border-yellow-500/30">
         <div className="max-w-2xl mx-auto px-4 py-3 flex gap-3">
-          <Button
-            variant="outline"
-            className="flex-1 border-yellow-500/50 text-yellow-300"
-            onClick={handleCancel}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+          <Button variant="outline" className="flex-1" onClick={onClose}>
             Cancel
           </Button>
-
           <Button
             className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300"
             onClick={handleSave}
-            disabled={!isDirty}
           >
             <Save className="w-4 h-4 mr-2" />
             Save & Close
           </Button>
         </div>
       </div>
-
-      {/* Rest Timer */}
-      {restTimer && (
-        <RestTimer
-          duration={restTimer}
-          onComplete={() => setRestTimer(null)}
-          onClose={() => setRestTimer(null)}
-        />
-      )}
     </div>
   );
 };
