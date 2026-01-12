@@ -1,62 +1,47 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { X, Save, Calendar } from "lucide-react";
+import { ArrowLeft, Save } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import ExerciseCard from "../components/ExerciseCard";
 import RestTimer from "../components/RestTimer";
-import PRCelebration from "../components/PRCelebration";
+import { toast } from "sonner";
 
 import {
   getWorkouts,
   updateWorkout,
-  getProgressionSettings,
-  updatePersonalRecord,
-  getPersonalRecords,
 } from "../utils/storage";
 
-import { useSettings } from "../contexts/SettingsContext";
-import { toast } from "sonner";
-
-const EditWorkoutPage = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { weightUnit } = useSettings();
-
+const EditWorkoutPage = ({ workoutId, onClose }) => {
   const [originalWorkout, setOriginalWorkout] = useState(null);
   const [workoutData, setWorkoutData] = useState([]);
   const [restTimer, setRestTimer] = useState(null);
-  const [prCelebration, setPrCelebration] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
 
   const didHydrateRef = useRef(false);
 
-  // -----------------------------
-  // Load workout by ID
-  // -----------------------------
   useEffect(() => {
     const workouts = getWorkouts();
-    const found = workouts.find((w) => w.id === id);
+    const workout = workouts.find((w) => w.id === workoutId);
 
-    if (!found) {
+    if (!workout) {
       toast.error("Workout not found");
-      navigate("/history");
+      onClose?.();
       return;
     }
 
-    setOriginalWorkout(found);
+    setOriginalWorkout(workout);
 
     setWorkoutData(
-      found.exercises.map((ex) => ({
+      workout.exercises.map((ex) => ({
         ...ex,
-        userNotes: ex.notes || "",
         setsData: ex.sets || [],
-        lastWorkoutData: null,
+        userNotes: ex.notes || "",
+        lastWorkoutData: null, // not needed in edit mode
       }))
     );
-  }, [id, navigate]);
+  }, [workoutId, onClose]);
 
-  // Track dirty state
+  // Track dirty state (ignore first hydration)
   useEffect(() => {
     if (!originalWorkout) return;
 
@@ -67,25 +52,6 @@ const EditWorkoutPage = () => {
 
     setIsDirty(true);
   }, [workoutData, originalWorkout]);
-
-  // -----------------------------
-  // Handlers
-  // -----------------------------
-  const handleSetComplete = (exercise, set) => {
-    const prs = getPersonalRecords();
-    const currentPR = prs?.[exercise.id];
-
-    if (!currentPR || (set.weight ?? 0) > (currentPR.weight ?? 0)) {
-      const wasNew = updatePersonalRecord(exercise.id, set.weight, set.reps);
-      if (wasNew) {
-        setPrCelebration({
-          exercise: exercise.name,
-          newWeight: set.weight,
-          oldWeight: currentPR?.weight,
-        });
-      }
-    }
-  };
 
   const handleWeightChange = (exercise, setsData) => {
     setWorkoutData((prev) =>
@@ -99,10 +65,11 @@ const EditWorkoutPage = () => {
     );
   };
 
-  const handleSaveAndClose = () => {
+  const handleSave = () => {
     if (!originalWorkout) return;
 
-    updateWorkout(originalWorkout.id, {
+    const updatedWorkout = {
+      ...originalWorkout,
       exercises: workoutData.map((ex) => ({
         id: ex.id,
         name: ex.name,
@@ -110,56 +77,49 @@ const EditWorkoutPage = () => {
         sets: ex.setsData || [],
         notes: ex.userNotes || "",
       })),
-    });
+    };
 
-    toast.success("Workout updated");
-    navigate("/history");
+    updateWorkout(originalWorkout.id, updatedWorkout);
+
+    toast.success("Workout updated ✏️");
+    onClose?.();
   };
 
   const handleCancel = () => {
     if (isDirty) {
-      const ok = window.confirm("Discard changes?");
+      const ok = window.confirm(
+        "Discard changes? Your edits will be lost."
+      );
       if (!ok) return;
     }
-    navigate("/history");
+    onClose?.();
   };
 
   if (!originalWorkout) return null;
 
   return (
-    <div className="min-h-screen bg-[#121212] pb-28">
+    <div className="min-h-screen bg-zinc-900 pb-28 text-foreground">
       {/* Header */}
-      <div className="bg-[#1b1b1b] border-b border-yellow-500/30">
-        <div className="max-w-2xl mx-auto px-4 py-6 space-y-3">
+      <div className="border-b border-yellow-500/30 bg-zinc-950">
+        <div className="max-w-2xl mx-auto px-4 py-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-yellow-400">
                 Edit Workout {originalWorkout.type}
               </h1>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                <Calendar className="w-4 h-4" />
-                {new Date(originalWorkout.date).toLocaleDateString("en-GB", {
-                  weekday: "short",
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
+              <p className="text-sm text-muted-foreground">
+                {new Date(originalWorkout.date).toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
                 })}
-              </div>
+              </p>
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancel}
-              className="text-muted-foreground hover:bg-muted/20"
-            >
-              <X className="w-4 h-4" />
-            </Button>
+            <Badge className="bg-yellow-400/20 text-yellow-300 border-yellow-400/50">
+              EDIT MODE
+            </Badge>
           </div>
-
-          <Badge className="bg-yellow-400/20 text-yellow-400 border-yellow-400/40">
-            Editing past workout
-          </Badge>
         </div>
       </div>
 
@@ -170,30 +130,31 @@ const EditWorkoutPage = () => {
             key={exercise.id}
             exercise={exercise}
             lastWorkoutData={null}
-            onSetComplete={handleSetComplete}
             onWeightChange={handleWeightChange}
             onNotesChange={handleNotesChange}
-            onRestTimer={(duration) => setRestTimer(duration)}
+            onRestTimer={(d) => setRestTimer(d)}
             isFirst={index === 0}
+            disablePRs
+            disableProgression
           />
         ))}
       </div>
 
-      {/* Bottom Action Bar */}
-      <div className="fixed bottom-0 inset-x-0 bg-[#1b1b1b] border-t border-yellow-500/30">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex gap-3">
+      {/* Action Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-yellow-500/30">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex gap-3">
           <Button
             variant="outline"
-            className="flex-1"
+            className="flex-1 border-yellow-500/50 text-yellow-300 hover:bg-yellow-500/10"
             onClick={handleCancel}
           >
+            <ArrowLeft className="w-4 h-4 mr-2" />
             Cancel
           </Button>
 
           <Button
             className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300"
-            onClick={handleSaveAndClose}
-            disabled={!isDirty}
+            onClick={handleSave}
           >
             <Save className="w-4 h-4 mr-2" />
             Save & Close
@@ -205,14 +166,12 @@ const EditWorkoutPage = () => {
       {restTimer && (
         <RestTimer
           duration={restTimer}
-          onComplete={() => setRestTimer(null)}
+          onComplete={() => {
+            setRestTimer(null);
+            toast.success("Rest complete");
+          }}
           onClose={() => setRestTimer(null)}
         />
-      )}
-
-      {/* PR Celebration */}
-      {prCelebration && (
-        <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />
       )}
     </div>
   );
