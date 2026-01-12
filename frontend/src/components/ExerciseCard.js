@@ -1,5 +1,5 @@
 // frontend/src/components/ExerciseCard.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Video, Dumbbell, Edit2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -19,9 +19,30 @@ import {
 import WarmupCalculator from "./WarmupCalculator";
 import PlateCalculator from "./PlateCalculator";
 
-const toNumberOrZero = (raw) => {
+/**
+ * Allows:
+ *  - negatives (assisted work, e.g. -20kg)
+ *  - zero (bodyweight / unloaded)
+ *  - intermediate typing states: "-", ".", "-."
+ * Keeps a "raw" string for the input while storing a numeric weight when ready.
+ */
+const isPermittedNumberString = (s) => /^-?\d*\.?\d*$/.test(s);
+const isIntermediate = (s) => s === "" || s === "-" || s === "." || s === "-.";
+
+const parseWeightRaw = (raw) => {
+  const s = String(raw ?? "");
+  if (!isPermittedNumberString(s)) return null; // reject illegal chars
+  if (isIntermediate(s)) {
+    return { raw: s, number: 0, ready: false };
+  }
+  const n = Number(s);
+  if (!Number.isFinite(n)) return { raw: s, number: 0, ready: false };
+  return { raw: s, number: n, ready: true }; // ✅ ready even if negative or 0
+};
+
+const toIntOrZero = (raw) => {
   if (raw === "" || raw == null) return 0;
-  const n = Number(raw);
+  const n = parseInt(String(raw), 10);
   return Number.isFinite(n) ? n : 0;
 };
 
@@ -37,12 +58,13 @@ const ExerciseCard = ({
   const { weightUnit } = useSettings();
   const [expanded, setExpanded] = useState(true);
 
-  // Store sets as numbers internally; render empty when 0 (prevents "ghost 0")
+  // Store raw weight string for typing + numeric weight for calculations/storage
   const [sets, setSets] = useState(
     Array(Number(exercise.sets) || 1)
       .fill(null)
       .map((_, index) => ({
         setNumber: index + 1,
+        weightRaw: "", // ✅ new
         weight: 0,
         reps: 0,
         completed: false,
@@ -72,70 +94,105 @@ const ExerciseCard = ({
   useEffect(() => {
     setSets((prev) => {
       const nextLen = Number(exercise.sets) || 1;
+
       return Array(nextLen)
         .fill(null)
         .map((_, i) => {
           const existing = prev[i];
+          const existingWeight =
+            typeof existing?.weight === "number" ? existing.weight : 0;
+
           return {
             setNumber: i + 1,
-            weight: existing?.weight ?? 0,
+            weightRaw:
+              existing?.weightRaw ??
+              (existingWeight === 0 ? "" : String(existingWeight)),
+            weight: existingWeight,
             reps: existing?.reps ?? 0,
             completed: existing?.completed ?? false,
             goalReps: exercise.goalReps?.[i] ?? exercise.goalReps?.[0] ?? 8,
           };
         });
     });
-  }, [exercise.sets, exercise.goalReps]);
+  }, [exercise.sets, JSON.stringify(exercise.goalReps)]);
 
   const handleSetComplete = (setIndex) => {
-    const newSets = [...sets];
-    const currentSet = newSets[setIndex];
+    setSets((prev) => {
+      const newSets = [...prev];
+      const currentSet = { ...newSets[setIndex] };
 
-    if (!currentSet.completed) {
-      currentSet.completed = true;
+      const weightParsed = parseWeightRaw(currentSet.weightRaw);
+      const weightReady = !!weightParsed?.ready;
+      const repsReady = Number(currentSet.reps) > 0;
 
-      if (setIndex === 0 && shouldLevelUp(currentSet.reps, currentSet.goalReps)) {
-        onSetComplete?.(exercise, currentSet, true);
+      // If they somehow click while invalid, ignore
+      if (!weightReady || !repsReady) return prev;
+
+      if (!currentSet.completed) {
+        currentSet.completed = true;
+
+        const levelUpNow =
+          setIndex === 0 && shouldLevelUp(currentSet.reps, currentSet.goalReps);
+
+        onSetComplete?.(exercise, currentSet, levelUpNow);
+
+        if (setIndex < newSets.length - 1) {
+          onRestTimer?.(exercise.restTime);
+        }
       } else {
-        onSetComplete?.(exercise, currentSet, false);
+        currentSet.completed = false;
       }
 
-      if (setIndex < newSets.length - 1) {
-        onRestTimer?.(exercise.restTime);
-      }
-    } else {
-      currentSet.completed = false;
-    }
+      newSets[setIndex] = currentSet;
 
-    setSets(newSets);
-    onWeightChange?.(exercise, newSets); // keep parent synced
+      // keep parent synced (draft + payload)
+      onWeightChange?.(exercise, newSets);
+
+      return newSets;
+    });
   };
 
   const handleWeightChange = (setIndex, raw) => {
-    const newSets = [...sets];
-    const newWeight = toNumberOrZero(raw);
-    newSets[setIndex].weight = newWeight;
+    const parsed = parseWeightRaw(raw);
+    if (!parsed) return; // illegal character sequence
 
-    // Auto-calculate RPT weights after set 1 changes
-    if (exercise.repScheme === "RPT" && setIndex === 0) {
-      const progressionSettings = getProgressionSettings();
-      for (let i = 1; i < newSets.length; i++) {
-        newSets[i].weight =
-          newWeight > 0
-            ? calculateRPTWeights(newWeight, i + 1, progressionSettings)
-            : 0;
+    setSets((prev) => {
+      const newSets = [...prev];
+
+      // Update this set
+      const updated = { ...newSets[setIndex] };
+      updated.weightRaw = parsed.raw;
+      updated.weight = parsed.ready ? parsed.number : 0;
+      newSets[setIndex] = updated;
+
+      // Auto-calculate RPT weights after set 1 changes
+      if (exercise.repScheme === "RPT" && setIndex === 0 && parsed.ready) {
+        const progressionSettings = getProgressionSettings();
+        for (let i = 1; i < newSets.length; i++) {
+          const autoW = calculateRPTWeights(parsed.number, i + 1, progressionSettings);
+          newSets[i] = {
+            ...newSets[i],
+            weight: autoW,
+            weightRaw: String(autoW),
+          };
+        }
       }
-    }
 
-    setSets(newSets);
-    onWeightChange?.(exercise, newSets);
+      onWeightChange?.(exercise, newSets);
+      return newSets;
+    });
   };
 
   const handleRepsChange = (setIndex, raw) => {
-    const newSets = [...sets];
-    newSets[setIndex].reps = toNumberOrZero(raw);
-    setSets(newSets);
-    onWeightChange?.(exercise, newSets); // keep parent synced (draft + payload)
+    setSets((prev) => {
+      const newSets = [...prev];
+      newSets[setIndex] = { ...newSets[setIndex], reps: toIntOrZero(raw) };
+
+      // keep parent synced (draft + payload)
+      onWeightChange?.(exercise, newSets);
+
+      return newSets;
+    });
   };
 
   const handleNotesBlur = () => {
@@ -147,8 +204,17 @@ const ExerciseCard = ({
     setShowVideoEdit(false);
   };
 
-  const completedSets = sets.filter((s) => s.completed).length;
+  const completedSets = useMemo(
+    () => sets.filter((s) => s.completed).length,
+    [sets]
+  );
+
   const levelUp = sets[0]?.completed && shouldLevelUp(sets[0].reps, sets[0].goalReps);
+
+  const topSetWeightNumber = useMemo(() => {
+    const p = parseWeightRaw(sets[0]?.weightRaw ?? "");
+    return p?.ready ? p.number : 0;
+  }, [sets]);
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -211,7 +277,8 @@ const ExerciseCard = ({
                 variant="outline"
                 size="sm"
                 onClick={() => setShowWarmup(true)}
-                disabled={!sets[0]?.weight}
+                // ✅ allow warmup for any non-zero (including negative)
+                disabled={topSetWeightNumber === 0}
               >
                 <Dumbbell className="w-4 h-4 mr-2" />
                 Warmup
@@ -222,10 +289,12 @@ const ExerciseCard = ({
               variant="outline"
               size="sm"
               onClick={() => {
-                setSelectedWeight(sets[0]?.weight || 0);
+                setSelectedWeight(topSetWeightNumber);
                 setShowPlates(true);
               }}
-              disabled={!sets[0]?.weight}
+              // ✅ plate calculator doesn't make sense for 0; allow negative if you want, but
+              // typically plates are only for positive barbell loads. We'll disable for <= 0.
+              disabled={topSetWeightNumber <= 0}
             >
               Plates
             </Button>
@@ -289,6 +358,11 @@ const ExerciseCard = ({
             {sets.map((set, index) => {
               const suggestedWeight = getSuggestedWeight(index);
 
+              const weightParsed = parseWeightRaw(set.weightRaw);
+              const weightReady = !!weightParsed?.ready;
+              const repsReady = Number(set.reps) > 0;
+              const canComplete = weightReady && repsReady;
+
               return (
                 <div
                   key={index}
@@ -303,13 +377,13 @@ const ExerciseCard = ({
                     <button
                       type="button"
                       onClick={() => handleSetComplete(index)}
-                      disabled={!set.weight || !set.reps}
+                      disabled={!canComplete}
                       className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-xl transition-all duration-200 ${
                         set.completed
                           ? "bg-primary border-primary text-primary-foreground shadow-lg scale-105"
                           : "bg-primary/10 border-primary/50 text-primary hover:bg-primary/20 hover:scale-105"
                       } ${
-                        !set.weight || !set.reps
+                        !canComplete
                           ? "opacity-50 cursor-not-allowed"
                           : "cursor-pointer"
                       }`}
@@ -325,13 +399,13 @@ const ExerciseCard = ({
                       <Input
                         type="text"
                         inputMode="decimal"
-                        value={set.weight === 0 ? "" : String(set.weight)}
+                        value={set.weightRaw}
                         onChange={(e) => handleWeightChange(index, e.target.value)}
                         placeholder={suggestedWeight != null ? String(suggestedWeight) : "0"}
                         className="h-12 text-center text-lg font-semibold"
                         disabled={set.completed}
                       />
-                      {suggestedWeight != null && set.weight === 0 && (
+                      {suggestedWeight != null && !weightReady && (
                         <div className="text-xs text-muted-foreground mt-1 text-center">
                           Last: {suggestedWeight}
                           {weightUnit}
@@ -361,11 +435,11 @@ const ExerciseCard = ({
                     </div>
                   </div>
 
-                  {/* Auto RPT note */}
-                  {exercise.repScheme === "RPT" && index === 0 && set.weight > 0 && (() => {
+                  {/* Auto RPT note (works for negative too; if you prefer only positive, add `&& set.weight > 0`) */}
+                  {exercise.repScheme === "RPT" && index === 0 && weightReady && (() => {
                     const progressionSettings = getProgressionSettings();
-                    const set2Weight = calculateRPTWeights(set.weight, 2, progressionSettings);
-                    const set3Weight = calculateRPTWeights(set.weight, 3, progressionSettings);
+                    const set2Weight = calculateRPTWeights(weightParsed.number, 2, progressionSettings);
+                    const set3Weight = calculateRPTWeights(weightParsed.number, 3, progressionSettings);
                     return (
                       <div className="mt-2 text-xs text-muted-foreground text-center">
                         Auto: Set 2 = {set2Weight}
@@ -404,7 +478,7 @@ const ExerciseCard = ({
       {showWarmup && (
         <WarmupCalculator
           exercise={exercise.name}
-          topSetWeight={sets[0]?.weight || 0}
+          topSetWeight={topSetWeightNumber}
           open={showWarmup}
           onClose={() => setShowWarmup(false)}
         />
