@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useState } from "react";
 import {
   Home,
@@ -11,11 +12,14 @@ import {
 
 import HomePage from "./pages/HomePage";
 import HistoryPage from "./pages/HistoryPage";
-import StatsPage from "./pages/StatsPage"; // ✅ NEW stats page
+import StatsPage from "./pages/StatsPage";
 import ProgrammesPage from "./pages/ProgrammesPage";
 import ExercisesPage from "./pages/ExercisesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ImportExportPage from "./pages/ImportExportPage";
+
+// ✅ NEW (create this file next)
+import EditWorkoutPage from "./pages/EditWorkoutPage";
 
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
@@ -34,7 +38,11 @@ const App = () => {
   const [showNavigationWarning, setShowNavigationWarning] = useState(false);
   const [pendingPage, setPendingPage] = useState(null);
 
+  // ✅ NEW: edit-workout page state
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
+
   const handleNavigate = (page) => {
+    // Optional: if you ever want to protect the edit page too, extend this condition
     if (currentPage === "home" && hasUnsavedData && page !== "home") {
       setPendingPage(page);
       setShowNavigationWarning(true);
@@ -64,6 +72,17 @@ const App = () => {
     setHasUnsavedData(false);
   };
 
+  // ✅ NEW: open the edit screen from History
+  const openEditWorkout = (workoutId) => {
+    setEditingWorkoutId(workoutId);
+    setCurrentPage("edit-workout");
+  };
+
+  const closeEditWorkout = () => {
+    setEditingWorkoutId(null);
+    setCurrentPage("history");
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case "home":
@@ -73,18 +92,36 @@ const App = () => {
             onSaved={handleWorkoutSaved}
           />
         );
+
       case "history":
-        return <HistoryPage />;
+        // ✅ pass handler down so pencil can open edit screen
+        return <HistoryPage onEditWorkout={openEditWorkout} />;
+
+      case "edit-workout":
+        // ✅ NEW: hidden page (not in nav)
+        return (
+          <EditWorkoutPage
+            workoutId={editingWorkoutId}
+            onClose={closeEditWorkout}
+            onSaved={closeEditWorkout}
+          />
+        );
+
       case "progress":
-        return <StatsPage />; // ✅ Progress now shows Stats
+        return <StatsPage />;
+
       case "programmes":
         return <ProgrammesPage />;
+
       case "exercises":
         return <ExercisesPage />;
+
       case "settings":
         return <SettingsPage />;
+
       case "import-export":
         return <ImportExportPage />;
+
       default:
         return (
           <HomePage
@@ -99,9 +136,7 @@ const App = () => {
     <SettingsProvider>
       <div className="flex flex-col h-full bg-background text-foreground">
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pb-20">
-          {renderPage()}
-        </main>
+        <main className="flex-1 overflow-y-auto pb-20">{renderPage()}</main>
 
         {/* Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
@@ -154,10 +189,7 @@ const App = () => {
         </nav>
 
         {/* Unsaved Workout Warning */}
-        <Dialog
-          open={showNavigationWarning}
-          onOpenChange={setShowNavigationWarning}
-        >
+        <Dialog open={showNavigationWarning} onOpenChange={setShowNavigationWarning}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">
@@ -166,10 +198,7 @@ const App = () => {
             </DialogHeader>
 
             <div className="py-4 space-y-3">
-              <p>
-                You have unsaved workout data. Leaving now will discard your
-                progress.
-              </p>
+              <p>You have unsaved workout data. Leaving now will discard your progress.</p>
               <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                 <p className="text-sm text-destructive font-semibold">
                   ⚠️ Sets, weights, and reps will be lost.
