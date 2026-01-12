@@ -229,11 +229,11 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
 
   // Keep selected id valid
   useEffect(() => {
-    if (!exercises.some((e) => e?.id === selectedExerciseId)) {
-      setSelectedExerciseId(exercises[0]?.id || "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [programme?.type, exercises.length]);
+  setSelectedExerciseId((prev) => {
+    const stillValid = exercises.some((e) => e?.id === prev);
+    return stillValid ? prev : (exercises[0]?.id || "");
+  });
+}, [programme?.type, exercises]);
 
   const selectedExercise = useMemo(() => {
     return exercises.find((e) => e?.id === selectedExerciseId) || exercises[0] || null;
