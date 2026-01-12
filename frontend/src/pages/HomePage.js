@@ -1,6 +1,6 @@
 // src/pages/HomePage.js
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Flame, RotateCcw } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Calendar, Flame, RotateCcw, ChevronDown } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import ExerciseCard from "../components/ExerciseCard";
@@ -21,13 +21,11 @@ import {
   saveWorkoutDraft,
   clearWorkoutDraft,
   isWorkoutDraftForToday,
-  getExerciseById, // ✅ merged (stock + overrides)
+  setDraftWorkoutType, // ✅ add
 } from "../utils/storage";
 
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
-
-const upper = (s) => String(s || "").toUpperCase();
 
 const HomePage = ({ onDataChange, onSaved }) => {
   const { weightUnit, toggleWeightUnit } = useSettings();
@@ -48,43 +46,21 @@ const HomePage = ({ onDataChange, onSaved }) => {
   // Prevent "dirty" being set during initial hydration
   const didHydrateRef = useRef(false);
 
-  // Avoid eslint-disable by using a ref for the loader
+  // avoid eslint-disable rule names entirely
   const loadRef = useRef(null);
 
-  const usableProgrammes = useMemo(() => {
+  // ✅ manual switcher
+  const [manualWorkoutType, setManualWorkoutType] = useState("");
+
+  const getUsableProgrammes = () => {
     const programmes = getProgrammes() || [];
-    return programmes.filter((p) => Array.isArray(p?.exercises) && p.exercises.length > 0);
-  }, []);
-
-  const hydrateWorkoutDataFromProgramme = (programme, lastSameWorkout, draft) => {
-    // Draft restore: only apply notes/sets to exercises that STILL exist in this programme.
-    const draftById = new Map((draft?.exercises || []).map((e) => [e.id, e]));
-
-    return (programme.exercises || []).map((progEx) => {
-      const merged = getExerciseById(progEx.id) || progEx;
-
-      const lastExerciseData = lastSameWorkout?.exercises?.find(
-        (e) => e?.id === merged.id
-      );
-
-      const draftEx = draftById.get(merged.id);
-
-      return {
-        // Base: programme order / membership
-        ...progEx,
-
-        // Override details from catalogue (stock + local edits)
-        ...merged,
-
-        userNotes: draftEx?.userNotes || "",
-        setsData: Array.isArray(draftEx?.setsData) ? draftEx.setsData : [],
-        lastWorkoutData: lastExerciseData || null,
-      };
-    });
+    return programmes.filter((p) => Array.isArray(p.exercises) && p.exercises.length > 0);
   };
 
   const loadTodaysWorkout = () => {
-    const workouts = getWorkouts() || [];
+    const workouts = getWorkouts();
+    const usableProgrammes = getUsableProgrammes();
+
     const draft = getWorkoutDraft();
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
 
@@ -95,21 +71,45 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
 
-    const chosen =
-      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || usableProgrammes[0];
+    const workout =
+      usableProgrammes.find(
+        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
+      ) || usableProgrammes[0];
 
-    if (!chosen) {
+    if (!workout) {
       toast.error("No programmes found. Please create a programme first.");
       return;
     }
 
-    const lastSameWorkout = workouts.find((w) => upper(w?.type) === upper(chosen.type));
+    const lastSameWorkout = workouts.find(
+      (w) => String(w.type).toUpperCase() === String(workout.type).toUpperCase()
+    );
 
-    setCurrentWorkout(chosen);
+    setCurrentWorkout(workout);
+    setManualWorkoutType(workout.type);
 
     // Restore draft if today + same type
-    if (hasTodaysDraft && upper(draft.workoutType) === upper(chosen.type)) {
-      setWorkoutData(hydrateWorkoutDataFromProgramme(chosen, lastSameWorkout, draft));
+    if (
+      hasTodaysDraft &&
+      String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
+    ) {
+      const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
+
+      setWorkoutData(
+        workout.exercises.map((ex) => {
+          const lastExerciseData = lastSameWorkout?.exercises.find(
+            (e) => e.id === ex.id || e.name === ex.name
+          );
+          const draftEx = draftById.get(ex.id);
+
+          return {
+            ...ex,
+            userNotes: draftEx?.userNotes || "",
+            setsData: draftEx?.setsData || [],
+            lastWorkoutData: lastExerciseData || null,
+          };
+        })
+      );
 
       toast.message("Restored unsaved workout", {
         description: "We loaded your in-progress session after refresh.",
@@ -122,7 +122,19 @@ const HomePage = ({ onDataChange, onSaved }) => {
     }
 
     // No draft - start fresh
-    setWorkoutData(hydrateWorkoutDataFromProgramme(chosen, lastSameWorkout, null));
+    setWorkoutData(
+      workout.exercises.map((ex) => {
+        const lastExerciseData = lastSameWorkout?.exercises.find(
+          (e) => e.id === ex.id || e.name === ex.name
+        );
+        return {
+          ...ex,
+          userNotes: "",
+          setsData: [],
+          lastWorkoutData: lastExerciseData || null,
+        };
+      })
+    );
 
     setDraftSaved(false);
     setIsDirty(false);
@@ -137,7 +149,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
     loadRef.current?.();
   }, []);
 
-  // When workout type changes, treat next load as hydration (not user edits)
   useEffect(() => {
     didHydrateRef.current = false;
     setIsDirty(false);
@@ -145,7 +156,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setFinishedSaved(false);
   }, [currentWorkout?.type]);
 
-  // Mark dirty when user changes workoutData (not during initial load)
   useEffect(() => {
     if (!currentWorkout) return;
 
@@ -201,7 +211,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
   useEffect(() => {
     const hasData = workoutData.some(
       (ex) =>
-        Array.isArray(ex.setsData) &&
+        ex.setsData &&
         ex.setsData.length > 0 &&
         ex.setsData.some((set) => (set.weight ?? 0) !== 0 || (set.reps ?? 0) !== 0)
     );
@@ -226,7 +236,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       });
     }
 
-    // PR check (by exercise.id)
+    // PR check (NOTE: this compares raw number; if you later want "best assisted" PR separately, we can)
     const prs = getPersonalRecords();
     const currentPR = prs?.[exercise.id];
 
@@ -243,15 +253,11 @@ const HomePage = ({ onDataChange, onSaved }) => {
   };
 
   const handleWeightChange = (exercise, setsData) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
-    );
+    setWorkoutData((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex)));
   };
 
   const handleNotesChange = (exercise, notes) => {
-    setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
-    );
+    setWorkoutData((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex)));
   };
 
   const buildWorkoutPayload = () => ({
@@ -314,6 +320,48 @@ const HomePage = ({ onDataChange, onSaved }) => {
     loadRef.current?.();
   };
 
+  // ✅ manual switch (does NOT advance pattern)
+  const handleManualSwitchWorkout = (nextType) => {
+    if (!nextType) return;
+
+    if (isDirty) {
+      const ok = window.confirm(
+        "You have unsaved changes.\n\nSwitching will keep them as a draft, but you may want to press Save Draft first.\n\nSwitch anyway?"
+      );
+      if (!ok) return;
+    }
+
+    const usableProgrammes = getUsableProgrammes();
+    const picked =
+      usableProgrammes.find(
+        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
+      ) || null;
+
+    if (!picked) {
+      toast.error("That workout type isn't available yet.");
+      return;
+    }
+
+    // ✅ lock “today’s” workout to the chosen type via the draft
+    setDraftWorkoutType(picked.type);
+
+    loadRef.current?.();
+
+    toast.message("Switched workout", {
+      description: `Now showing: ${picked.name}`,
+    });
+  };
+
+  // ✅ return to the pattern’s next workout (also does NOT advance)
+  const handleReturnToSequence = () => {
+    const next = peekNextWorkoutTypeFromPattern();
+    if (!next) {
+      toast.error("No next workout found in your pattern.");
+      return;
+    }
+    handleManualSwitchWorkout(next);
+  };
+
   const getStreak = () => {
     const workouts = getWorkouts();
     if (workouts.length === 0) return 0;
@@ -347,6 +395,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
   if (!currentWorkout) return null;
 
+  const nextInSequence = peekNextWorkoutTypeFromPattern();
+
   return (
     <div className="min-h-screen bg-background pb-28">
       {/* Header */}
@@ -354,9 +404,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gradient-primary">
-                Gym Strength Programme
-              </h1>
+              <h1 className="text-3xl font-bold text-gradient-primary">Gym Strength Programme</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
@@ -393,12 +441,64 @@ const HomePage = ({ onDataChange, onSaved }) => {
           {/* Workout Info */}
           <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
             <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-foreground mb-1">{currentWorkout.name}</h2>
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-foreground mb-1 truncate">
+                  {currentWorkout.name}
+                </h2>
                 <Badge className="bg-primary/20 text-primary border-primary/50">
                   {currentWorkout.focus}
                 </Badge>
+
+                {/* ✅ Manual switcher */}
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    Next in sequence:{" "}
+                    <span className="font-semibold text-foreground">
+                      {nextInSequence ? String(nextInSequence) : "—"}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <div className="relative">
+                        <select
+                          value={manualWorkoutType || ""}
+                          onChange={(e) => setManualWorkoutType(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
+                        >
+                          {getUsableProgrammes().map((p) => (
+                            <option key={p.type} value={p.type}>
+                              {p.name} ({p.type})
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
+                      disabled={!manualWorkoutType || manualWorkoutType === currentWorkout.type}
+                      className="shrink-0"
+                    >
+                      Switch
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleReturnToSequence}
+                      disabled={!nextInSequence || String(nextInSequence).toUpperCase() === String(currentWorkout.type).toUpperCase()}
+                      className="shrink-0"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               </div>
+
               <Button variant="ghost" size="sm" onClick={() => loadRef.current?.()}>
                 <RotateCcw className="w-4 h-4" />
               </Button>
@@ -407,7 +507,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         </div>
       </div>
 
-      {/* Exercises (ONLY programme exercises; each hydrated from catalogue) */}
+      {/* Exercises */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         {workoutData.map((exercise, index) => (
           <ExerciseCard
