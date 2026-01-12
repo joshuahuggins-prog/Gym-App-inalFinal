@@ -103,6 +103,17 @@ export const isWorkoutDraftForToday = (draft) => {
   return draft.dateKey === getLocalDateKey();
 };
 
+export const setDraftWorkoutType = (workoutType) => {
+  if (!workoutType) return false;
+
+  const draft = getWorkoutDraft() || {};
+  return saveWorkoutDraft({
+    ...draft,
+    workoutType,
+    exercises: Array.isArray(draft.exercises) ? draft.exercises : [],
+  });
+};
+
 // ============================
 // Workouts
 // ============================
