@@ -1,34 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { Home, History, TrendingUp, BarChart3, FileText, Dumbbell, Settings, Download } from 'lucide-react';
-import HomePage from './pages/HomePage';
-import HistoryPage from './pages/HistoryPage';
-import StatsPage from './pages/StatsPage';
-import ProgressPage from './pages/ProgressPage';
-import ProgrammesPage from './pages/ProgrammesPage';
-import ExercisesPage from './pages/ExercisesPage';
-import SettingsPage from './pages/SettingsPage';
-import ImportExportPage from './pages/ImportExportPage';
-import { SettingsProvider } from './contexts/SettingsContext';
-import { Toaster } from './components/ui/sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './components/ui/dialog';
-import { Button } from './components/ui/button';
+import React, { useState } from "react";
+import {
+  Home,
+  History,
+  TrendingUp,
+  FileText,
+  Dumbbell,
+  Settings,
+  Download,
+} from "lucide-react";
+
+import HomePage from "./pages/HomePage";
+import HistoryPage from "./pages/HistoryPage";
+import StatsPage from "./pages/StatsPage"; // ✅ NEW stats page
+import ProgrammesPage from "./pages/ProgrammesPage";
+import ExercisesPage from "./pages/ExercisesPage";
+import SettingsPage from "./pages/SettingsPage";
+import ImportExportPage from "./pages/ImportExportPage";
+
+import { SettingsProvider } from "./contexts/SettingsContext";
+import { Toaster } from "./components/ui/sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "./components/ui/dialog";
+import { Button } from "./components/ui/button";
 
 const App = () => {
-  const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPage] = useState("home");
   const [hasUnsavedData, setHasUnsavedData] = useState(false);
   const [showNavigationWarning, setShowNavigationWarning] = useState(false);
   const [pendingPage, setPendingPage] = useState(null);
 
   const handleNavigate = (page) => {
-    // If on home page with unsaved data, show warning
-    if (currentPage === 'home' && hasUnsavedData && page !== 'home') {
+    if (currentPage === "home" && hasUnsavedData && page !== "home") {
       setPendingPage(page);
       setShowNavigationWarning(true);
     } else {
       setCurrentPage(page);
-      if (page !== 'home') {
-        setHasUnsavedData(false);
-      }
+      if (page !== "home") setHasUnsavedData(false);
     }
   };
 
@@ -54,24 +66,32 @@ const App = () => {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'home':
-        return <HomePage onDataChange={handleWorkoutDataChange} onSaved={handleWorkoutSaved} />;
-      case 'history':
+      case "home":
+        return (
+          <HomePage
+            onDataChange={handleWorkoutDataChange}
+            onSaved={handleWorkoutSaved}
+          />
+        );
+      case "history":
         return <HistoryPage />;
-      case 'stats':
-        return <StatsPage />;
-      case 'progress':
-        return <ProgressPage />;
-      case 'programmes':
+      case "progress":
+        return <StatsPage />; // ✅ Progress now shows Stats
+      case "programmes":
         return <ProgrammesPage />;
-      case 'exercises':
+      case "exercises":
         return <ExercisesPage />;
-      case 'settings':
+      case "settings":
         return <SettingsPage />;
-      case 'import-export':
+      case "import-export":
         return <ImportExportPage />;
       default:
-        return <HomePage onDataChange={handleWorkoutDataChange} onSaved={handleWorkoutSaved} />;
+        return (
+          <HomePage
+            onDataChange={handleWorkoutDataChange}
+            onSaved={handleWorkoutSaved}
+          />
+        );
     }
   };
 
@@ -90,67 +110,73 @@ const App = () => {
               <NavButton
                 icon={<Home className="w-5 h-5" />}
                 label="Today"
-                active={currentPage === 'home'}
-                onClick={() => handleNavigate('home')}
+                active={currentPage === "home"}
+                onClick={() => handleNavigate("home")}
               />
               <NavButton
                 icon={<History className="w-5 h-5" />}
                 label="History"
-                active={currentPage === 'history'}
-                onClick={() => handleNavigate('history')}
+                active={currentPage === "history"}
+                onClick={() => handleNavigate("history")}
               />
               <NavButton
                 icon={<TrendingUp className="w-5 h-5" />}
                 label="Progress"
-                active={currentPage === 'progress'}
-                onClick={() => handleNavigate('progress')}
+                active={currentPage === "progress"}
+                onClick={() => handleNavigate("progress")}
               />
               <NavButton
                 icon={<FileText className="w-5 h-5" />}
                 label="Programmes"
-                active={currentPage === 'programmes'}
-                onClick={() => handleNavigate('programmes')}
+                active={currentPage === "programmes"}
+                onClick={() => handleNavigate("programmes")}
               />
               <NavButton
                 icon={<Dumbbell className="w-5 h-5" />}
                 label="Exercises"
-                active={currentPage === 'exercises'}
-                onClick={() => handleNavigate('exercises')}
+                active={currentPage === "exercises"}
+                onClick={() => handleNavigate("exercises")}
               />
               <NavButton
                 icon={<Settings className="w-5 h-5" />}
                 label="Settings"
-                active={currentPage === 'settings'}
-                onClick={() => handleNavigate('settings')}
+                active={currentPage === "settings"}
+                onClick={() => handleNavigate("settings")}
               />
               <NavButton
                 icon={<Download className="w-5 h-5" />}
                 label="Data"
-                active={currentPage === 'import-export'}
-                onClick={() => handleNavigate('import-export')}
+                active={currentPage === "import-export"}
+                onClick={() => handleNavigate("import-export")}
               />
             </div>
           </div>
         </nav>
 
-        {/* Navigation Warning Dialog */}
-        <Dialog open={showNavigationWarning} onOpenChange={setShowNavigationWarning}>
+        {/* Unsaved Workout Warning */}
+        <Dialog
+          open={showNavigationWarning}
+          onOpenChange={setShowNavigationWarning}
+        >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-foreground">
+              <DialogTitle className="text-xl font-bold">
                 Unsaved Workout Data
               </DialogTitle>
             </DialogHeader>
-            <div className="py-4">
-              <p className="text-foreground mb-4">
-                You have unsaved workout data. If you navigate away now, you'll lose your progress.
+
+            <div className="py-4 space-y-3">
+              <p>
+                You have unsaved workout data. Leaving now will discard your
+                progress.
               </p>
               <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
                 <p className="text-sm text-destructive font-semibold">
-                  ⚠️ Your sets, weights, and reps will be lost!
+                  ⚠️ Sets, weights, and reps will be lost.
                 </p>
               </div>
             </div>
+
             <DialogFooter className="flex gap-3">
               <Button
                 variant="outline"
@@ -176,22 +202,18 @@ const App = () => {
   );
 };
 
-const NavButton = ({ icon, label, active, onClick }) => {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
-        active
-          ? 'text-primary scale-105'
-          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-      }`}
-    >
-      <div className={active ? 'glow-primary' : ''}>
-        {icon}
-      </div>
-      <span className="text-[10px] font-medium">{label}</span>
-    </button>
-  );
-};
+const NavButton = ({ icon, label, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
+      active
+        ? "text-primary scale-105"
+        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+    }`}
+  >
+    <div className={active ? "glow-primary" : ""}>{icon}</div>
+    <span className="text-[10px] font-medium">{label}</span>
+  </button>
+);
 
 export default App;
