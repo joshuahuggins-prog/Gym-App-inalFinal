@@ -29,7 +29,12 @@ const STORAGE_KEYS = {
   PERSONAL_RECORDS: "gym_personal_records",
   VIDEO_LINKS: "gym_video_links",
   PROGRAMMES: "gym_programmes",
+
+  // IMPORTANT:
+  // This key now stores ONLY "overrides" (changes/custom exercises),
+  // not a fully-synced catalogue generated from programmes.
   EXERCISES: "gym_exercises",
+
   PROGRESSION_SETTINGS: "gym_progression_settings",
   WORKOUT_PATTERN: "gym_workout_pattern",
   WORKOUT_PATTERN_INDEX: "gym_workout_pattern_index",
@@ -65,9 +70,8 @@ export const setStorageData = (key, value) => {
 // ============================
 
 const getLocalDateKey = (d = new Date()) => {
-  // en-CA gives YYYY-MM-DD
   try {
-    return d.toLocaleDateString("en-CA");
+    return d.toLocaleDateString("en-CA"); // YYYY-MM-DD
   } catch {
     return d.toISOString().slice(0, 10);
   }
@@ -96,8 +100,7 @@ export const clearWorkoutDraft = () => {
 
 export const isWorkoutDraftForToday = (draft) => {
   if (!draft) return false;
-  const todayKey = getLocalDateKey();
-  return draft.dateKey === todayKey;
+  return draft.dateKey === getLocalDateKey();
 };
 
 // ============================
@@ -242,8 +245,6 @@ export const updateVideoLink = (exerciseName, url) => {
 export const getProgrammes = () => {
   const programmes = getStorageData(STORAGE_KEYS.PROGRAMMES);
   if (!programmes || programmes.length === 0) {
-    // Initialize with default programmes from workoutData
-    // eslint note: keep as require to avoid circular imports in some setups
     const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
     const defaultProgrammes = [WORKOUT_A, WORKOUT_B];
     setStorageData(STORAGE_KEYS.PROGRAMMES, defaultProgrammes);
@@ -252,216 +253,131 @@ export const getProgrammes = () => {
   return programmes;
 };
 
-// ============================
-// Catalogue Sync (Programmes -> Exercises)
-// ============================
-
-const norm = (s) => String(s || "").trim().toLowerCase();
-const upper = (s) => String(s || "").trim().toUpperCase();
-
-/**
- * Build a map: exerciseId -> Set(programmeTypes that reference it)
- */
-const buildAssignedToMapFromProgrammes = (programmes) => {
-  const map = new Map();
-
-  (programmes || []).forEach((p) => {
-    const type = upper(p?.type);
-    (p?.exercises || []).forEach((ex) => {
-      const id = norm(ex?.id);
-      if (!id || !type) return;
-
-      if (!map.has(id)) map.set(id, new Set());
-      map.get(id).add(type);
-    });
-  });
-
-  return map;
-};
-
-/**
- * Sync catalogue `assignedTo` (and optionally `hidden`) based on programmes.
- * - Dedupes by `id` (last wins)
- * - Adds any programme exercise missing from catalogue (using programme copy as base)
- * - Rebuilds assignedTo from scratch
- */
-export const syncExerciseCatalogueFromProgrammes = ({
-  programmes,
-  exercises,
-  autoHideUnused = true,
-}) => {
-  const assignedToMap = buildAssignedToMapFromProgrammes(programmes);
-  const catalogue = Array.isArray(exercises) ? exercises.slice() : [];
-
-  // Index existing catalogue by id (dedupe)
-  const byId = new Map();
-  catalogue.forEach((ex) => {
-    const id = norm(ex?.id);
-    if (!id) return;
-    byId.set(id, ex);
-  });
-
-  // Ensure every programme exercise exists in catalogue
-  (programmes || []).forEach((p) => {
-    (p?.exercises || []).forEach((exFromProg) => {
-      const id = norm(exFromProg?.id);
-      if (!id) return;
-
-      if (!byId.has(id)) {
-        byId.set(id, {
-          id: exFromProg.id,
-          name: exFromProg.name || exFromProg.id,
-          sets: exFromProg.sets ?? 3,
-          repScheme: exFromProg.repScheme ?? "RPT",
-          goalReps: exFromProg.goalReps ?? [6, 8, 10],
-          restTime: exFromProg.restTime ?? 120,
-          notes: exFromProg.notes ?? "",
-          hidden: false,
-          assignedTo: [],
-        });
-      }
-    });
-  });
-
-  const synced = Array.from(byId.values()).map((ex) => {
-    const id = norm(ex?.id);
-    const set = assignedToMap.get(id);
-    const assignedTo = set ? Array.from(set) : [];
-
-    const next = { ...ex, assignedTo };
-    if (autoHideUnused) {
-      next.hidden = assignedTo.length === 0;
-    }
-    return next;
-  });
-
-  // Stable-ish ordering: used first, then name
-  synced.sort((a, b) => {
-    const aUsed = (a.assignedTo || []).length > 0;
-    const bUsed = (b.assignedTo || []).length > 0;
-    if (aUsed !== bUsed) return aUsed ? -1 : 1;
-    return String(a.name || "").localeCompare(String(b.name || ""));
-  });
-
-  return synced;
-};
-
-/**
- * One-call helper: sync and persist catalogue.
- */
-export const syncAndSaveExerciseCatalogue = (options = { autoHideUnused: true }) => {
-  const programmes = getProgrammes() || [];
-  const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
-
-  const synced = syncExerciseCatalogueFromProgrammes({
-    programmes,
-    exercises,
-    autoHideUnused: options.autoHideUnused !== false,
-  });
-
-  setStorageData(STORAGE_KEYS.EXERCISES, synced);
-  return synced;
-};
-
 export const saveProgramme = (programme) => {
   const programmes = getProgrammes();
   const existing = programmes.find((p) => p.type === programme.type);
 
-  let nextProgrammes;
-  if (existing) {
-    nextProgrammes = programmes.map((p) => (p.type === programme.type ? programme : p));
-  } else {
-    nextProgrammes = [...programmes, programme];
-  }
+  const nextProgrammes = existing
+    ? programmes.map((p) => (p.type === programme.type ? programme : p))
+    : [...programmes, programme];
 
-  const ok = setStorageData(STORAGE_KEYS.PROGRAMMES, nextProgrammes);
-  if (ok) syncAndSaveExerciseCatalogue({ autoHideUnused: true });
-  return ok;
+  return setStorageData(STORAGE_KEYS.PROGRAMMES, nextProgrammes);
 };
 
 export const deleteProgramme = (type) => {
   const programmes = getProgrammes();
   const filtered = programmes.filter((p) => p.type !== type);
-
-  const ok = setStorageData(STORAGE_KEYS.PROGRAMMES, filtered);
-  if (ok) syncAndSaveExerciseCatalogue({ autoHideUnused: true });
-  return ok;
+  return setStorageData(STORAGE_KEYS.PROGRAMMES, filtered);
 };
 
 // ============================
-// Exercises Management
+// Exercises (Stock baseline + Local overrides)
 // ============================
 
-export const getExercises = () => {
-  const stored = getStorageData(STORAGE_KEYS.EXERCISES);
+const normId = (s) => String(s || "").trim();
 
-  // If missing/empty, initialise from programmes first
-  if (!stored || stored.length === 0) {
-    const programmes = getProgrammes();
-    const allExercises = [];
+const getStockProgrammes = () => {
+  const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
+  return [WORKOUT_A, WORKOUT_B].filter(Boolean);
+};
 
-    programmes.forEach((prog) => {
-      (prog.exercises || []).forEach((ex) => {
-        if (!allExercises.find((e) => e.id === ex.id)) {
-          allExercises.push({
-            ...ex,
-            assignedTo: [prog.type],
-            hidden: false,
-          });
-        } else {
-          const existing = allExercises.find((e) => e.id === ex.id);
-          existing.assignedTo = existing.assignedTo || [];
-          if (!existing.assignedTo.includes(prog.type)) {
-            existing.assignedTo.push(prog.type);
-          }
-        }
-      });
+const buildStockExercisesFromWorkouts = () => {
+  const programmes = getStockProgrammes();
+  const map = new Map();
+
+  programmes.forEach((prog) => {
+    (prog.exercises || []).forEach((ex) => {
+      const id = normId(ex?.id);
+      if (!id) return;
+      if (!map.has(id)) {
+        map.set(id, {
+          ...ex,
+          id,
+          // keep these if your UI uses them
+          hidden: !!ex.hidden,
+          assignedTo: Array.isArray(ex.assignedTo) ? ex.assignedTo : [],
+        });
+      }
     });
+  });
 
-    setStorageData(STORAGE_KEYS.EXERCISES, allExercises);
+  return Array.from(map.values());
+};
 
-    // Immediately sync (dedupe + hide unused, etc.)
-    return syncAndSaveExerciseCatalogue({ autoHideUnused: true });
+// Local overrides ONLY (what user changed or added)
+export const getExerciseOverrides = () => {
+  const local = getStorageData(STORAGE_KEYS.EXERCISES);
+  return Array.isArray(local) ? local : [];
+};
+
+// Merged view used by the app
+export const getExercises = () => {
+  const stock = buildStockExercisesFromWorkouts();
+  const local = getExerciseOverrides();
+
+  const stockById = new Map(stock.map((e) => [normId(e.id), e]));
+  const localById = new Map(
+    local.filter((e) => e && e.id).map((e) => [normId(e.id), e])
+  );
+
+  const merged = [];
+  const seen = new Set();
+
+  for (const [id, stockEx] of stockById.entries()) {
+    const localEx = localById.get(id);
+    merged.push(localEx ? { ...stockEx, ...localEx, id } : stockEx);
+    seen.add(id);
   }
 
-  // Always return a synced view so "unassigned" ghosts don’t linger
-  const programmes = getProgrammes();
-  const synced = syncExerciseCatalogueFromProgrammes({
-    programmes,
-    exercises: stored,
-    autoHideUnused: true,
-  });
-  setStorageData(STORAGE_KEYS.EXERCISES, synced);
-  return synced;
+  // Add any local-only custom exercises
+  for (const [id, localEx] of localById.entries()) {
+    if (seen.has(id)) continue;
+    merged.push({ ...localEx, id });
+  }
+
+  return merged;
 };
 
+// Upsert override (does NOT rebuild from programmes)
 export const saveExercise = (exercise) => {
-  // Keep whatever is stored, then upsert, then sync against programmes
-  const existing = getStorageData(STORAGE_KEYS.EXERCISES) || [];
-  const id = norm(exercise?.id);
+  const id = normId(exercise?.id);
   if (!id) return false;
 
-  const next = existing.slice();
-  const idx = next.findIndex((e) => norm(e?.id) === id);
+  const local = getExerciseOverrides();
+  const next = local.slice();
 
-  if (idx >= 0) next[idx] = { ...next[idx], ...exercise };
-  else next.push(exercise);
+  const idx = next.findIndex((e) => normId(e?.id) === id);
+  if (idx >= 0) next[idx] = { ...next[idx], ...exercise, id };
+  else next.push({ ...exercise, id });
 
-  const ok = setStorageData(STORAGE_KEYS.EXERCISES, next);
-  if (!ok) return false;
-
-  // Sync ensures assignedTo/hidden remain consistent with programmes
-  syncAndSaveExerciseCatalogue({ autoHideUnused: true });
-  return true;
+  return setStorageData(STORAGE_KEYS.EXERCISES, next);
 };
 
+// Delete override.
+// If it's a stock exercise, we "hide" it by writing an override {hidden:true}
+// so it stays gone in the UI (optional but usually expected).
 export const deleteExercise = (id) => {
-  const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
-  const target = norm(id);
-  const filtered = exercises.filter((e) => norm(e?.id) !== target);
-  const ok = setStorageData(STORAGE_KEYS.EXERCISES, filtered);
-  if (ok) syncAndSaveExerciseCatalogue({ autoHideUnused: true });
-  return ok;
+  const target = normId(id);
+  if (!target) return false;
+
+  const stock = buildStockExercisesFromWorkouts();
+  const isStock = stock.some((e) => normId(e.id) === target);
+
+  const local = getExerciseOverrides();
+  const without = local.filter((e) => normId(e?.id) !== target);
+
+  if (isStock) {
+    without.push({ id: target, hidden: true });
+  }
+
+  return setStorageData(STORAGE_KEYS.EXERCISES, without);
+};
+
+// Convenience: get a single exercise by id (merged)
+export const getExerciseById = (id) => {
+  const target = normId(id);
+  if (!target) return null;
+  return getExercises().find((e) => normId(e?.id) === target) || null;
 };
 
 // ============================
@@ -688,7 +604,10 @@ export const exportAllDataToJSON = () => {
         personalRecords: getPersonalRecords(),
         videoLinks: getVideoLinks(),
         programmes: getProgrammes(),
-        exercises: getExercises(),
+
+        // Export overrides only (keeps backups small + portable)
+        exerciseOverrides: getExerciseOverrides(),
+
         progressionSettings: getProgressionSettings(),
         workoutPattern: typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
         workoutPatternIndex:
@@ -710,7 +629,12 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     const data = backup.data || {};
 
     const looksValid =
-      data.workouts || data.settings || data.programmes || data.exercises || data.progressionSettings;
+      data.workouts ||
+      data.settings ||
+      data.programmes ||
+      data.exerciseOverrides ||
+      data.exercises ||
+      data.progressionSettings;
 
     if (!looksValid) {
       return { success: false, error: "This file doesn't look like a valid full backup." };
@@ -735,7 +659,16 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     if (data.personalRecords) setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
     if (data.videoLinks) setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
     if (Array.isArray(data.programmes)) setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
-    if (Array.isArray(data.exercises)) setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
+
+    // New format: overrides-only
+    if (Array.isArray(data.exerciseOverrides)) {
+      setStorageData(STORAGE_KEYS.EXERCISES, data.exerciseOverrides);
+    }
+    // Backward compat: if old backups contain full "exercises", accept them as overrides
+    else if (Array.isArray(data.exercises)) {
+      setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
+    }
+
     if (data.progressionSettings)
       setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, data.progressionSettings);
 
@@ -746,39 +679,11 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, data.workoutPatternIndex);
     }
 
-    // ✅ After importing, resync catalogue so assignedTo/hidden are correct
-    syncAndSaveExerciseCatalogue({ autoHideUnused: true });
-
     return { success: true };
   } catch (e) {
     console.error("Failed to import all data", e);
     return { success: false, error: `Import failed: ${e.message}` };
   }
-};
-
-// Kept for backwards compatibility with any older code paths that used it.
-// (Not required for the new sync system, but harmless to leave here.)
-const normalize = (s) => (s || "").toString().trim().toLowerCase();
-const autoHideUnusedCatalogueExercises = (data) => {
-  if (!data || !Array.isArray(data.exercises)) return data;
-
-  const activeIds = new Set();
-  if (Array.isArray(data.programmes)) {
-    data.programmes.forEach((prog) => {
-      (prog.exercises || []).forEach((ex) => {
-        if (ex?.id) activeIds.add(normalize(ex.id));
-      });
-    });
-  }
-
-  data.exercises = data.exercises.map((ex) => {
-    const id = normalize(ex.id);
-    if (!id) return ex;
-    const shouldStayVisible = activeIds.has(id);
-    return { ...ex, hidden: !shouldStayVisible };
-  });
-
-  return data;
 };
 
 export const resetWithBackup = async (options = { merge: false }) => {
