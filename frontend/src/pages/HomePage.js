@@ -1,5 +1,5 @@
 // src/pages/HomePage.js
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, Flame, RotateCcw } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -21,10 +21,13 @@ import {
   saveWorkoutDraft,
   clearWorkoutDraft,
   isWorkoutDraftForToday,
+  getExerciseById, // ✅ merged (stock + overrides)
 } from "../utils/storage";
 
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
+
+const upper = (s) => String(s || "").toUpperCase();
 
 const HomePage = ({ onDataChange, onSaved }) => {
   const { weightUnit, toggleWeightUnit } = useSettings();
@@ -45,20 +48,45 @@ const HomePage = ({ onDataChange, onSaved }) => {
   // Prevent "dirty" being set during initial hydration
   const didHydrateRef = useRef(false);
 
-  // Option B refs: avoid eslint-disable rule names entirely
+  // Avoid eslint-disable by using a ref for the loader
   const loadRef = useRef(null);
 
-  const loadTodaysWorkout = () => {
-    const workouts = getWorkouts();
-    const programmes = getProgrammes();
+  const usableProgrammes = useMemo(() => {
+    const programmes = getProgrammes() || [];
+    return programmes.filter((p) => Array.isArray(p?.exercises) && p.exercises.length > 0);
+  }, []);
 
+  const hydrateWorkoutDataFromProgramme = (programme, lastSameWorkout, draft) => {
+    // Draft restore: only apply notes/sets to exercises that STILL exist in this programme.
+    const draftById = new Map((draft?.exercises || []).map((e) => [e.id, e]));
+
+    return (programme.exercises || []).map((progEx) => {
+      const merged = getExerciseById(progEx.id) || progEx;
+
+      const lastExerciseData = lastSameWorkout?.exercises?.find(
+        (e) => e?.id === merged.id
+      );
+
+      const draftEx = draftById.get(merged.id);
+
+      return {
+        // Base: programme order / membership
+        ...progEx,
+
+        // Override details from catalogue (stock + local edits)
+        ...merged,
+
+        userNotes: draftEx?.userNotes || "",
+        setsData: Array.isArray(draftEx?.setsData) ? draftEx.setsData : [],
+        lastWorkoutData: lastExerciseData || null,
+      };
+    });
+  };
+
+  const loadTodaysWorkout = () => {
+    const workouts = getWorkouts() || [];
     const draft = getWorkoutDraft();
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
-
-    // Only programmes with 1+ exercises should be eligible
-    const usableProgrammes = programmes.filter(
-      (p) => Array.isArray(p.exercises) && p.exercises.length > 0
-    );
 
     if (usableProgrammes.length === 0) {
       toast.error("No usable programmes found. Add at least 1 exercise to a programme.");
@@ -67,50 +95,26 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
 
-    const workout =
-      usableProgrammes.find(
-        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
-      ) || usableProgrammes[0];
+    const chosen =
+      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || usableProgrammes[0];
 
-    if (!workout) {
+    if (!chosen) {
       toast.error("No programmes found. Please create a programme first.");
       return;
     }
 
-    const lastSameWorkout = workouts.find(
-      (w) => String(w.type).toUpperCase() === String(nextType).toUpperCase()
-    );
+    const lastSameWorkout = workouts.find((w) => upper(w?.type) === upper(chosen.type));
 
-    setCurrentWorkout(workout);
+    setCurrentWorkout(chosen);
 
     // Restore draft if today + same type
-    if (
-      hasTodaysDraft &&
-      String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
-    ) {
-      const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
-
-      setWorkoutData(
-        workout.exercises.map((ex) => {
-          const lastExerciseData = lastSameWorkout?.exercises.find(
-            (e) => e.id === ex.id || e.name === ex.name
-          );
-          const draftEx = draftById.get(ex.id);
-
-          return {
-            ...ex,
-            userNotes: draftEx?.userNotes || "",
-            setsData: draftEx?.setsData || [],
-            lastWorkoutData: lastExerciseData || null,
-          };
-        })
-      );
+    if (hasTodaysDraft && upper(draft.workoutType) === upper(chosen.type)) {
+      setWorkoutData(hydrateWorkoutDataFromProgramme(chosen, lastSameWorkout, draft));
 
       toast.message("Restored unsaved workout", {
         description: "We loaded your in-progress session after refresh.",
       });
 
-      // Draft exists -> show as saved (blue) until user edits
       setDraftSaved(true);
       setIsDirty(false);
       setFinishedSaved(false);
@@ -118,31 +122,17 @@ const HomePage = ({ onDataChange, onSaved }) => {
     }
 
     // No draft - start fresh
-    setWorkoutData(
-      workout.exercises.map((ex) => {
-        const lastExerciseData = lastSameWorkout?.exercises.find(
-          (e) => e.id === ex.id || e.name === ex.name
-        );
-        return {
-          ...ex,
-          userNotes: "",
-          setsData: [],
-          lastWorkoutData: lastExerciseData || null,
-        };
-      })
-    );
+    setWorkoutData(hydrateWorkoutDataFromProgramme(chosen, lastSameWorkout, null));
 
     setDraftSaved(false);
     setIsDirty(false);
     setFinishedSaved(false);
   };
 
-  // Keep ref updated to latest function
   useEffect(() => {
     loadRef.current = loadTodaysWorkout;
   });
 
-  // Run once on mount (no eslint-disable needed)
   useEffect(() => {
     loadRef.current?.();
   }, []);
@@ -178,16 +168,13 @@ const HomePage = ({ onDataChange, onSaved }) => {
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
-          ex.setsData.some(
-            (set) => (set.weight ?? 0) !== 0 || (set.reps ?? 0) !== 0
-          ))
+          ex.setsData.some((set) => (set.weight ?? 0) !== 0 || (set.reps ?? 0) !== 0))
     );
 
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
 
     draftSaveTimerRef.current = setTimeout(() => {
       if (!hasMeaningfulData) {
-        // If user cleared everything, remove draft
         clearWorkoutDraft();
         return;
       }
@@ -204,9 +191,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
           setsData: ex.setsData || [],
         })),
       });
-
-      // ❌ DO NOT setDraftSaved(true) here
-      // ❌ DO NOT setIsDirty(false) here
     }, 400);
 
     return () => {
@@ -217,7 +201,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
   useEffect(() => {
     const hasData = workoutData.some(
       (ex) =>
-        ex.setsData &&
+        Array.isArray(ex.setsData) &&
         ex.setsData.length > 0 &&
         ex.setsData.some((set) => (set.weight ?? 0) !== 0 || (set.reps ?? 0) !== 0)
     );
@@ -242,7 +226,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       });
     }
 
-    // PR check
+    // PR check (by exercise.id)
     const prs = getPersonalRecords();
     const currentPR = prs?.[exercise.id];
 
@@ -327,7 +311,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     });
 
     onSaved?.();
-    loadRef.current?.(); // reload next workout
+    loadRef.current?.();
   };
 
   const getStreak = () => {
@@ -381,12 +365,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                 })}
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleWeightUnit}
-              className="font-semibold"
-            >
+            <Button variant="outline" size="sm" onClick={toggleWeightUnit} className="font-semibold">
               {weightUnit}
             </Button>
           </div>
@@ -415,9 +394,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
           <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-xl font-bold text-foreground mb-1">
-                  {currentWorkout.name}
-                </h2>
+                <h2 className="text-xl font-bold text-foreground mb-1">{currentWorkout.name}</h2>
                 <Badge className="bg-primary/20 text-primary border-primary/50">
                   {currentWorkout.focus}
                 </Badge>
@@ -430,7 +407,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         </div>
       </div>
 
-      {/* Exercises */}
+      {/* Exercises (ONLY programme exercises; each hydrated from catalogue) */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         {workoutData.map((exercise, index) => (
           <ExerciseCard
