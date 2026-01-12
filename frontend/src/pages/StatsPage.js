@@ -1,40 +1,421 @@
-import React, { useState, useEffect } from 'react';
-import { Trophy, TrendingUp, Dumbbell, Calendar as CalendarIcon, Weight, Plus, Trash2 } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
-import { Badge } from '../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { getWorkouts, getPersonalRecords, getBodyWeights, addBodyWeight, deleteBodyWeight } from '../utils/storage';
-import { useSettings } from '../contexts/SettingsContext';
-import { toast } from 'sonner';
+// src/pages/StatsPage.js
+import React, { useEffect, useMemo, useState } from "react";
+import { BarChart3, TrendingUp, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+
+import {
+  getWorkouts,
+  getProgrammes,
+} from "../utils/storage";
+
+import { useSettings } from "../contexts/SettingsContext";
+
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
+
+/**
+ * Metric helpers
+ */
+const round1 = (n) => Math.round(n * 10) / 10;
+
+const formatDateShort = (iso) => {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  } catch {
+    return "";
+  }
+};
+
+const calcE1RM = (weight, reps) => {
+  const w = Number(weight);
+  const r = Number(reps);
+  if (!Number.isFinite(w) || !Number.isFinite(r) || w <= 0 || r <= 0) return 0;
+  return w * (1 + r / 30); // Epley
+};
+
+const getExerciseBestForWorkoutEntry = (exerciseEntry, statsMetric) => {
+  // exerciseEntry.sets = array of {weight, reps}
+  const sets = Array.isArray(exerciseEntry?.sets) ? exerciseEntry.sets : [];
+
+  if (sets.length === 0) return 0;
+
+  if (statsMetric === "e1rm") {
+    let best = 0;
+    for (const s of sets) {
+      const v = calcE1RM(s?.weight, s?.reps);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  // default: maxWeight
+  let best = 0;
+  for (const s of sets) {
+    const w = Number(s?.weight);
+    if (Number.isFinite(w) && w > best) best = w;
+  }
+  return best;
+};
+
+const safeUpper = (s) => String(s || "").toUpperCase();
+
+/**
+ * Build time-series for (programmeType, exerciseId) from workouts
+ */
+const buildSeries = (workouts, programmeType, exerciseId, statsMetric) => {
+  const type = safeUpper(programmeType);
+  const id = String(exerciseId || "");
+
+  const points = [];
+
+  // workouts are stored newest-first in your app, but we want chronological for the chart
+  const filtered = workouts
+    .filter((w) => safeUpper(w?.type) === type)
+    .slice()
+    .sort((a, b) => new Date(a?.date).getTime() - new Date(b?.date).getTime());
+
+  for (const w of filtered) {
+    const entry = (w?.exercises || []).find((e) => e?.id === id || e?.name === id);
+    if (!entry) continue;
+
+    const value = getExerciseBestForWorkoutEntry(entry, statsMetric);
+    if (value <= 0) continue;
+
+    points.push({
+      date: w.date,
+      label: formatDateShort(w.date),
+      value: round1(value),
+      // for tooltip
+      repsBest:
+        statsMetric === "e1rm"
+          ? (() => {
+              // optional: find the set that produced the best e1rm
+              let best = 0;
+              let bestReps = 0;
+              let bestWeight = 0;
+              for (const s of entry.sets || []) {
+                const v = calcE1RM(s?.weight, s?.reps);
+                if (v > best) {
+                  best = v;
+                  bestReps = Number(s?.reps) || 0;
+                  bestWeight = Number(s?.weight) || 0;
+                }
+              }
+              return { bestWeight, bestReps };
+            })()
+          : null,
+    });
+  }
+
+  return points;
+};
+
+/**
+ * Progress scoring:
+ * - Use last N points (default 4)
+ * - Score = last - first
+ * - Needs attention = worst score (or missing data)
+ */
+const computeProgressScore = (series, lookback = 4) => {
+  if (!Array.isArray(series) || series.length < 2) return null;
+  const slice = series.slice(-lookback);
+  if (slice.length < 2) return null;
+  const first = slice[0].value;
+  const last = slice[slice.length - 1].value;
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
+  return round1(last - first);
+};
+
+const TooltipContent = ({ active, payload, label, unit, statsMetric }) => {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0]?.payload;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow">
+      <div className="text-sm font-semibold text-foreground">{label}</div>
+      <div className="text-sm text-muted-foreground">
+        {statsMetric === "e1rm" ? "e1RM" : "Max"}:{" "}
+        <span className="font-semibold text-foreground">
+          {p?.value}{unit}
+        </span>
+      </div>
+
+      {statsMetric === "e1rm" && p?.repsBest?.bestWeight > 0 && (
+        <div className="text-xs text-muted-foreground mt-1">
+          Based on {p.repsBest.bestWeight}{unit} × {p.repsBest.bestReps}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ProgrammeCard = ({
+  programme,
+  workouts,
+  statsMetric,
+  unit,
+}) => {
+  const exercises = Array.isArray(programme?.exercises) ? programme.exercises : [];
+
+  const [selectedExerciseId, setSelectedExerciseId] = useState(
+    exercises[0]?.id || ""
+  );
+
+  // If programme changes / first load, ensure selection is valid
+  useEffect(() => {
+    if (!exercises.some((e) => e?.id === selectedExerciseId)) {
+      setSelectedExerciseId(exercises[0]?.id || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programme?.type, exercises.length]);
+
+  const selectedExercise = useMemo(
+    () => exercises.find((e) => e?.id === selectedExerciseId) || exercises[0],
+    [exercises, selectedExerciseId]
+  );
+
+  const series = useMemo(() => {
+    if (!selectedExercise?.id) return [];
+    return buildSeries(workouts, programme.type, selectedExercise.id, statsMetric);
+  }, [workouts, programme.type, selectedExercise?.id, statsMetric]);
+
+  // Build “Most progress” and “Needs attention”
+  const insights = useMemo(() => {
+    if (exercises.length === 0) return { best: null, worst: null };
+
+    const scored = exercises.map((ex) => {
+      const s = buildSeries(workouts, programme.type, ex.id, statsMetric);
+      const score = computeProgressScore(s, 4);
+      return {
+        id: ex.id,
+        name: ex.name,
+        score,
+        hasData: Array.isArray(s) && s.length > 0,
+      };
+    });
+
+    // Best = highest score with data
+    const withScore = scored.filter((x) => x.score != null);
+    const best = withScore.length
+      ? withScore.slice().sort((a, b) => b.score - a.score)[0]
+      : null;
+
+    // Worst = either:
+    // 1) missing data (prioritize)
+    // 2) lowest score
+    const missing = scored.filter((x) => !x.hasData);
+    const worst =
+      missing.length > 0
+        ? missing[0]
+        : withScore.length
+        ? withScore.slice().sort((a, b) => a.score - b.score)[0]
+        : null;
+
+    return { best, worst };
+  }, [exercises, workouts, programme.type, statsMetric]);
+
+  const metricLabel = statsMetric === "e1rm" ? "e1RM" : "Max";
+  const chartEmpty = !series || series.length === 0;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 space-y-4 shadow-sm">
+      {/* Programme header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-bold text-foreground truncate">
+              {programme?.name || `Programme ${programme?.type}`}
+            </h2>
+          </div>
+          <div className="mt-1">
+            <Badge className="bg-primary/20 text-primary border-primary/40">
+              {safeUpper(programme?.type)}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Insights row: 2 half-size boxes side-by-side */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-border bg-background/40 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Most progress
+          </div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            {insights.best ? (
+              <>
+                <div className="font-semibold text-foreground truncate">
+                  {insights.best.name}
+                </div>
+                <div className="text-xs mt-1">
+                  +{insights.best.score}
+                  {unit} ({metricLabel}, last 4)
+                </div>
+              </>
+            ) : (
+              <div className="text-xs">Not enough data yet</div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-background/40 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <AlertCircle className="w-4 h-4 text-destructive" />
+            Needs attention
+          </div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            {insights.worst ? (
+              <>
+                <div className="font-semibold text-foreground truncate">
+                  {insights.worst.name}
+                </div>
+                <div className="text-xs mt-1">
+                  {insights.worst.hasData
+                    ? `${insights.worst.score >= 0 ? "+" : ""}${insights.worst.score}${unit} (${metricLabel}, last 4)`
+                    : "No history logged yet"}
+                </div>
+              </>
+            ) : (
+              <div className="text-xs">Not enough data yet</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Dropdown */}
+      <div className="space-y-2">
+        <div className="text-sm font-semibold text-foreground">Exercise</div>
+
+        <select
+          value={selectedExerciseId}
+          onChange={(e) => setSelectedExerciseId(e.target.value)}
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+        >
+          {exercises.map((ex) => (
+            <option key={ex.id} value={ex.id}>
+              {ex.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Chart */}
+      <div className="rounded-xl border border-border bg-background/40 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold text-foreground truncate">
+            {selectedExercise?.name || "Exercise"}
+          </div>
+          <Badge variant="outline" className="text-muted-foreground">
+            {metricLabel}
+          </Badge>
+        </div>
+
+        <div className="h-56 mt-3">
+          {chartEmpty ? (
+            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
+              <div className="text-sm font-semibold">No data yet</div>
+              <div className="text-xs mt-1">
+                Log this exercise in your workout to see a chart here.
+              </div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={series} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  content={
+                    <TooltipContent unit={unit} statsMetric={statsMetric} />
+                  }
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  strokeWidth={3}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const StatsPage = () => {
-  const { weightUnit } = useSettings();
-  const [stats, setStats] = useState({
-    totalWorkouts: 0,
-    streak: 0,
-    totalVolume: 0,
-    monthWorkouts: 0
-  });
-  const [prs, setPrs] = useState([]);
-  const [bodyWeights, setBodyWeights] = useState([]);
-  const [showBodyWeightDialog, setShowBodyWeightDialog] = useState(false);
-  const [newBodyWeight, setNewBodyWeight] = useState('');
-  const [bodyWeightNote, setBodyWeightNote] = useState('');
+  const { weightUnit, statsMetric } = useSettings();
+
+  const workouts = useMemo(() => getWorkouts() || [], []);
+  const programmes = useMemo(() => getProgrammes() || [], []);
+
+  const usableProgrammes = useMemo(() => {
+    return programmes.filter((p) => Array.isArray(p?.exercises) && p.exercises.length > 0);
+  }, [programmes]);
 
   useEffect(() => {
-    loadStats();
-  }, []);
+    if (usableProgrammes.length === 0) {
+      toast.message("No programmes yet", {
+        description: "Add exercises to a programme to see stats by programme.",
+      });
+    }
+  }, [usableProgrammes.length]);
 
-  const loadStats = () => {
-    const workouts = getWorkouts();
-    const prData = getPersonalRecords();
-    const weights = getBodyWeights();
+  const unit = weightUnit === "lbs" ? "lbs" : "kg";
 
-    // Total workouts
-    const totalWorkouts = workouts.length;
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Stats</h1>
+            <div className="text-sm text-muted-foreground mt-1">
+              Viewing by programme • Metric:{" "}
+              <span className="font-semibold text-foreground">
+                {statsMetric === "e1rm" ? "Weight + Reps (e1RM)" : "Max Weight"}
+              </span>
+            </div>
+          </div>
 
+          <Button
+            variant="outline"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
+            Top
+          </Button>
+        </div>
+
+        <div className="space-y-5">
+          {usableProgrammes.map((p) => (
+            <ProgrammeCard
+              key={p.type}
+              programme={p}
+              workouts={workouts}
+              statsMetric={statsMetric || "maxWeight"}
+              unit={unit}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StatsPage;
     // Streak
     let streak = 0;
     const today = new Date();
