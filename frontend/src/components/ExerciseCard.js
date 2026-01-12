@@ -20,26 +20,23 @@ import WarmupCalculator from "./WarmupCalculator";
 import PlateCalculator from "./PlateCalculator";
 
 /**
- * Allow typing intermediate negatives like "-", "-.", "-0."
- * Return { ok: false } for intermediate states, { ok: true, value } for real numbers.
+ * Allows intermediate typing like "" or "." etc.
+ * Returns { ok:false } for intermediate, { ok:true, value:number } for valid.
  */
 const parseMaybeNumber = (raw) => {
   const s = (raw ?? "").toString().trim();
-
-  // empty = treat as "no value yet"
   if (s === "") return { ok: false, value: null };
+  if (s === "." ) return { ok: false, value: null };
 
-  // intermediate states
-  if (s === "-" || s === "." || s === "-.") return { ok: false, value: null };
-
-  // valid number?
   const n = Number(s);
   if (!Number.isFinite(n)) return { ok: false, value: null };
-
   return { ok: true, value: n };
 };
 
-const formatInput = (raw) => (raw == null ? "" : String(raw));
+const toAbsString = (n) => {
+  if (n == null || !Number.isFinite(n)) return "";
+  return String(Math.abs(n));
+};
 
 const ExerciseCard = ({
   exercise,
@@ -53,24 +50,24 @@ const ExerciseCard = ({
   const { weightUnit } = useSettings();
   const [expanded, setExpanded] = useState(true);
 
-  // Each set keeps BOTH:
-  // - weightText: what user is typing (supports "-")
-  // - weight: parsed number (null while intermediate)
+  // Each set stores:
+  // - weightText (always positive string, user types normally)
+  // - weight (signed number: negative if assisted)
+  // - assisted boolean
   const initialSets = useMemo(() => {
     const count = Number(exercise.sets) || 1;
     return Array(count)
       .fill(null)
       .map((_, index) => ({
         setNumber: index + 1,
+        assisted: false,
         weightText: "",
-        weight: null,
+        weight: null, // signed number
         repsText: "",
         reps: null,
         completed: false,
         goalReps: exercise.goalReps?.[index] ?? exercise.goalReps?.[0] ?? 8,
       }));
-    // eslint not needed; derived only on first render for this component instance
-    // (we sync in effect below)
   }, [exercise.sets, exercise.goalReps]);
 
   const [sets, setSets] = useState(initialSets);
@@ -97,14 +94,13 @@ const ExerciseCard = ({
   useEffect(() => {
     setSets((prev) => {
       const nextLen = Number(exercise.sets) || 1;
-
       return Array(nextLen)
         .fill(null)
         .map((_, i) => {
           const existing = prev[i];
-
           return {
             setNumber: i + 1,
+            assisted: existing?.assisted ?? false,
             weightText: existing?.weightText ?? "",
             weight: existing?.weight ?? null,
             repsText: existing?.repsText ?? "",
@@ -117,8 +113,6 @@ const ExerciseCard = ({
   }, [exercise.sets, exercise.goalReps]);
 
   const emitSetsToParent = (nextSets) => {
-    // Parent expects numeric weights/reps.
-    // For intermediate inputs, send 0 so draft doesn’t explode.
     const payload = nextSets.map((s) => ({
       setNumber: s.setNumber,
       weight: Number.isFinite(s.weight) ? s.weight : 0,
@@ -129,15 +123,19 @@ const ExerciseCard = ({
     onWeightChange?.(exercise, payload);
   };
 
+  const applySign = (assisted, value) => {
+    if (!Number.isFinite(value)) return null;
+    const abs = Math.abs(value);
+    return assisted ? -abs : abs;
+  };
+
   const handleSetComplete = (setIndex) => {
     setSets((prev) => {
       const next = prev.slice();
       const current = { ...next[setIndex] };
 
-      // require real numbers (including negative weight allowed), reps must be > 0
       const hasWeight = Number.isFinite(current.weight);
       const hasReps = Number.isFinite(current.reps) && current.reps > 0;
-
       if (!hasWeight || !hasReps) {
         next[setIndex] = current;
         return next;
@@ -150,11 +148,13 @@ const ExerciseCard = ({
         const leveled =
           isTopSet && shouldLevelUp(current.reps, current.goalReps);
 
-        onSetComplete?.(exercise, { weight: current.weight, reps: current.reps }, !!leveled);
+        onSetComplete?.(
+          exercise,
+          { weight: current.weight, reps: current.reps },
+          !!leveled
+        );
 
-        if (setIndex < next.length - 1) {
-          onRestTimer?.(exercise.restTime);
-        }
+        if (setIndex < next.length - 1) onRestTimer?.(exercise.restTime);
       } else {
         current.completed = false;
       }
@@ -172,28 +172,58 @@ const ExerciseCard = ({
       const next = prev.slice();
       const s = { ...next[setIndex] };
 
+      // user types positive always
       s.weightText = rawText;
 
       const parsed = parseMaybeNumber(rawText);
-      s.weight = parsed.ok ? parsed.value : null;
+      if (parsed.ok) {
+        s.weight = applySign(s.assisted, parsed.value);
+      } else {
+        s.weight = null;
+      }
 
       next[setIndex] = s;
 
-      // Auto-calc RPT weights ONLY if top set is a positive number
+      // RPT: only auto-fill if top set is a POSITIVE number and not assisted
       if (exercise.repScheme === "RPT" && setIndex === 0) {
         const top = s.weight;
-
-        if (Number.isFinite(top) && top > 0) {
+        if (Number.isFinite(top) && top > 0 && !s.assisted) {
           const progressionSettings = getProgressionSettings();
           for (let i = 1; i < next.length; i++) {
             const setWeight = calculateRPTWeights(top, i + 1, progressionSettings);
-            next[i] = { ...next[i], weight: setWeight, weightText: String(setWeight) };
+            next[i] = {
+              ...next[i],
+              assisted: false,
+              weight: setWeight,
+              weightText: String(setWeight),
+            };
           }
-        } else {
-          // If top set is not positive (negative or not yet valid), don't overwrite other sets.
-          // Leave whatever user had.
         }
       }
+
+      emitSetsToParent(next);
+      return next;
+    });
+  };
+
+  const handleToggleAssisted = (setIndex) => {
+    setSets((prev) => {
+      const next = prev.slice();
+      const s = { ...next[setIndex] };
+
+      s.assisted = !s.assisted;
+
+      // if there's a valid number typed, flip the sign immediately
+      const parsed = parseMaybeNumber(s.weightText);
+      if (parsed.ok) {
+        s.weight = applySign(s.assisted, parsed.value);
+      } else if (Number.isFinite(s.weight)) {
+        // fallback if text was empty but number exists
+        s.weight = s.assisted ? -Math.abs(s.weight) : Math.abs(s.weight);
+        s.weightText = toAbsString(s.weight);
+      }
+
+      next[setIndex] = s;
 
       emitSetsToParent(next);
       return next;
@@ -209,7 +239,6 @@ const ExerciseCard = ({
 
       s.repsText = rawText;
 
-      // reps must be a non-negative int while typing; allow "" as intermediate
       if (rawText.trim() === "") {
         s.reps = null;
       } else {
@@ -223,9 +252,7 @@ const ExerciseCard = ({
     });
   };
 
-  const handleNotesBlur = () => {
-    onNotesChange?.(exercise, notes);
-  };
+  const handleNotesBlur = () => onNotesChange?.(exercise, notes);
 
   const handleVideoUpdate = () => {
     updateVideoLink(exercise.id, videoLink);
@@ -243,19 +270,16 @@ const ExerciseCard = ({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
       {/* Header */}
-      <div
-        className="p-4 cursor-pointer select-none"
-        onClick={() => setExpanded((v) => !v)}
-      >
+      <div className="p-4 cursor-pointer select-none" onClick={() => setExpanded((v) => !v)}>
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-lg font-bold text-foreground">{exercise.name}</h3>
-              {levelUp && (
+              {levelUp ? (
                 <Badge className="bg-gold text-gold-foreground font-semibold animate-bounce-slow">
                   Level Up! +5{weightUnit}
                 </Badge>
-              )}
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2 text-sm">
@@ -322,19 +346,11 @@ const ExerciseCard = ({
               Plates
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAlternatives((v) => !v)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setShowAlternatives((v) => !v)}>
               Alternatives
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowVideoEdit((v) => !v)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setShowVideoEdit((v) => !v)}>
               <Edit2 className="w-4 h-4 mr-2" />
               Video
             </Button>
@@ -343,9 +359,7 @@ const ExerciseCard = ({
           {/* Video Edit */}
           {showVideoEdit ? (
             <div className="p-3 bg-muted/50 rounded-lg border border-border space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                Form Check Video URL
-              </label>
+              <label className="text-sm font-medium text-foreground">Form Check Video URL</label>
               <div className="flex gap-2">
                 <Input
                   value={videoLink}
@@ -363,9 +377,7 @@ const ExerciseCard = ({
           {/* Alternatives */}
           {showAlternatives && EXERCISE_ALTERNATIVES[exercise.id] ? (
             <div className="p-3 bg-muted/50 rounded-lg border border-border">
-              <div className="text-sm font-medium text-foreground mb-2">
-                Alternative Exercises:
-              </div>
+              <div className="text-sm font-medium text-foreground mb-2">Alternative Exercises:</div>
               <div className="flex flex-wrap gap-2">
                 {EXERCISE_ALTERNATIVES[exercise.id].map((alt, index) => (
                   <Badge key={index} variant="secondary">
@@ -385,14 +397,16 @@ const ExerciseCard = ({
               const hasReps = Number.isFinite(set.reps) && set.reps > 0;
               const canComplete = hasWeight && hasReps;
 
+              const modeClasses = set.assisted
+                ? "bg-orange-500/15 border-orange-500/40 text-orange-700"
+                : "bg-primary/10 border-primary/40 text-primary";
+
               return (
                 <div
                   key={index}
                   className={
                     "p-4 rounded-lg border transition-all duration-200 " +
-                    (set.completed
-                      ? "bg-primary/10 border-primary/50"
-                      : "bg-muted/30 border-border")
+                    (set.completed ? "bg-primary/10 border-primary/50" : "bg-muted/30 border-border")
                   }
                 >
                   <div className="flex items-center gap-3">
@@ -415,57 +429,63 @@ const ExerciseCard = ({
 
                     {/* Weight */}
                     <div className="flex-1">
-                      <label className="text-xs text-muted-foreground block mb-1">
-                        Weight ({weightUnit})
-                      </label>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <label className="text-xs text-muted-foreground">
+                          Weight ({weightUnit})
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAssisted(index)}
+                          disabled={set.completed}
+                          className={"text-xs px-2 py-1 rounded-md border transition-colors " + modeClasses}
+                        >
+                          {set.assisted ? "Assisted" : "Weighted"}
+                        </button>
+                      </div>
+
                       <Input
                         type="text"
                         inputMode="decimal"
-                        value={formatInput(set.weightText)}
+                        value={set.weightText}
                         onChange={(e) => handleWeightChange(index, e.target.value)}
-                        placeholder={suggestedWeight != null ? String(suggestedWeight) : "0"}
+                        placeholder={suggestedWeight != null ? String(Math.abs(suggestedWeight)) : "0"}
                         className="h-12 text-center text-lg font-semibold"
                         disabled={set.completed}
                       />
-                      {suggestedWeight != null && (set.weightText || "") === "" ? (
-                        <div className="text-xs text-muted-foreground mt-1 text-center">
-                          Last: {suggestedWeight}
-                          {weightUnit}
+
+                      {/* show the stored signed value so it’s obvious */}
+                      {Number.isFinite(set.weight) ? (
+                        <div className="text-[11px] text-muted-foreground mt-1 text-center">
+                          Stored: <span className="font-semibold text-foreground">{set.weight}{weightUnit}</span>
                         </div>
                       ) : null}
-
-                      <div className="text-[11px] text-muted-foreground mt-1 text-center">
-                        Tip: use negative for assisted (e.g. -20{weightUnit})
-                      </div>
                     </div>
 
                     {/* Reps */}
                     <div className="flex-1">
-                      <label className="text-xs text-muted-foreground block mb-1">
-                        Reps
-                      </label>
+                      <label className="text-xs text-muted-foreground block mb-1">Reps</label>
                       <div className="flex items-center gap-2">
                         <Input
                           type="text"
                           inputMode="numeric"
-                          value={formatInput(set.repsText)}
+                          value={set.repsText}
                           onChange={(e) => handleRepsChange(index, e.target.value)}
                           placeholder={String(set.goalReps)}
                           className="h-12 text-center text-lg font-semibold w-16"
                           disabled={set.completed}
                         />
-                        <span className="text-muted-foreground whitespace-nowrap">
-                          / {set.goalReps}
-                        </span>
+                        <span className="text-muted-foreground whitespace-nowrap">/ {set.goalReps}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Auto RPT note (only if top set is positive) */}
+                  {/* Auto RPT note */}
                   {exercise.repScheme === "RPT" &&
                   index === 0 &&
                   Number.isFinite(set.weight) &&
-                  set.weight > 0 ? (
+                  set.weight > 0 &&
+                  !set.assisted ? (
                     (() => {
                       const progressionSettings = getProgressionSettings();
                       const set2Weight = calculateRPTWeights(set.weight, 2, progressionSettings);
@@ -486,9 +506,7 @@ const ExerciseCard = ({
 
           {/* Notes */}
           <div>
-            <label className="text-sm font-medium text-foreground block mb-2">
-              Notes
-            </label>
+            <label className="text-sm font-medium text-foreground block mb-2">Notes</label>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
