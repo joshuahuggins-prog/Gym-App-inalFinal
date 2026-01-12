@@ -8,6 +8,8 @@ import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
+const pad2 = (n) => String(n).padStart(2, "0");
+
 const HistoryPage = () => {
   const { weightUnit } = useSettings();
   const [workouts, setWorkouts] = useState([]);
@@ -42,8 +44,9 @@ const HistoryPage = () => {
   const groupByMonth = (items) => {
     const grouped = {};
     (items || []).forEach((workout) => {
-      const date = new Date(workout.date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      const d = new Date(workout.date);
+      const monthKey = String(d.getFullYear()) + "-" + pad2(d.getMonth() + 1);
+
       if (!grouped[monthKey]) grouped[monthKey] = [];
       grouped[monthKey].push(workout);
     });
@@ -78,8 +81,11 @@ const HistoryPage = () => {
           </div>
         ) : (
           Object.entries(groupedWorkouts).map(([monthKey, monthWorkouts]) => {
-            const [year, month] = monthKey.split("-");
-            const monthName = new Date(year, parseInt(month, 10) - 1).toLocaleDateString(
+            const parts = String(monthKey).split("-");
+            const year = parts[0];
+            const month = parts[1];
+
+            const monthName = new Date(Number(year), Number(month) - 1).toLocaleDateString(
               "en-US",
               { month: "long", year: "numeric" }
             );
@@ -114,8 +120,8 @@ const HistoryPage = () => {
                         onClick={() => toggleExpand(workout.id)}
                       >
                         <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-bold text-foreground mb-1">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-lg font-bold text-foreground mb-1 truncate">
                               {workout.name}
                             </h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -134,13 +140,13 @@ const HistoryPage = () => {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {/* ✅ Edit */}
+                            {/* Edit */}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/edit-workout/${workout.id}`);
+                                navigate("/edit-workout/" + workout.id);
                               }}
                               className="text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10"
                               title="Edit workout"
@@ -176,7 +182,7 @@ const HistoryPage = () => {
                       </div>
 
                       {/* Expanded Details */}
-                      {isExpanded && (
+                      {isExpanded ? (
                         <div className="px-4 pb-4 space-y-3 animate-fadeIn">
                           {(workout.exercises || []).map((exercise, exIndex) => (
                             <div
@@ -203,15 +209,15 @@ const HistoryPage = () => {
                                 ))}
                               </div>
 
-                              {exercise.notes && (
+                              {exercise.notes ? (
                                 <div className="mt-2 text-xs text-muted-foreground p-2 bg-card rounded border border-border">
                                   {exercise.notes}
                                 </div>
-                              )}
+                              ) : null}
                             </div>
                           ))}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}
@@ -225,4 +231,3 @@ const HistoryPage = () => {
 };
 
 export default HistoryPage;
-```0
