@@ -562,7 +562,11 @@ const ProgrammeCard = ({ programme, workouts, statsMetric, unit }) => {
                     <LineChart data={selectedData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
+                      <YAxis
+                       tick={{ fontSize: 12 }}
+                       domain={yDomain}
+                       allowDataOverflow
+                       />
                       {showZeroLine ? <ReferenceLine y={0} strokeDasharray="4 4" /> : null}
                       <Tooltip content={<TooltipContent unit={unit} statsMetric={statsMetric} />} />
                       <Line type="monotone" dataKey="value" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
