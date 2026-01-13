@@ -3,13 +3,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Save, AlertTriangle } from "lucide-react";
 import { Button } from "../components/ui/button";
 import ExerciseCard from "../components/ExerciseCard";
-import RestTimer from "../components/RestTimer";
-import PRCelebration from "../components/PRCelebration";
-
 import { toast } from "sonner";
-import { getWorkouts, updateWorkout, getProgrammes, getExercises } from "../utils/storage";
 
-import { buildWorkoutExerciseRows, serializeWorkoutExercisesFromRows } from "../utils/workoutBuilder";
+import { getWorkouts, updateWorkout, getProgrammes, getExercises } from "../utils/storage";
+import {
+  buildWorkoutExerciseRows,
+  serializeWorkoutExercisesFromRows,
+} from "../utils/workoutBuilder";
 
 const formatDateLong = (iso) => {
   try {
@@ -28,13 +28,9 @@ const formatDateLong = (iso) => {
 const EditWorkoutPage = ({ workoutId, onClose }) => {
   const [originalWorkout, setOriginalWorkout] = useState(null);
   const [rows, setRows] = useState([]);
-  const [restTimer, setRestTimer] = useState(null);
-  const [prCelebration, setPrCelebration] = useState(null);
-
   const [isDirty, setIsDirty] = useState(false);
   const didHydrateRef = useRef(false);
 
-  // Load once when workoutId changes
   useEffect(() => {
     didHydrateRef.current = false;
     setIsDirty(false);
@@ -45,21 +41,17 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
     if (!w) {
       toast.error("Workout not found");
-      setRows([]);
       return;
     }
 
     const programmes = getProgrammes() || [];
     const programme =
       programmes.find(
-        (p) =>
-          String(p?.type || "").toUpperCase() ===
-          String(w?.type || "").toUpperCase()
+        (p) => String(p?.type || "").toUpperCase() === String(w?.type || "").toUpperCase()
       ) || null;
 
     const catalogue = getExercises() || [];
 
-    // ✅ IMPORTANT: call builder with correct argument names
     const built = buildWorkoutExerciseRows({
       workout: w,
       programme,
@@ -69,15 +61,12 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     setRows(built);
   }, [workoutId]);
 
-  // Dirty tracking (ignore initial hydration)
   useEffect(() => {
     if (!originalWorkout) return;
-
     if (!didHydrateRef.current) {
       didHydrateRef.current = true;
       return;
     }
-
     setIsDirty(true);
   }, [rows, originalWorkout]);
 
@@ -89,15 +78,11 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   }, [originalWorkout]);
 
   const handleWeightChange = (exercise, setsData) => {
-    setRows((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
-    );
+    setRows((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex)));
   };
 
   const handleNotesChange = (exercise, notes) => {
-    setRows((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
-    );
+    setRows((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex)));
   };
 
   const handleSave = () => {
@@ -106,7 +91,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     const nextExercises = serializeWorkoutExercisesFromRows(rows);
 
     const ok = updateWorkout(originalWorkout.id, {
-      ...originalWorkout,
       exercises: nextExercises,
     });
 
@@ -115,10 +99,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       return;
     }
 
-    toast.success("Workout updated ✅", {
-      description: "Your history has been updated.",
-    });
-
+    toast.success("Workout updated ✅", { description: "Your history has been updated." });
     setIsDirty(false);
     onClose?.();
   };
@@ -146,7 +127,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     );
   }
 
-  // Theme: dark gray + yellow accents
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 pb-24">
       {/* Header */}
@@ -155,11 +135,9 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-sm text-zinc-400">Editing</div>
-              <h1 className="text-lg font-bold text-yellow-300 truncate">
-                {headerTitle}
-              </h1>
+              <h1 className="text-lg font-bold text-yellow-300 truncate">{headerTitle}</h1>
               <div className="text-xs text-zinc-400 mt-1">
-                Save changes to update your history.
+                Edit sets / reps / weight, then save.
               </div>
             </div>
 
@@ -174,17 +152,16 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             </Button>
           </div>
 
-          {/* Action row */}
           <div className="flex gap-2">
             <Button
               onClick={handleSave}
               className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-300"
               disabled={!isDirty}
-              title={!isDirty ? "No changes to save" : "Save changes"}
             >
               <Save className="w-4 h-4 mr-2" />
               Save & Close
             </Button>
+
             <Button
               variant="outline"
               onClick={handleCancel}
@@ -206,41 +183,15 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             <ExerciseCard
               exercise={exercise}
               lastWorkoutData={exercise.lastWorkoutData}
-              onSetComplete={(ex, set, levelUp) => {
-                // optional; harmless
-                if (levelUp) {
-                  setPrCelebration({
-                    exercise: ex?.name || "Exercise",
-                    newWeight: set?.weight,
-                    oldWeight: null,
-                  });
-                }
-              }}
+              onSetComplete={() => {}}
               onWeightChange={handleWeightChange}
               onNotesChange={handleNotesChange}
-              onRestTimer={(duration) => setRestTimer(duration)}
+              // ✅ IMPORTANT: no onRestTimer in edit mode
               isFirst={idx === 0}
             />
           </div>
         ))}
       </div>
-
-      {/* Rest Timer */}
-      {restTimer && (
-        <RestTimer
-          duration={restTimer}
-          onComplete={() => {
-            setRestTimer(null);
-            toast.success("Rest period complete!");
-          }}
-          onClose={() => setRestTimer(null)}
-        />
-      )}
-
-      {/* PR Celebration (optional) */}
-      {prCelebration && (
-        <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />
-      )}
     </div>
   );
 };
