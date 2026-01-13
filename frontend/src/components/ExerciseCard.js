@@ -12,47 +12,28 @@ import {
   getPersonalRecords,
 } from "../utils/storage";
 
-const toNum = (v, fallback = 0) => {
+const toNum = (v) => {
   const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  return Number.isFinite(n) ? n : null;
 };
 
-const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
+const clampInt = (n, min, max) =>
+  Math.max(min, Math.min(max, Math.trunc(n)));
 
-const normalizeGoalReps = (goalReps, setsCount) => {
-  const arr = Array.isArray(goalReps) ? goalReps.map((x) => toNum(x, 8)) : [];
-  const safe = arr.length ? arr : [8];
-  if (safe.length < setsCount)
-    return [...safe, ...Array.from({ length: setsCount - safe.length }, () => 8)];
-  if (safe.length > setsCount) return safe.slice(0, setsCount);
-  return safe;
-};
+const normalizeSets = (setsData, count) => {
+  const base = Array.isArray(setsData) ? setsData : [];
+  const out = [];
 
-// ✅ Use BLANK inputs by default (""), not 0
-const normalizeSetsData = (setsData, setsCount) => {
-  const arr = Array.isArray(setsData) ? setsData : [];
-  const base = arr.map((s) => ({
-    weight: s?.weight === "" || s?.weight == null ? "" : toNum(s?.weight, 0),
-    reps: s?.reps === "" || s?.reps == null ? "" : toNum(s?.reps, 0),
-    completed: !!s?.completed,
-  }));
-
-  if (base.length < setsCount) {
-    return [
-      ...base,
-      ...Array.from({ length: setsCount - base.length }, () => ({
-        weight: "",
-        reps: "",
-        completed: false,
-      })),
-    ];
+  for (let i = 0; i < count; i++) {
+    const s = base[i] || {};
+    out.push({
+      weight: s.weight ?? "",
+      reps: s.reps ?? "",
+      completed: !!s.completed,
+    });
   }
-
-  if (base.length > setsCount) return base.slice(0, setsCount);
-  return base;
+  return out;
 };
-
-const abs1 = (n) => Math.abs(toNum(n, 0));
 
 const ExerciseCard = ({
   exercise,
@@ -61,365 +42,226 @@ const ExerciseCard = ({
   onWeightChange,
   onNotesChange,
   onRestTimer,
-  isFirst = false,
 }) => {
+  const setsCount = clampInt(exercise?.sets ?? 3, 1, 12);
   const [expanded, setExpanded] = useState(false);
+  const [notes, setNotes] = useState(exercise?.userNotes || "");
   const [videoLink, setVideoLink] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const setsCount = clampInt(toNum(exercise?.sets, 3), 1, 12);
-
-  const goalReps = useMemo(
-    () => normalizeGoalReps(exercise?.goalReps, setsCount),
-    [exercise?.goalReps, setsCount]
+  const [sets, setSets] = useState(() =>
+    normalizeSets(exercise?.setsData, setsCount)
   );
 
-  // ✅ Weighted/Assisted mode
-  const inferModeFromSets = (setsArr) => {
-    const anyNeg = (setsArr || []).some((s) => toNum(s?.weight, 0) < 0);
-    return anyNeg ? "assisted" : "weighted";
-  };
-
-  const [weightMode, setWeightMode] = useState(() =>
-    inferModeFromSets(exercise?.setsData)
+  const [mode, setMode] = useState(() =>
+    (exercise?.setsData || []).some(s => Number(s.weight) < 0)
+      ? "assisted"
+      : "weighted"
   );
 
-  // ✅ PR (read from storage)
-  const pr = useMemo(() => {
-    const prs = getPersonalRecords?.() || {};
-    return prs?.[exercise?.id] || null;
-  }, [exercise?.id]);
+  const hydrateKey = useRef("");
 
-  const [sets, setSets] = useState(() => {
-    const base = normalizeSetsData(exercise?.setsData, setsCount);
-    return base.map((s, idx) => ({
-      ...s,
-      goalReps: goalReps[idx] ?? 8,
-    }));
-  });
-
-  const lastHydratedKeyRef = useRef("");
-
-  // hydrate video + notes + sets when exercise changes OR parent updates setsData
+  /* ---------- hydrate ---------- */
   useEffect(() => {
-    const links = getVideoLinks();
-    setVideoLink(links?.[exercise?.id] || "");
+    const key = JSON.stringify(exercise?.setsData);
+    if (key === hydrateKey.current) return;
+    hydrateKey.current = key;
 
+    setSets(normalizeSets(exercise?.setsData, setsCount));
     setNotes(exercise?.userNotes || "");
 
-    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(
-      exercise?.setsData || []
-    )}__${JSON.stringify(goalReps)}`;
+    const links = getVideoLinks();
+    setVideoLink(links?.[exercise?.id] || "");
+  }, [exercise, setsCount]);
 
-    if (key === lastHydratedKeyRef.current) return;
-    lastHydratedKeyRef.current = key;
+  /* ---------- PR ---------- */
+  const pr = useMemo(() => {
+    const prs = getPersonalRecords?.() || {};
+    return prs[exercise?.id] || null;
+  }, [exercise?.id]);
 
-    const base = normalizeSetsData(exercise?.setsData, setsCount);
-
-    setSets(
-      base.map((s, idx) => ({
-        ...s,
-        goalReps: goalReps[idx] ?? 8,
-      }))
-    );
-
-    setWeightMode(inferModeFromSets(base));
-  }, [exercise?.id, setsCount, exercise?.setsData, goalReps]);
-
-  const completedCount = useMemo(
-    () => (sets || []).filter((s) => s.completed).length,
-    [sets]
-  );
-
-  const topSetAbs = useMemo(() => abs1(sets?.[0]?.weight ?? 0), [sets]);
-
-  const openVideo = (e) => {
-    e.stopPropagation();
-    if (!videoLink) return;
-    window.open(videoLink, "_blank", "noopener,noreferrer");
-  };
-
-  const handleNotesBlur = () => {
-    onNotesChange?.(exercise, notes);
-  };
-
-  const toSignedWeight = (value, mode) => {
-    if (value === "") return "";
-    const n = toNum(value, 0);
-    const a = Math.abs(n);
-    return mode === "assisted" ? -a : a;
-  };
-
-  const displayWeight = (storedWeight, mode) => {
-    if (storedWeight === "" || storedWeight == null) return "";
-    const n = toNum(storedWeight, 0);
-    return mode === "assisted" ? Math.abs(n) : n;
-  };
-
-  const pushSetsUp = (nextSets) => {
+  /* ---------- propagate upward WITHOUT coercing ---------- */
+  const pushUp = (nextSets) => {
     setSets(nextSets);
 
-    const setsData = nextSets.map((s) => ({
-      // ✅ store 0 if blank, but input stays blank
-      weight: s.weight === "" ? 0 : toNum(s.weight, 0),
-      reps: s.reps === "" ? 0 : toNum(s.reps, 0),
-      completed: !!s.completed,
-    }));
-
-    onWeightChange?.(exercise, setsData);
-  };
-
-  const toggleComplete = (idx) => {
-    const next = sets.map((s, i) =>
-      i === idx ? { ...s, completed: !s.completed } : s
+    onWeightChange?.(
+      exercise,
+      nextSets.map(s => ({
+        weight: s.weight === "" ? "" : Number(s.weight),
+        reps: s.reps === "" ? "" : Number(s.reps),
+        completed: s.completed,
+      }))
     );
-    pushSetsUp(next);
-
-    const set = next[idx];
-    onSetComplete?.(exercise, set, false);
   };
 
-  const updateField = (idx, field, value) => {
-    const next = sets.map((s, i) => {
-      if (i !== idx) return s;
+  const toggleMode = (next) => {
+    if (next === mode) return;
+    setMode(next);
 
-      if (field === "weight") {
-        if (value === "") return { ...s, weight: "" };
-        return { ...s, weight: toSignedWeight(value, weightMode) };
-      }
-
-      if (value === "") return { ...s, [field]: "" };
-      return { ...s, [field]: value };
+    const converted = sets.map(s => {
+      if (s.weight === "") return s;
+      const v = Math.abs(Number(s.weight));
+      return { ...s, weight: next === "assisted" ? -v : v };
     });
 
-    pushSetsUp(next);
-  };
-
-  const handleSuggestIncrement = () => {
-    const p = getProgressionSettings();
-    const inc = p.exerciseSpecific?.[exercise.id];
-    toast.message("Progression", {
-      description: inc ? `Exercise increment: ${inc}` : `Global increment settings apply`,
-    });
-  };
-
-  const handleToggleMode = (nextMode) => {
-    if (nextMode === weightMode) return;
-
-    setWeightMode(nextMode);
-
-    const converted = sets.map((s) => {
-      if (s.weight === "" || s.weight == null) return s;
-      const n = toNum(s.weight, 0);
-      const a = Math.abs(n);
-      return { ...s, weight: nextMode === "assisted" ? -a : a };
-    });
-
-    pushSetsUp(converted);
+    pushUp(converted);
   };
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg">
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
       {/* Header */}
       <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left p-4 cursor-pointer select-none"
+        className="w-full text-left p-4"
+        onClick={() => setExpanded(v => !v)}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-bold text-foreground truncate">
-              {exercise?.name || "Exercise"}
-            </h3>
-
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold truncate">{exercise?.name}</h3>
+            <div className="text-xs text-muted-foreground flex flex-wrap gap-2 mt-1">
               <span>
-                {completedCount}/{setsCount} sets
+                {sets.filter(s => s.completed).length}/{setsCount} sets
               </span>
-              <span>•</span>
-              <span>Top: {topSetAbs}</span>
 
-              {/* ✅ PR shown compact */}
-              {pr?.weight != null && (
-                <>
-                  <span>•</span>
-                  <span className="text-foreground font-semibold">
-                    PR: {pr.weight} × {pr.reps}
-                  </span>
-                </>
+              {pr && (
+                <span className="font-semibold text-foreground">
+                  PR {pr.weight} × {pr.reps}
+                </span>
               )}
 
-              {/* ✅ Weighted / Assisted toggle */}
-              <span>•</span>
+              {/* Mode toggle */}
               <div
-                className="inline-flex rounded-lg border border-border bg-muted/30 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
+                className="inline-flex border rounded-md overflow-hidden"
+                onClick={e => e.stopPropagation()}
               >
                 <button
-                  type="button"
-                  onClick={() => handleToggleMode("weighted")}
-                  className={`px-2 py-1 text-[11px] font-semibold transition ${
-                    weightMode === "weighted"
+                  className={`px-2 py-0.5 text-[11px] ${
+                    mode === "weighted"
                       ? "bg-primary/20 text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                      : "text-muted-foreground"
                   }`}
-                  title="Weighted (stores positive)"
+                  onClick={() => toggleMode("weighted")}
                 >
                   Weighted
                 </button>
                 <button
-                  type="button"
-                  onClick={() => handleToggleMode("assisted")}
-                  className={`px-2 py-1 text-[11px] font-semibold transition ${
-                    weightMode === "assisted"
-                      ? "bg-primary/20 text-primary"
-                      : "text-muted-foreground hover:text-foreground"
+                  className={`px-2 py-0.5 text-[11px] ${
+                    mode === "assisted"
+                      ? "bg-orange-500/20 text-orange-600"
+                      : "text-muted-foreground"
                   }`}
-                  title="Assisted (stores negative)"
+                  onClick={() => toggleMode("assisted")}
                 >
                   Assisted
                 </button>
               </div>
-
-              {exercise?.repScheme ? (
-                <>
-                  <span>•</span>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {exercise.repScheme}
-                  </Badge>
-                </>
-              ) : null}
             </div>
           </div>
 
-          {/* Right-side icons */}
-          <div className="flex items-center gap-1 shrink-0">
-            {videoLink ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={openVideo}
-                title="Open form video"
-                className="hover:bg-muted/50"
-              >
-                <Video className="w-4 h-4" />
-              </Button>
-            ) : null}
+          {videoLink && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(videoLink, "_blank");
+              }}
+            >
+              <Video className="w-4 h-4" />
+            </Button>
+          )}
 
-            {expanded ? (
-              <ChevronUp className="w-5 h-5 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-muted-foreground" />
-            )}
-          </div>
+          {expanded ? <ChevronUp /> : <ChevronDown />}
         </div>
       </button>
 
       {/* Body */}
       {expanded && (
-        <div className="px-4 pb-4 space-y-4 animate-fadeIn">
-          {/* Sets */}
-          <div className="space-y-2">
-            {sets.map((set, idx) => (
-              <div
-                key={idx}
-                className="grid grid-cols-[80px_1fr_1fr_44px] gap-2 items-center bg-muted/30 rounded-lg p-2 border border-border"
-              >
-                <div className="text-xs text-muted-foreground">Set {idx + 1}</div>
+        <div className="px-4 pb-4 space-y-3">
+          {sets.map((s, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-[70px_1fr_1fr_40px] gap-2 items-center"
+            >
+              <span className="text-xs">Set {i + 1}</span>
 
-                <Input
-                  type="number"
-                  value={displayWeight(set.weight, weightMode)}
-                  onChange={(e) =>
-                    updateField(
-                      idx,
-                      "weight",
-                      e.target.value === "" ? "" : Number(e.target.value)
-                    )
-                  }
-                  placeholder={weightMode === "assisted" ? "Assist" : "Weight"}
-                />
+              <Input
+                type="number"
+                value={s.weight === "" ? "" : Math.abs(s.weight)}
+                placeholder={mode === "assisted" ? "Assist" : "Weight"}
+                onChange={e => {
+                  const v = e.target.value;
+                  const next = [...sets];
+                  next[i] = {
+                    ...s,
+                    weight:
+                      v === ""
+                        ? ""
+                        : mode === "assisted"
+                        ? -Number(v)
+                        : Number(v),
+                  };
+                  pushUp(next);
+                }}
+              />
 
-                <Input
-                  type="number"
-                  value={set.reps ?? ""}
-                  onChange={(e) =>
-                    updateField(
-                      idx,
-                      "reps",
-                      e.target.value === "" ? "" : Number(e.target.value)
-                    )
-                  }
-                  placeholder={`Reps (goal ${goalReps[idx] ?? 8})`}
-                />
+              <Input
+                type="number"
+                value={s.reps}
+                placeholder="Reps"
+                onChange={e => {
+                  const next = [...sets];
+                  next[i] = { ...s, reps: e.target.value };
+                  pushUp(next);
+                }}
+              />
 
-                <Button
-                  variant={set.completed ? "default" : "outline"}
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleComplete(idx);
-                  }}
-                  title={set.completed ? "Completed" : "Mark completed"}
-                >
-                  ✓
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          {/* Notes */}
-          <div>
-            <div className="text-sm font-medium text-foreground mb-2">Notes</div>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={handleNotesBlur}
-              placeholder="Add notes..."
-              className="min-h-[70px]"
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-wrap gap-2">
-            {onRestTimer ? (
               <Button
-                variant="outline"
                 size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRestTimer?.(toNum(exercise?.restTime, 120));
+                variant={s.completed ? "default" : "outline"}
+                onClick={() => {
+                  const next = [...sets];
+                  next[i] = { ...s, completed: !s.completed };
+                  pushUp(next);
+                  onSetComplete?.(exercise, next[i], false);
                 }}
               >
-                <Timer className="w-4 h-4 mr-2" />
-                Rest Timer
+                ✓
               </Button>
-            ) : null}
+            </div>
+          ))}
+
+          <Textarea
+            value={notes}
+            placeholder="Notes…"
+            onChange={e => setNotes(e.target.value)}
+            onBlur={() => onNotesChange?.(exercise, notes)}
+          />
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onRestTimer?.(exercise?.restTime ?? 120)}
+            >
+              <Timer className="w-4 h-4 mr-1" />
+              Rest
+            </Button>
 
             <Button
               variant="outline"
               size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSuggestIncrement();
+              onClick={() => {
+                const p = getProgressionSettings();
+                toast.message("Progression", {
+                  description:
+                    p.exerciseSpecific?.[exercise.id] ??
+                    "Global progression applies",
+                });
               }}
             >
-              <Award className="w-4 h-4 mr-2" />
+              <Award className="w-4 h-4 mr-1" />
               Progression
             </Button>
           </div>
-
-          {/* Last workout */}
-          {lastWorkoutData ? (
-            <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-              <div className="font-semibold text-foreground mb-1">Last time</div>
-              {(lastWorkoutData.sets || []).map((s, i) => (
-                <div key={i}>
-                  Set {i + 1}: {s.weight} × {s.reps}
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
       )}
     </div>
