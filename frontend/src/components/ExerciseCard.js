@@ -91,7 +91,7 @@ const ExerciseCard = ({
 }) => {
   const { weightUnit } = useSettings();
 
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [showWarmup, setShowWarmup] = useState(false);
   const [showPlates, setShowPlates] = useState(false);
   const [selectedWeight, setSelectedWeight] = useState(0);
