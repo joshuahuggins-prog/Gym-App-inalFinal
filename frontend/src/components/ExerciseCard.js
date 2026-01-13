@@ -1,6 +1,13 @@
 // frontend/src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Timer, Award, Video } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Timer,
+  Award,
+  Video,
+  Shuffle,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -14,13 +21,20 @@ import {
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
+const normalizeGoalReps = (goalReps, count) => {
+  const base = Array.isArray(goalReps) ? goalReps : [];
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(base[i] ?? 8);
+  return out;
+};
+
 const normalizeSets = (setsData, count) => {
   const base = Array.isArray(setsData) ? setsData : [];
   const out = [];
   for (let i = 0; i < count; i++) {
     const s = base[i] || {};
     out.push({
-      // ✅ keep blank as blank during editing
+      // keep blank as blank during editing
       weight: s.weight ?? "",
       reps: s.reps ?? "",
       completed: !!s.completed,
@@ -29,8 +43,6 @@ const normalizeSets = (setsData, count) => {
   return out;
 };
 
-const toNumberOrBlank = (v) => (v === "" ? "" : Number(v));
-
 const ExerciseCard = ({
   exercise,
   lastWorkoutData,
@@ -38,8 +50,13 @@ const ExerciseCard = ({
   onWeightChange,
   onNotesChange,
   onRestTimer,
+  onAlternateExercise, // ✅ optional hook (won’t break if not passed)
 }) => {
-  const setsCount = clampInt(exercise?.sets ?? 3, 1, 12);
+  const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 12);
+  const goalReps = useMemo(
+    () => normalizeGoalReps(exercise?.goalReps, setsCount),
+    [exercise?.goalReps, setsCount]
+  );
 
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(exercise?.userNotes || "");
@@ -53,27 +70,24 @@ const ExerciseCard = ({
 
   const hydrateKey = useRef("");
 
-  // ✅ PR / Max data (display only — never used to fill inputs)
+  // PR (display only)
   const pr = useMemo(() => {
     const prs = getPersonalRecords?.() || {};
     return prs[exercise?.id] || null;
   }, [exercise?.id]);
 
-  // ✅ derive best from this workout’s saved sets (for the label line)
+  // derive best from this workout’s saved sets (for the label line)
   const bestFromWorkout = useMemo(() => {
     const nums = (sets || [])
       .map((s) => (s.weight === "" ? null : Number(s.weight)))
       .filter((n) => Number.isFinite(n));
-
     if (nums.length === 0) return null;
-
-    const absMax = Math.max(...nums.map((n) => Math.abs(n)));
-    return absMax;
+    return Math.max(...nums.map((n) => Math.abs(n)));
   }, [sets]);
 
   // hydrate when parent provides updated exercise object
   useEffect(() => {
-    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(exercise?.setsData || [])}`;
+    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(exercise?.setsData || [])}__${JSON.stringify(exercise?.goalReps || [])}`;
     if (key === hydrateKey.current) return;
     hydrateKey.current = key;
 
@@ -89,7 +103,7 @@ const ExerciseCard = ({
   const pushUp = (nextSets) => {
     setSets(nextSets);
 
-    // ✅ IMPORTANT: keep blanks as blanks, don’t coerce everything to 0
+    // keep blanks as blanks, don’t coerce to 0
     onWeightChange?.(
       exercise,
       nextSets.map((s) => ({
@@ -117,13 +131,13 @@ const ExerciseCard = ({
   const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
 
   const maxLabel = useMemo(() => {
-    // Prefer PR if present, else best in this workout
     const best = pr?.weight != null ? Math.abs(Number(pr.weight)) : bestFromWorkout;
     if (!Number.isFinite(best) || best === 0) return null;
-
     const label = mode === "assisted" ? "Assist max" : "Max";
     return `${label}: ${best}`;
   }, [pr, bestFromWorkout, mode]);
+
+  const showExerciseInfoNotes = !!(exercise?.notes && String(exercise.notes).trim().length > 0);
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -139,7 +153,7 @@ const ExerciseCard = ({
               {exercise?.name || "Exercise"}
             </h3>
 
-            {/* ✅ Row 2: compact stats */}
+            {/* Row 2: compact stats */}
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
                 {completedCount}/{setsCount} sets
@@ -151,7 +165,6 @@ const ExerciseCard = ({
                 </Badge>
               ) : null}
 
-              {/* ✅ PR shown here (display only) */}
               {pr?.weight != null && (
                 <span className="text-foreground font-semibold">
                   PR: {pr.weight} × {pr.reps}
@@ -159,7 +172,7 @@ const ExerciseCard = ({
               )}
             </div>
 
-            {/* ✅ Row 3: toggle ALWAYS on its own line so it never jumps around */}
+            {/* Row 3: toggle ALWAYS on its own line */}
             <div
               className="mt-2 inline-flex border border-border rounded-md overflow-hidden"
               onClick={(e) => e.stopPropagation()}
@@ -213,10 +226,16 @@ const ExerciseCard = ({
       {/* Body */}
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
-          {/* ✅ label ABOVE sets (not in input) */}
+          {/* Label ABOVE sets */}
           {maxLabel && (
             <div className="text-xs text-muted-foreground">
-              <span className={mode === "assisted" ? "text-orange-600 font-semibold" : "text-foreground font-semibold"}>
+              <span
+                className={
+                  mode === "assisted"
+                    ? "text-orange-600 font-semibold"
+                    : "text-foreground font-semibold"
+                }
+              >
                 {maxLabel}
               </span>
             </div>
@@ -233,7 +252,6 @@ const ExerciseCard = ({
 
                 <Input
                   type="number"
-                  // ✅ show blank if blank (never inject max/pr here)
                   value={s.weight === "" ? "" : Math.abs(Number(s.weight))}
                   placeholder={mode === "assisted" ? "Assist" : "Weight"}
                   onChange={(e) => {
@@ -254,14 +272,25 @@ const ExerciseCard = ({
                   }}
                 />
 
+                {/* ✅ Target reps as GREY placeholder (not a value) */}
                 <Input
                   type="number"
                   value={s.reps}
-                  placeholder="Reps"
+                  placeholder={`${goalReps[i] ?? 8}`}
                   onChange={(e) => {
                     const raw = e.target.value;
                     const next = [...sets];
-                    next[i] = { ...s, reps: raw === "" ? "" : toNumberOrBlank(raw) };
+
+                    if (raw === "") {
+                      next[i] = { ...s, reps: "" };
+                      pushUp(next);
+                      return;
+                    }
+
+                    const n = Number(raw);
+                    if (!Number.isFinite(n)) return;
+
+                    next[i] = { ...s, reps: n };
                     pushUp(next);
                   }}
                 />
@@ -283,17 +312,29 @@ const ExerciseCard = ({
             ))}
           </div>
 
-          {/* Notes */}
+          {/* User notes (per workout) */}
           <Textarea
             value={notes}
-            placeholder="Notes…"
+            placeholder="Workout notes…"
             className="min-h-[70px]"
             onChange={(e) => setNotes(e.target.value)}
             onBlur={() => onNotesChange?.(exercise, notes)}
           />
 
+          {/* ✅ Exercise info notes (from library/programme) */}
+          {showExerciseInfoNotes && (
+            <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
+              <div className="text-[11px] font-semibold text-foreground mb-1">
+                Exercise notes
+              </div>
+              <div className="whitespace-pre-wrap">
+                {String(exercise.notes).trim()}
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {onRestTimer ? (
               <Button
                 variant="outline"
@@ -319,7 +360,33 @@ const ExerciseCard = ({
               <Award className="w-4 h-4 mr-1" />
               Progression
             </Button>
+
+            {/* ✅ Alternative exercise button (optional) */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (onAlternateExercise) onAlternateExercise(exercise);
+                else toast.message("Alternative exercise", { description: "Hook not wired yet." });
+              }}
+              title="Alternative exercise"
+            >
+              <Shuffle className="w-4 h-4 mr-1" />
+              Alternative
+            </Button>
           </div>
+
+          {/* Last workout (if available) */}
+          {lastWorkoutData ? (
+            <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
+              <div className="font-semibold text-foreground mb-1">Last time</div>
+              {(lastWorkoutData.sets || []).map((s, idx) => (
+                <div key={idx}>
+                  Set {idx + 1}: {s.weight} × {s.reps}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
     </div>
