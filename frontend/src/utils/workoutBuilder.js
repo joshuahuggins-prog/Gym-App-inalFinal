@@ -72,15 +72,11 @@ const normalizeGoalReps = (goalReps, count) => {
  * - Overlays saved workout values (weight/reps/completed/notes)
  * - Always returns setsData with EXACT number of sets (template sets)
  */
-export const buildWorkoutExerciseRows = ({
-  workout,
-  programme,
-  catalogueExercises = [],
-}) => {
+export const buildWorkoutExerciseRows = ({ workout, programme, catalogueExercises = [] }) => {
   if (!workout) return [];
 
   const templateExercises =
-    (programme?.exercises && Array.isArray(programme.exercises) && programme.exercises.length > 0)
+    programme?.exercises && Array.isArray(programme.exercises) && programme.exercises.length > 0
       ? programme.exercises
       : workout.exercises || [];
 
@@ -105,17 +101,15 @@ export const buildWorkoutExerciseRows = ({
     const saved = (id && savedById.get(id)) || savedByName.get(nameKey) || null;
     const cat = (id && catById.get(id)) || null;
 
-    const setsCount = clampInt(toNum(tmpl?.sets ?? cat?.sets ?? saved?.sets?.length ?? 3, 3), 1, 12);
-
-    const goalReps = normalizeGoalReps(
-      tmpl?.goalReps ?? cat?.goalReps ?? [],
-      setsCount
+    const setsCount = clampInt(
+      toNum(tmpl?.sets ?? cat?.sets ?? saved?.sets?.length ?? 3, 3),
+      1,
+      12
     );
 
-    const baseSetsData = saved
-      ? savedSetsToSetsData(saved.sets)
-      : [];
+    const goalReps = normalizeGoalReps(tmpl?.goalReps ?? cat?.goalReps ?? [], setsCount);
 
+    const baseSetsData = saved ? savedSetsToSetsData(saved.sets) : [];
     const setsData = normalizeSetsData(baseSetsData, setsCount);
 
     return {
@@ -126,11 +120,35 @@ export const buildWorkoutExerciseRows = ({
       goalReps,
       restTime: tmpl?.restTime ?? cat?.restTime ?? 120,
       notes: tmpl?.notes ?? cat?.notes ?? "",
-      // This is the key thing the cards read/write:
+      // what ExerciseCard reads/writes:
       setsData,
-      // user notes on the workout exercise
+      // saved workout exercise notes:
       userNotes: saved?.notes || "",
       lastWorkoutData: null,
+    };
+  });
+};
+
+/**
+ * ✅ NEW: Convert UI rows back into saved workout exercise format for storage.
+ * This is what your HistoryPage expects: exercise.sets[] and exercise.notes.
+ */
+export const serializeWorkoutExercisesFromRows = (rows) => {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.map((r) => {
+    const setsData = Array.isArray(r.setsData) ? r.setsData : [];
+
+    return {
+      id: r.id,
+      name: r.name,
+      repScheme: r.repScheme || "RPT",
+      sets: setsData.map((s) => ({
+        weight: toNum(s?.weight, 0),
+        reps: clampInt(toNum(s?.reps, 0), 0, 999),
+        completed: !!s?.completed,
+      })),
+      notes: r.userNotes || "",
     };
   });
 };
