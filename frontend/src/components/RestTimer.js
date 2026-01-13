@@ -1,131 +1,126 @@
-import React, { useState, useEffect } from 'react';
-import { X, Play, Pause } from 'lucide-react';
-import { Button } from '../components/ui/button';
+import React, { useEffect, useMemo, useState } from "react";
+import { X, Play, Pause, RotateCcw } from "lucide-react";
+import { Button } from "../components/ui/button";
+
+const fmt = (s) => {
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+};
 
 const RestTimer = ({ duration, onComplete, onClose }) => {
-  const [timeLeft, setTimeLeft] = useState(duration);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
+  const [timeLeft, setTimeLeft] = useState(duration || 0);
+  const [paused, setPaused] = useState(false);
 
+  // Reset when duration changes
   useEffect(() => {
-    if (timeLeft <= 0) {
-      onComplete?.();
-      return;
-    }
+    setTimeLeft(duration || 0);
+    setPaused(false);
+  }, [duration]);
 
-    if (isPaused) return;
+  // Tick
+  useEffect(() => {
+    if (paused || timeLeft <= 0) return;
 
-    const timer = setInterval(() => {
+    const t = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
+        if (prev <= 1) return 0;
         return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [timeLeft, isPaused, onComplete]);
+    return () => clearInterval(t);
+  }, [paused, timeLeft]);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Complete callback
+  useEffect(() => {
+    if (timeLeft === 0) onComplete?.();
+  }, [timeLeft, onComplete]);
 
-  const progress = ((duration - timeLeft) / duration) * 100;
+  const progress = useMemo(() => {
+    const d = Math.max(1, Number(duration) || 1);
+    return ((d - Math.max(0, timeLeft)) / d) * 100;
+  }, [duration, timeLeft]);
 
-  if (!isVisible) return null;
+  const r = 40;
+  const c = 2 * Math.PI * r;
+  const dash = c * (1 - progress / 100);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl max-w-sm w-full mx-4 relative overflow-hidden">
-        {/* Close button */}
+    <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 backdrop-blur-sm animate-fadeIn">
+      <div className="relative w-[92vw] max-w-xs rounded-2xl border border-border bg-card p-4 shadow-2xl">
         <button
-          onClick={() => {
-            onClose?.();
-            setIsVisible(false);
-          }}
-          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+          onClick={onClose}
+          className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+          aria-label="Close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
-        <div className="text-center space-y-6">
-          <h3 className="text-lg font-semibold text-foreground">Rest Timer</h3>
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-foreground">Rest</div>
+          <div className="text-xs text-muted-foreground">
+            {timeLeft === 0 ? "Done" : "Remaining"}
+          </div>
+        </div>
 
-          {/* Circular Progress */}
-          <div className="relative w-48 h-48 mx-auto">
-            <svg className="w-full h-full transform -rotate-90">
+        <div className="mt-3 flex items-center gap-3">
+          {/* Ring */}
+          <div className="relative w-20 h-20">
+            <svg className="w-full h-full -rotate-90">
+              <circle cx="40" cy="40" r={r} stroke="hsl(var(--muted))" strokeWidth="6" fill="none" />
               <circle
-                cx="96"
-                cy="96"
-                r="88"
-                stroke="hsl(var(--muted))"
-                strokeWidth="8"
-                fill="none"
-              />
-              <circle
-                cx="96"
-                cy="96"
-                r="88"
+                cx="40"
+                cy="40"
+                r={r}
                 stroke="hsl(var(--primary))"
-                strokeWidth="8"
+                strokeWidth="6"
                 fill="none"
-                strokeDasharray={`${2 * Math.PI * 88}`}
-                strokeDashoffset={`${2 * Math.PI * 88 * (1 - progress / 100)}`}
-                className="transition-all duration-1000 ease-linear"
-                style={{ filter: 'drop-shadow(0 0 8px hsl(var(--primary) / 0.5))' }}
+                strokeDasharray={c}
+                strokeDashoffset={dash}
+                className="transition-all duration-500 ease-linear"
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-5xl font-bold text-gradient-primary">
-                  {formatTime(timeLeft)}
-                </div>
-                <div className="text-sm text-muted-foreground mt-2">
-                  {timeLeft === 0 ? "Time's up!" : 'remaining'}
-                </div>
+            <div className="absolute inset-0 grid place-items-center">
+              <div className="text-lg font-extrabold text-gradient-primary">
+                {fmt(Math.max(0, timeLeft))}
               </div>
             </div>
           </div>
 
           {/* Controls */}
-          <div className="flex gap-3 justify-center">
+          <div className="flex-1 flex gap-2">
             <Button
-              onClick={() => setIsPaused(!isPaused)}
               variant="outline"
-              size="lg"
+              size="sm"
               className="flex-1"
+              onClick={() => setPaused((p) => !p)}
+              disabled={timeLeft === 0}
+              title={paused ? "Resume" : "Pause"}
             >
-              {isPaused ? (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Resume
-                </>
-              ) : (
-                <>
-                  <Pause className="w-4 h-4 mr-2" />
-                  Pause
-                </>
-              )}
+              {paused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
+              {paused ? "Resume" : "Pause"}
             </Button>
+
             <Button
-              onClick={() => setTimeLeft(duration)}
               variant="outline"
-              size="lg"
+              size="sm"
+              onClick={() => {
+                setTimeLeft(duration || 0);
+                setPaused(false);
+              }}
+              title="Reset"
             >
-              Reset
+              <RotateCcw className="w-4 h-4" />
             </Button>
           </div>
-
-          {timeLeft === 0 && (
-            <div className="animate-bounce">
-              <span className="text-2xl">🎯</span>
-            </div>
-          )}
         </div>
+
+        {timeLeft === 0 && (
+          <div className="mt-3 text-center text-sm font-semibold text-success">
+            Ready for the next set 🎯
+          </div>
+        )}
       </div>
     </div>
   );
