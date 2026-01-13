@@ -1,265 +1,276 @@
-// frontend/src/components/ExerciseCard.js
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Video, Dumbbell, Edit2 } from "lucide-react";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Textarea } from "../components/ui/textarea";
-import { Badge } from "../components/ui/badge";
+// src/components/ExerciseCard.js
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  calculateRPTWeights,
-  shouldLevelUp,
-  EXERCISE_ALTERNATIVES,
-} from "../data/workoutData";
+  ChevronDown,
+  ChevronUp,
+  Timer,
+  Play,
+  Edit2,
+  Dumbbell,
+} from "lucide-react";
+
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { toast } from "sonner";
+
 import { useSettings } from "../contexts/SettingsContext";
-import {
-  getVideoLinks,
-  updateVideoLink,
-  getProgressionSettings,
-} from "../utils/storage";
+import { getProgressionSettings, getVideoLinks, updateVideoLink } from "../utils/storage";
 import WarmupCalculator from "./WarmupCalculator";
 import PlateCalculator from "./PlateCalculator";
 
-const toNumberOrZero = (raw) => {
-  if (raw === "" || raw == null) return 0;
-  // allow decimals; user never types "-" (we handle sign via toggle)
-  const n = Number(String(raw).replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
+// Keep your existing alternatives constant if you had it earlier
+const EXERCISE_ALTERNATIVES = {
+  // ...
 };
 
-const abs1 = (n) => Math.round(Math.abs(Number(n) || 0) * 10) / 10;
+const toNum = (v, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
+
+const abs1 = (n) => Math.abs(toNum(n, 0));
+
+const normalizeSetsData = (setsData, count) => {
+  const c = clampInt(toNum(count, 3), 1, 12);
+  const arr = Array.isArray(setsData) ? setsData.slice(0, c) : [];
+
+  while (arr.length < c) {
+    arr.push({ weight: 0, reps: 0, completed: false });
+  }
+
+  return arr.map((s) => ({
+    weight: toNum(s?.weight, 0),
+    reps: clampInt(toNum(s?.reps, 0), 0, 999),
+    completed: !!s?.completed,
+    // infer assisted from negative weight if not present
+    assisted: typeof s?.assisted === "boolean" ? s.assisted : toNum(s?.weight, 0) < 0,
+  }));
+};
+
+const normalizeGoalReps = (goalReps, count) => {
+  const c = clampInt(toNum(count, 3), 1, 12);
+  let arr = Array.isArray(goalReps) ? goalReps.slice() : [];
+  if (arr.length === 0) arr = [8];
+
+  arr = arr.map((r) => {
+    const n = toNum(r, 8);
+    if (!Number.isFinite(n) || n <= 0) return 8;
+    return clampInt(n, 1, 200);
+  });
+
+  if (arr.length < c) {
+    arr = [...arr, ...Array.from({ length: c - arr.length }, () => 8)];
+  } else if (arr.length > c) {
+    arr = arr.slice(0, c);
+  }
+  return arr;
+};
+
+const calculateRPTWeights = (topSetAbs, setNumber, progressionSettings) => {
+  // basic: set2 = 90%, set3 = 80% (configurable)
+  const p2 = toNum(progressionSettings?.rptSet2Percentage, 90) / 100;
+  const p3 = toNum(progressionSettings?.rptSet3Percentage, 80) / 100;
+
+  if (setNumber === 2) return Math.round(topSetAbs * p2 * 10) / 10;
+  if (setNumber === 3) return Math.round(topSetAbs * p3 * 10) / 10;
+  return topSetAbs;
+};
 
 const ExerciseCard = ({
   exercise,
+  lastWorkoutData,
   onSetComplete,
   onWeightChange,
   onNotesChange,
   onRestTimer,
   isFirst,
-  lastWorkoutData,
 }) => {
   const { weightUnit } = useSettings();
+
   const [expanded, setExpanded] = useState(true);
-
-  // Each set stores: weight (can be negative), reps, completed, goalReps, assisted(boolean)
-  const [sets, setSets] = useState(() =>
-    Array(Number(exercise.sets) || 1)
-      .fill(null)
-      .map((_, index) => ({
-        setNumber: index + 1,
-        weight: 0,
-        reps: 0,
-        completed: false,
-        assisted: false,
-        goalReps: exercise.goalReps?.[index] ?? exercise.goalReps?.[0] ?? 8,
-      }))
-  );
-
-  const [notes, setNotes] = useState(exercise.notes || "");
   const [showWarmup, setShowWarmup] = useState(false);
   const [showPlates, setShowPlates] = useState(false);
   const [selectedWeight, setSelectedWeight] = useState(0);
   const [showAlternatives, setShowAlternatives] = useState(false);
   const [showVideoEdit, setShowVideoEdit] = useState(false);
+
   const [videoLink, setVideoLink] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const completedSets = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
-  const levelUp = useMemo(() => {
-    const s1 = sets[0];
-    return !!(s1?.completed && shouldLevelUp(s1.reps, s1.goalReps));
-  }, [sets]);
+  // ✅ IMPORTANT: hydrate from exercise.setsData
+  const [sets, setSets] = useState(() => {
+    const setsCount = clampInt(toNum(exercise?.sets, 3), 1, 12);
+    const goalReps = normalizeGoalReps(exercise?.goalReps, setsCount);
+    const base = normalizeSetsData(exercise?.setsData, setsCount);
 
-  const getSuggestedWeight = (setIndex) => {
-    const w = lastWorkoutData?.sets?.[setIndex]?.weight;
-    const n = Number(w);
-    return Number.isFinite(n) ? n : null;
-  };
+    return base.map((s, idx) => ({
+      ...s,
+      goalReps: goalReps[idx] ?? 8,
+    }));
+  });
 
+  const lastHydratedKeyRef = useRef("");
+
+  const setsCount = clampInt(toNum(exercise?.sets, 3), 1, 12);
+  const goalReps = useMemo(
+    () => normalizeGoalReps(exercise?.goalReps, setsCount),
+    [exercise?.goalReps, setsCount]
+  );
+
+  // hydrate video + notes + sets when exercise changes OR when parent updates setsData
   useEffect(() => {
     const links = getVideoLinks();
-    setVideoLink(links[exercise.id] || "");
-  }, [exercise.id]);
+    setVideoLink(links?.[exercise?.id] || "");
 
-  // Keep local sets in sync if exercise.sets / goalReps change
-  useEffect(() => {
-    setSets((prev) => {
-      const nextLen = Number(exercise.sets) || 1;
-      return Array(nextLen)
-        .fill(null)
-        .map((_, i) => {
-          const existing = prev[i];
-          return {
-            setNumber: i + 1,
-            weight: existing?.weight ?? 0,
-            reps: existing?.reps ?? 0,
-            completed: existing?.completed ?? false,
-            assisted: existing?.assisted ?? false,
-            goalReps: exercise.goalReps?.[i] ?? exercise.goalReps?.[0] ?? 8,
-          };
-        });
-    });
-  }, [exercise.sets, exercise.goalReps]);
+    setNotes(exercise?.userNotes || "");
 
-  const pushUp = (nextSets) => {
-    setSets(nextSets);
-    onWeightChange?.(exercise, nextSets); // keep parent synced (draft + payload)
-  };
+    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(exercise?.setsData || [])}__${JSON.stringify(goalReps)}`;
+    if (key === lastHydratedKeyRef.current) return;
+    lastHydratedKeyRef.current = key;
 
-  const handleSetComplete = (setIndex) => {
-    const newSets = [...sets];
-    const currentSet = { ...newSets[setIndex] };
+    const base = normalizeSetsData(exercise?.setsData, setsCount);
 
-    // Weight must be non-zero (negative allowed), reps must be > 0
-    const canComplete = Number(currentSet.weight) !== 0 && Number(currentSet.reps) > 0;
-    if (!canComplete) return;
+    setSets(
+      base.map((s, idx) => ({
+        ...s,
+        goalReps: goalReps[idx] ?? 8,
+      }))
+    );
+  }, [exercise?.id, setsCount, exercise?.setsData, goalReps]);
 
-    if (!currentSet.completed) {
-      currentSet.completed = true;
-
-      if (setIndex === 0 && shouldLevelUp(currentSet.reps, currentSet.goalReps)) {
-        onSetComplete?.(exercise, currentSet, true);
-      } else {
-        onSetComplete?.(exercise, currentSet, false);
-      }
-
-      if (setIndex < newSets.length - 1) {
-        onRestTimer?.(exercise.restTime);
-      }
-    } else {
-      currentSet.completed = false;
-    }
-
-    newSets[setIndex] = currentSet;
-    pushUp(newSets);
-  };
-
-  const applyRPT = (newSets, set1WeightSigned, assisted) => {
-    const progressionSettings = getProgressionSettings();
-
-    // RPT math should use absolute load, then re-apply sign if assisted
-    const baseAbs = Math.abs(set1WeightSigned);
-
-    for (let i = 1; i < newSets.length; i++) {
-      const absW =
-        baseAbs > 0 ? calculateRPTWeights(baseAbs, i + 1, progressionSettings) : 0;
-
-      newSets[i] = {
-        ...newSets[i],
-        assisted,
-        weight: assisted ? -absW : absW,
-      };
-    }
-  };
-
-  const handleWeightChange = (setIndex, raw) => {
-    const newSets = [...sets];
-    const current = { ...newSets[setIndex] };
-
-    const typedAbs = toNumberOrZero(raw);
-    const assisted = !!current.assisted;
-    const signed = assisted ? -Math.abs(typedAbs) : Math.abs(typedAbs);
-
-    current.weight = signed;
-    newSets[setIndex] = current;
-
-    // Auto-calculate RPT weights after set 1 changes
-    if (exercise.repScheme === "RPT" && setIndex === 0) {
-      applyRPT(newSets, signed, assisted);
-    }
-
-    pushUp(newSets);
-  };
-
-  const handleToggleAssisted = (setIndex) => {
-    const newSets = [...sets];
-    const current = { ...newSets[setIndex] };
-
-    const nextAssisted = !current.assisted;
-    const absW = Math.abs(Number(current.weight) || 0);
-
-    current.assisted = nextAssisted;
-    current.weight = nextAssisted ? -absW : absW;
-    newSets[setIndex] = current;
-
-    // If toggling set 1 and scheme is RPT, re-apply sign + recalc
-    if (exercise.repScheme === "RPT" && setIndex === 0) {
-      applyRPT(newSets, current.weight, nextAssisted);
-    }
-
-    pushUp(newSets);
-  };
-
-  const handleRepsChange = (setIndex, raw) => {
-    const newSets = [...sets];
-    newSets[setIndex] = {
-      ...newSets[setIndex],
-      reps: toNumberOrZero(raw),
-    };
-    pushUp(newSets);
-  };
+  // handy: top set abs weight
+  const topSetAbs = useMemo(() => {
+    const first = sets?.[0]?.weight ?? 0;
+    return abs1(first);
+  }, [sets]);
 
   const handleNotesBlur = () => {
     onNotesChange?.(exercise, notes);
   };
 
-  const handleVideoUpdate = () => {
-    updateVideoLink(exercise.id, videoLink);
-    setShowVideoEdit(false);
+  const pushSetsUp = (nextSets) => {
+    setSets(nextSets);
+
+    // remove goalReps before sending upward (parent stores setsData only)
+    const setsData = nextSets.map((s) => ({
+      weight: toNum(s.weight, 0),
+      reps: clampInt(toNum(s.reps, 0), 0, 999),
+      completed: !!s.completed,
+    }));
+
+    onWeightChange?.(exercise, setsData);
   };
 
-  const suggestedSet1 = getSuggestedWeight(0);
-  const topSetAbs = abs1(sets[0]?.weight || 0);
+  const handleWeightChangeLocal = (index, raw) => {
+    const n = raw === "" ? 0 : toNum(raw, 0);
+
+    pushSetsUp(
+      sets.map((s, i) => {
+        if (i !== index) return s;
+        const assisted = !!s.assisted;
+        const signed = assisted ? -Math.abs(n) : Math.abs(n);
+        return { ...s, weight: signed };
+      })
+    );
+  };
+
+  const handleRepsChangeLocal = (index, raw) => {
+    const n = raw === "" ? 0 : clampInt(toNum(raw, 0), 0, 999);
+    pushSetsUp(sets.map((s, i) => (i === index ? { ...s, reps: n } : s)));
+  };
+
+  const handleToggleAssisted = (index) => {
+    pushSetsUp(
+      sets.map((s, i) => {
+        if (i !== index) return s;
+        if (s.completed) return s;
+
+        const nextAssisted = !s.assisted;
+        const abs = Math.abs(toNum(s.weight, 0));
+        const signed = nextAssisted ? -abs : abs;
+        return { ...s, assisted: nextAssisted, weight: signed };
+      })
+    );
+  };
+
+  const getSuggestedWeight = (idx) => {
+    // if lastWorkoutData exists, use it. otherwise blank.
+    if (!lastWorkoutData?.sets || !Array.isArray(lastWorkoutData.sets)) return null;
+    const prev = lastWorkoutData.sets[idx];
+    if (!prev) return null;
+    return toNum(prev.weight, 0);
+  };
+
+  const handleSetCompleteClick = (index) => {
+    const s = sets[index];
+    const canComplete = toNum(s.weight, 0) !== 0 && toNum(s.reps, 0) > 0;
+    if (!canComplete) return;
+
+    const next = sets.map((x, i) => (i === index ? { ...x, completed: !x.completed } : x));
+    pushSetsUp(next);
+
+    // call PR / level up hook when marking complete
+    if (!sets[index].completed) {
+      const updatedSet = {
+        weight: toNum(next[index].weight, 0),
+        reps: toNum(next[index].reps, 0),
+        completed: true,
+      };
+
+      // "level up" heuristic: reps >= goal
+      const levelUp = toNum(updatedSet.reps, 0) >= toNum(goalReps[index], 0);
+
+      onSetComplete?.(exercise, updatedSet, levelUp);
+
+      // optional rest timer
+      const rest = toNum(exercise?.restTime, 120);
+      if (rest > 0) onRestTimer?.(rest);
+    }
+  };
+
+  const handleVideoUpdate = () => {
+    try {
+      updateVideoLink(exercise.id, videoLink);
+      toast.success("Video link saved");
+    } catch (e) {
+      toast.error("Failed to save video link");
+    }
+  };
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
+    <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg">
       {/* Header */}
-      <div
-        className="p-4 cursor-pointer select-none"
+      <button
+        type="button"
         onClick={() => setExpanded((v) => !v)}
+        className="w-full text-left p-4 flex items-start justify-between gap-3"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <h3 className="text-lg font-bold text-foreground">{exercise.name}</h3>
-              {levelUp && (
-                <Badge className="bg-gold text-gold-foreground font-semibold animate-bounce-slow">
-                  Level Up! +5{weightUnit}
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2 text-sm">
-              <Badge variant="outline" className="text-primary border-primary/50">
-                {exercise.repScheme}
-              </Badge>
-              <span className="text-muted-foreground">
-                {completedSets}/{exercise.sets} sets
-              </span>
-              <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground">{exercise.restTime}s rest</span>
-            </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-foreground truncate">
+              {exercise.name}
+            </h3>
+            <Badge variant="secondary" className="text-xs">
+              {exercise.repScheme || "RPT"}
+            </Badge>
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {videoLink && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(videoLink, "_blank");
-                }}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <Video className="w-5 h-5 text-primary" />
-              </button>
-            )}
-            {expanded ? (
-              <ChevronUp className="w-5 h-5 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-muted-foreground" />
-            )}
+          <div className="text-xs text-muted-foreground mt-1">
+            {exercise.sets} sets • Rest {exercise.restTime || 120}s
           </div>
         </div>
-      </div>
+
+        <div className="pt-1">
+          {expanded ? (
+            <ChevronUp className="w-5 h-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-muted-foreground" />
+          )}
+        </div>
+      </button>
 
       {expanded && (
         <div className="px-4 pb-4 space-y-4 animate-fadeIn">
@@ -348,7 +359,7 @@ const ExerciseCard = ({
             {sets.map((set, index) => {
               const suggestedWeight = getSuggestedWeight(index);
               const absWeight = abs1(set.weight);
-              const canComplete = Number(set.weight) !== 0 && Number(set.reps) > 0;
+              const canComplete = toNum(set.weight, 0) !== 0 && toNum(set.reps, 0) > 0;
 
               return (
                 <div
@@ -359,12 +370,11 @@ const ExerciseCard = ({
                       : "bg-muted/30 border-border"
                   }`}
                 >
-                  {/* Make the row wrap on small screens to prevent overflow */}
                   <div className="flex items-center gap-3 flex-wrap">
                     {/* Set Number */}
                     <button
                       type="button"
-                      onClick={() => handleSetComplete(index)}
+                      onClick={() => handleSetCompleteClick(index)}
                       disabled={!canComplete}
                       className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center font-bold text-xl transition-all duration-200 ${
                         set.completed
@@ -382,7 +392,6 @@ const ExerciseCard = ({
                           Weight ({weightUnit})
                         </label>
 
-                        {/* Toggle pill */}
                         <div className="flex rounded-full border border-border bg-background/40 p-0.5">
                           <button
                             type="button"
@@ -413,7 +422,7 @@ const ExerciseCard = ({
                         type="text"
                         inputMode="decimal"
                         value={absWeight === 0 ? "" : String(absWeight)}
-                        onChange={(e) => handleWeightChange(index, e.target.value)}
+                        onChange={(e) => handleWeightChangeLocal(index, e.target.value)}
                         placeholder={
                           suggestedWeight != null ? String(Math.abs(Number(suggestedWeight))) : "0"
                         }
@@ -430,19 +439,18 @@ const ExerciseCard = ({
                       )}
                     </div>
 
-                    {/* Reps (fixed overflow) */}
+                    {/* Reps */}
                     <div className="flex-1 min-w-[140px]">
                       <label className="text-xs text-muted-foreground block mb-1">
                         Reps
                       </label>
 
-                      {/* allow wrapping so '/ goal' never spills outside card */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <Input
                           type="text"
                           inputMode="numeric"
-                          value={set.reps === 0 ? "" : String(set.reps)}
-                          onChange={(e) => handleRepsChange(index, e.target.value)}
+                          value={toNum(set.reps, 0) === 0 ? "" : String(set.reps)}
+                          onChange={(e) => handleRepsChangeLocal(index, e.target.value)}
                           placeholder={String(set.goalReps)}
                           className="h-12 text-center text-lg font-semibold w-20"
                           disabled={set.completed}
@@ -490,9 +498,11 @@ const ExerciseCard = ({
           </div>
 
           {/* Exercise Description */}
-          <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-            {exercise.notes}
-          </div>
+          {!!exercise.notes && (
+            <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
+              {exercise.notes}
+            </div>
+          )}
         </div>
       )}
 
