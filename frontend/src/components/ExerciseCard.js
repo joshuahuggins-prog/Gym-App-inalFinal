@@ -1,30 +1,20 @@
-// frontend/src/components/ExerciseCard.js
+// src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Timer,
-  Award,
-  Video,
-  Shuffle,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Timer, Video, Shuffle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
-import {
-  getProgressionSettings,
-  getVideoLinks,
-  getPersonalRecords,
-} from "../utils/storage";
+import { getVideoLinks, getPersonalRecords } from "../utils/storage";
+import { EXERCISE_ALTERNATIVES } from "../data/workoutData";
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
 const normalizeGoalReps = (goalReps, count) => {
   const base = Array.isArray(goalReps) ? goalReps : [];
   const out = [];
-  for (let i = 0; i < count; i++) out.push(base[i] ?? 8);
+  for (let i = 0; i < count; i++) out.push(base[i] ?? base[0] ?? 8);
   return out;
 };
 
@@ -34,7 +24,6 @@ const normalizeSets = (setsData, count) => {
   for (let i = 0; i < count; i++) {
     const s = base[i] || {};
     out.push({
-      // keep blank as blank during editing
       weight: s.weight ?? "",
       reps: s.reps ?? "",
       completed: !!s.completed,
@@ -50,9 +39,9 @@ const ExerciseCard = ({
   onWeightChange,
   onNotesChange,
   onRestTimer,
-  onAlternateExercise, // ✅ optional hook (won’t break if not passed)
 }) => {
   const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 12);
+
   const goalReps = useMemo(
     () => normalizeGoalReps(exercise?.goalReps, setsCount),
     [exercise?.goalReps, setsCount]
@@ -76,7 +65,7 @@ const ExerciseCard = ({
     return prs[exercise?.id] || null;
   }, [exercise?.id]);
 
-  // derive best from this workout’s saved sets (for the label line)
+  // best from this workout’s sets (for label line)
   const bestFromWorkout = useMemo(() => {
     const nums = (sets || [])
       .map((s) => (s.weight === "" ? null : Number(s.weight)))
@@ -85,9 +74,11 @@ const ExerciseCard = ({
     return Math.max(...nums.map((n) => Math.abs(n)));
   }, [sets]);
 
-  // hydrate when parent provides updated exercise object
   useEffect(() => {
-    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(exercise?.setsData || [])}__${JSON.stringify(exercise?.goalReps || [])}`;
+    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(
+      exercise?.setsData || []
+    )}__${JSON.stringify(exercise?.goalReps || [])}`;
+
     if (key === hydrateKey.current) return;
     hydrateKey.current = key;
 
@@ -97,13 +88,16 @@ const ExerciseCard = ({
     const links = getVideoLinks();
     setVideoLink(links?.[exercise?.id] || "");
 
-    setMode((exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted");
+    setMode(
+      (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
+        ? "assisted"
+        : "weighted"
+    );
   }, [exercise, setsCount]);
 
   const pushUp = (nextSets) => {
     setSets(nextSets);
 
-    // keep blanks as blanks, don’t coerce to 0
     onWeightChange?.(
       exercise,
       nextSets.map((s) => ({
@@ -118,7 +112,6 @@ const ExerciseCard = ({
     if (nextMode === mode) return;
     setMode(nextMode);
 
-    // Convert existing weights while preserving blanks
     const converted = sets.map((s) => {
       if (s.weight === "") return s;
       const v = Math.abs(Number(s.weight));
@@ -139,6 +132,36 @@ const ExerciseCard = ({
 
   const showExerciseInfoNotes = !!(exercise?.notes && String(exercise.notes).trim().length > 0);
 
+  const showAlternativesToast = () => {
+    const id = exercise?.id;
+    const alts = id ? EXERCISE_ALTERNATIVES?.[id] : null;
+
+    if (!alts || !Array.isArray(alts) || alts.length === 0) {
+      toast.message("Alternatives", {
+        description: "No alternatives saved for this exercise.",
+      });
+      return;
+    }
+
+    // sonner description can be a React node, so we can render a compact list
+    toast.message("Alternatives", {
+      description: (
+        <div className="mt-1 space-y-1">
+          {alts.slice(0, 8).map((a, i) => (
+            <div key={i} className="text-sm">
+              • {a}
+            </div>
+          ))}
+          {alts.length > 8 ? (
+            <div className="text-xs text-muted-foreground mt-1">
+              +{alts.length - 8} more…
+            </div>
+          ) : null}
+        </div>
+      ),
+    });
+  };
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       {/* Header */}
@@ -153,7 +176,7 @@ const ExerciseCard = ({
               {exercise?.name || "Exercise"}
             </h3>
 
-            {/* Row 2: compact stats */}
+            {/* Row 2 */}
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
                 {completedCount}/{setsCount} sets
@@ -172,7 +195,7 @@ const ExerciseCard = ({
               )}
             </div>
 
-            {/* Row 3: toggle ALWAYS on its own line */}
+            {/* Row 3 toggle */}
             <div
               className="mt-2 inline-flex border border-border rounded-md overflow-hidden"
               onClick={(e) => e.stopPropagation()}
@@ -218,7 +241,11 @@ const ExerciseCard = ({
               </Button>
             ) : null}
 
-            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            {expanded ? (
+              <ChevronUp className="w-5 h-5" />
+            ) : (
+              <ChevronDown className="w-5 h-5" />
+            )}
           </div>
         </div>
       </button>
@@ -226,7 +253,6 @@ const ExerciseCard = ({
       {/* Body */}
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
-          {/* Label ABOVE sets */}
           {maxLabel && (
             <div className="text-xs text-muted-foreground">
               <span
@@ -272,7 +298,6 @@ const ExerciseCard = ({
                   }}
                 />
 
-                {/* ✅ Target reps as GREY placeholder (not a value) */}
                 <Input
                   type="number"
                   value={s.reps}
@@ -312,7 +337,7 @@ const ExerciseCard = ({
             ))}
           </div>
 
-          {/* User notes (per workout) */}
+          {/* Workout notes */}
           <Textarea
             value={notes}
             placeholder="Workout notes…"
@@ -321,15 +346,13 @@ const ExerciseCard = ({
             onBlur={() => onNotesChange?.(exercise, notes)}
           />
 
-          {/* ✅ Exercise info notes (from library/programme) */}
+          {/* Exercise info notes */}
           {showExerciseInfoNotes && (
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
               <div className="text-[11px] font-semibold text-foreground mb-1">
                 Exercise notes
               </div>
-              <div className="whitespace-pre-wrap">
-                {String(exercise.notes).trim()}
-              </div>
+              <div className="whitespace-pre-wrap">{String(exercise.notes).trim()}</div>
             </div>
           )}
 
@@ -349,34 +372,15 @@ const ExerciseCard = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                const p = getProgressionSettings();
-                const inc = p.exerciseSpecific?.[exercise.id];
-                toast.message("Progression", {
-                  description: inc ? `Exercise increment: ${inc}` : "Global progression applies",
-                });
-              }}
-            >
-              <Award className="w-4 h-4 mr-1" />
-              Progression
-            </Button>
-
-            {/* ✅ Alternative exercise button (optional) */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (onAlternateExercise) onAlternateExercise(exercise);
-                else toast.message("Alternative exercise", { description: "Hook not wired yet." });
-              }}
-              title="Alternative exercise"
+              onClick={showAlternativesToast}
+              title="Show alternatives"
             >
               <Shuffle className="w-4 h-4 mr-1" />
-              Alternative
+              Alternatives
             </Button>
           </div>
 
-          {/* Last workout (if available) */}
+          {/* Last workout */}
           {lastWorkoutData ? (
             <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
               <div className="font-semibold text-foreground mb-1">Last time</div>
