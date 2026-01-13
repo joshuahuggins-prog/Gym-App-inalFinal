@@ -1,99 +1,98 @@
-import React, { useEffect, useState } from 'react';
-import { Trophy, Sparkles, X } from 'lucide-react';
-import { Button } from '../components/ui/button';
+import React, { useEffect, useMemo } from "react";
+import { Trophy, X } from "lucide-react";
+import { Button } from "../components/ui/button";
+
+const COLORS = ["hsl(var(--primary))", "hsl(var(--gold))", "hsl(var(--success))"];
 
 const PRCelebration = ({ exercise, newWeight, oldWeight, onClose }) => {
-  const [confetti, setConfetti] = useState([]);
-
   useEffect(() => {
-    // Generate confetti particles
-    const particles = Array.from({ length: 50 }, (_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      delay: Math.random() * 0.5,
-      duration: 2 + Math.random() * 1,
-      color: ['hsl(var(--primary))', 'hsl(var(--gold))', 'hsl(var(--success))'][Math.floor(Math.random() * 3)]
-    }));
-    setConfetti(particles);
-
-    // Auto close after 5 seconds
-    const timer = setTimeout(() => {
-      onClose?.();
-    }, 5000);
-
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => onClose?.(), 3500);
+    return () => clearTimeout(t);
   }, [onClose]);
 
+  // No state needed: just render a small set of particles
+  const confetti = useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, i) => ({
+        id: i,
+        left: Math.random() * 100,
+        delay: Math.random() * 0.35,
+        duration: 1.6 + Math.random() * 0.8,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        size: 4 + Math.floor(Math.random() * 4),
+      })),
+    []
+  );
+
+  const showOld = oldWeight != null && oldWeight !== "" && Number(oldWeight) !== 0;
+  const diff = showOld ? Number(newWeight) - Number(oldWeight) : null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-background/90 backdrop-blur-sm animate-fadeIn">
       {/* Confetti */}
-      {confetti.map((particle) => (
+      {confetti.map((p) => (
         <div
-          key={particle.id}
-          className="absolute w-2 h-2 rounded-full animate-confetti"
+          key={p.id}
+          className="absolute rounded-full animate-confetti"
           style={{
-            left: `${particle.left}%`,
-            top: '-20px',
-            backgroundColor: particle.color,
-            animationDelay: `${particle.delay}s`,
-            animationDuration: `${particle.duration}s`
+            left: `${p.left}%`,
+            top: "-16px",
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            backgroundColor: p.color,
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`,
           }}
         />
       ))}
 
-      {/* Content */}
-      <div className="relative bg-card border-2 border-gold rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4 text-center space-y-6 glow-gold">
+      <div className="relative w-[92vw] max-w-sm rounded-2xl border border-gold/40 bg-card p-4 shadow-2xl glow-gold">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+          className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+          aria-label="Close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
-        <div className="inline-block p-4 bg-gold/10 rounded-full animate-bounce-slow">
-          <Trophy className="w-16 h-16 text-gold" />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-center gap-2">
-            <Sparkles className="w-5 h-5 text-gold" />
-            <h2 className="text-2xl font-bold text-gradient-gold">
-              New Personal Record!
-            </h2>
-            <Sparkles className="w-5 h-5 text-gold" />
+        <div className="flex items-center gap-3">
+          <div className="grid place-items-center w-10 h-10 rounded-full bg-gold/10">
+            <Trophy className="w-5 h-5 text-gold" />
           </div>
-          <p className="text-lg text-foreground font-semibold">
-            {exercise}
-          </p>
-        </div>
 
-        <div className="space-y-3 py-4">
-          {oldWeight && (
-            <div className="text-sm text-muted-foreground">
-              Previous Best:
-              <span className="block text-lg font-semibold text-foreground mt-1">
-                {oldWeight} lbs
-              </span>
-            </div>
-          )}
-          
-          <div className="text-3xl font-bold text-gradient-gold">
-            {newWeight} lbs
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-gold">New PR</div>
+            <div className="truncate text-base font-bold text-foreground">{exercise}</div>
           </div>
-          
-          {oldWeight && (
-            <div className="text-success font-semibold">
-              +{(newWeight - oldWeight).toFixed(1)} lbs increase! 💪
+
+          <div className="text-right">
+            <div className="text-xs text-muted-foreground">Now</div>
+            <div className="text-lg font-extrabold text-gradient-gold">
+              {newWeight} lbs
             </div>
-          )}
+          </div>
         </div>
 
-        <div className="text-sm text-muted-foreground p-4 bg-gold/5 rounded-lg border border-gold/20">
-          Keep crushing it! Consistency is the key to greatness.
-        </div>
+        {showOld && (
+          <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-3">
+            <div>
+              <div className="text-xs text-muted-foreground">Prev</div>
+              <div className="font-semibold text-foreground">{oldWeight} lbs</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-muted-foreground">Increase</div>
+              <div className="font-semibold text-success">
+                +{diff.toFixed(1)} lbs 💪
+              </div>
+            </div>
+          </div>
+        )}
 
-        <Button onClick={onClose} className="w-full bg-gold hover:bg-gold/90 text-gold-foreground font-semibold">
-          Awesome! Let's go! 🔥
+        <Button
+          onClick={onClose}
+          className="mt-3 w-full bg-gold hover:bg-gold/90 text-gold-foreground font-semibold"
+        >
+          Nice! 🔥
         </Button>
       </div>
     </div>
