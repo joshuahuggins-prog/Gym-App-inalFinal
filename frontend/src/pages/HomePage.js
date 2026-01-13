@@ -14,7 +14,7 @@ import {
   updatePersonalRecord,
   getPersonalRecords,
   getProgrammes,
-  getExercises, // ✅ NEW (fallback source)
+  getVideoLinks,
   getProgressionSettings,
   peekNextWorkoutTypeFromPattern,
   advanceWorkoutPatternIndex,
@@ -22,7 +22,7 @@ import {
   saveWorkoutDraft,
   clearWorkoutDraft,
   isWorkoutDraftForToday,
-  setDraftWorkoutType, // assumes you added this helper in storage.js
+  setDraftWorkoutType, // ✅ keeps today's workout pinned when you manually switch
 } from "../utils/storage";
 
 import { useSettings } from "../contexts/SettingsContext";
@@ -36,13 +36,18 @@ const HomePage = ({ onDataChange, onSaved }) => {
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
 
+  // Draft autosave debounce
   const draftSaveTimerRef = useRef(null);
 
+  // UI state for floating buttons
   const [isDirty, setIsDirty] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [finishedSaved, setFinishedSaved] = useState(false);
 
+  // Prevent "dirty" being set during initial hydration
   const didHydrateRef = useRef(false);
+
+  // avoid eslint-disable rule names entirely
   const loadRef = useRef(null);
 
   // ✅ manual switcher
@@ -53,90 +58,69 @@ const HomePage = ({ onDataChange, onSaved }) => {
     return programmes.filter((p) => Array.isArray(p.exercises) && p.exercises.length > 0);
   };
 
-  // ✅ IMPORTANT: always resolve exercises even if programme.exercises is empty
-  const resolveWorkoutExercises = (programme, workoutType) => {
-    const progExercises = Array.isArray(programme?.exercises) ? programme.exercises : [];
-    if (progExercises.length > 0) return progExercises;
+  // Some older code used name-based keys for videos; support both.
+  const buildVideoUrl = (ex, links) => {
+    const byId = links?.[ex?.id];
+    if (byId) return byId;
 
-    // fallback: derive from catalogue assignments
-    const catalogue = getExercises() || [];
-    const t = String(workoutType || "").toUpperCase();
+    const byNameKey = String(ex?.name || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "_");
 
-    const derived = catalogue
-      .filter((ex) => {
-        const assigned = Array.isArray(ex.assignedTo) ? ex.assignedTo : [];
-        return assigned.map((x) => String(x || "").toUpperCase()).includes(t) && !ex.hidden;
-      })
-      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-
-    return derived;
+    return links?.[byNameKey] || "";
   };
 
   const loadTodaysWorkout = () => {
     const workouts = getWorkouts();
-    const programmes = getProgrammes() || [];
+    const usableProgrammes = getUsableProgrammes();
 
     const draft = getWorkoutDraft();
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
 
-    // Programmes with 1+ exercises
-    const usableProgrammes = programmes.filter(
-      (p) => Array.isArray(p.exercises) && p.exercises.length > 0
-    );
-
-    if (usableProgrammes.length === 0 && programmes.length === 0) {
-      toast.error("No programmes found. Please create a programme first.");
+    if (usableProgrammes.length === 0) {
+      toast.error("No usable programmes found. Add at least 1 exercise to a programme.");
       return;
     }
 
     const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
 
-    const pickedProgramme =
-      programmes.find(
+    const workout =
+      usableProgrammes.find(
         (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
-      ) ||
-      usableProgrammes[0] ||
-      programmes[0];
+      ) || usableProgrammes[0];
 
-    if (!pickedProgramme) {
+    if (!workout) {
       toast.error("No programmes found. Please create a programme first.");
       return;
     }
 
     const lastSameWorkout = workouts.find(
-      (w) => String(w.type).toUpperCase() === String(pickedProgramme.type).toUpperCase()
+      (w) => String(w.type).toUpperCase() === String(workout.type).toUpperCase()
     );
 
-    const exercisesForThisWorkout = resolveWorkoutExercises(pickedProgramme, pickedProgramme.type);
+    const videoLinks = getVideoLinks();
 
-    setCurrentWorkout(pickedProgramme);
-    setManualWorkoutType(pickedProgramme.type);
-
-    if (!exercisesForThisWorkout || exercisesForThisWorkout.length === 0) {
-      setWorkoutData([]);
-      toast.error("This workout has no exercises yet.", {
-        description: "Assign exercises to this programme in the Exercises page.",
-      });
-      return;
-    }
+    setCurrentWorkout(workout);
+    setManualWorkoutType(workout.type);
 
     // Restore draft if today + same type
     if (
       hasTodaysDraft &&
-      String(draft.workoutType).toUpperCase() === String(pickedProgramme.type).toUpperCase()
+      String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
     ) {
       const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
 
       setWorkoutData(
-        exercisesForThisWorkout.map((ex) => {
-          const lastExerciseData = lastSameWorkout?.exercises?.find(
+        workout.exercises.map((ex) => {
+          const lastExerciseData = lastSameWorkout?.exercises.find(
             (e) => e.id === ex.id || e.name === ex.name
           );
-
           const draftEx = draftById.get(ex.id);
 
           return {
             ...ex,
+            videoUrl: buildVideoUrl(ex, videoLinks),
             userNotes: draftEx?.userNotes || "",
             setsData: draftEx?.setsData || [],
             lastWorkoutData: lastExerciseData || null,
@@ -156,12 +140,13 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     // No draft - start fresh
     setWorkoutData(
-      exercisesForThisWorkout.map((ex) => {
-        const lastExerciseData = lastSameWorkout?.exercises?.find(
+      workout.exercises.map((ex) => {
+        const lastExerciseData = lastSameWorkout?.exercises.find(
           (e) => e.id === ex.id || e.name === ex.name
         );
         return {
           ...ex,
+          videoUrl: buildVideoUrl(ex, videoLinks),
           userNotes: "",
           setsData: [],
           lastWorkoutData: lastExerciseData || null,
@@ -202,6 +187,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setFinishedSaved(false);
   }, [workoutData, currentWorkout?.type]);
 
+  // Auto-save workout draft as the user enters data (protects against refresh)
+  // IMPORTANT: this MUST NOT change button UI state.
   useEffect(() => {
     if (!currentWorkout) return;
 
@@ -267,6 +254,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       });
     }
 
+    // PR check (raw number compare)
     const prs = getPersonalRecords();
     const currentPR = prs?.[exercise.id];
 
@@ -287,7 +275,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
   };
 
   const handleNotesChange = (exercise, notes) => {
-    setWorkoutData((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex)));
+    setWorkoutData((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+    );
   };
 
   const buildWorkoutPayload = () => ({
@@ -350,6 +340,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     loadRef.current?.();
   };
 
+  // ✅ manual switch (does NOT advance pattern)
   const handleManualSwitchWorkout = (nextType) => {
     if (!nextType) return;
 
@@ -360,17 +351,20 @@ const HomePage = ({ onDataChange, onSaved }) => {
       if (!ok) return;
     }
 
-    const programmes = getProgrammes() || [];
+    const usableProgrammes = getUsableProgrammes();
     const picked =
-      programmes.find((p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()) ||
-      null;
+      usableProgrammes.find(
+        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
+      ) || null;
 
     if (!picked) {
       toast.error("That workout type isn't available yet.");
       return;
     }
 
+    // ✅ lock today to chosen workout via draft key
     setDraftWorkoutType(picked.type);
+
     loadRef.current?.();
 
     toast.message("Switched workout", {
@@ -378,6 +372,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     });
   };
 
+  // ✅ return to the pattern’s next workout (does NOT advance)
   const handleReturnToSequence = () => {
     const next = peekNextWorkoutTypeFromPattern();
     if (!next) {
@@ -429,7 +424,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gradient-primary">Gym Strength Programme</h1>
+              <h1 className="text-3xl font-bold text-gradient-primary">
+                Gym Strength Programme
+              </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
@@ -438,7 +435,12 @@ const HomePage = ({ onDataChange, onSaved }) => {
                 })}
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={toggleWeightUnit} className="font-semibold">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggleWeightUnit}
+              className="font-semibold"
+            >
               {weightUnit}
             </Button>
           </div>
@@ -474,7 +476,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                   {currentWorkout.focus}
                 </Badge>
 
-                {/* Manual switcher */}
+                {/* ✅ Manual switcher */}
                 <div className="mt-3 space-y-2">
                   <div className="text-xs text-muted-foreground">
                     Next in sequence:{" "}
@@ -491,7 +493,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                           onChange={(e) => setManualWorkoutType(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
                         >
-                          {(getProgrammes() || []).map((p) => (
+                          {getUsableProgrammes().map((p) => (
                             <option key={p.type} value={p.type}>
                               {p.name} ({p.type})
                             </option>
@@ -517,7 +519,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       onClick={handleReturnToSequence}
                       disabled={
                         !nextInSequence ||
-                        String(nextInSequence).toUpperCase() === String(currentWorkout.type).toUpperCase()
+                        String(nextInSequence).toUpperCase() ===
+                          String(currentWorkout.type).toUpperCase()
                       }
                       className="shrink-0"
                     >
@@ -551,6 +554,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         ))}
       </div>
 
+      {/* Floating Save Buttons */}
       <WorkoutActionBar
         isDirty={isDirty}
         isDraftSaved={draftSaved}
@@ -560,6 +564,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         disableFinish={!currentWorkout}
       />
 
+      {/* Rest Timer */}
       {restTimer && (
         <RestTimer
           duration={restTimer}
@@ -571,6 +576,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
         />
       )}
 
+      {/* PR Celebration */}
       {prCelebration && (
         <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />
       )}
