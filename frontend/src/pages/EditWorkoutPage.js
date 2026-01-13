@@ -7,17 +7,9 @@ import RestTimer from "../components/RestTimer";
 import PRCelebration from "../components/PRCelebration";
 
 import { toast } from "sonner";
-import {
-  getWorkouts,
-  updateWorkout,
-  getProgrammes,
-  getExercises,
-} from "../utils/storage";
+import { getWorkouts, updateWorkout, getProgrammes, getExercises } from "../utils/storage";
 
-import {
-  buildWorkoutExerciseRows,
-  serializeWorkoutExercisesFromRows,
-} from "../utils/workoutBuilder";
+import { buildWorkoutExerciseRows, serializeWorkoutExercisesFromRows } from "../utils/workoutBuilder";
 
 const formatDateLong = (iso) => {
   try {
@@ -37,7 +29,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   const [originalWorkout, setOriginalWorkout] = useState(null);
   const [rows, setRows] = useState([]);
   const [restTimer, setRestTimer] = useState(null);
-  const [prCelebration, setPrCelebration] = useState(null); // optional, keep if ExerciseCard triggers it
+  const [prCelebration, setPrCelebration] = useState(null);
 
   const [isDirty, setIsDirty] = useState(false);
   const didHydrateRef = useRef(false);
@@ -53,23 +45,25 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
     if (!w) {
       toast.error("Workout not found");
+      setRows([]);
       return;
     }
 
-    const programmes = getProgrammes();
+    const programmes = getProgrammes() || [];
     const programme =
       programmes.find(
-        (p) => String(p?.type || "").toUpperCase() === String(w?.type || "").toUpperCase()
+        (p) =>
+          String(p?.type || "").toUpperCase() ===
+          String(w?.type || "").toUpperCase()
       ) || null;
 
-    const catalogue = getExercises();
+    const catalogue = getExercises() || [];
 
+    // ✅ IMPORTANT: call builder with correct argument names
     const built = buildWorkoutExerciseRows({
-      workoutType: w.type,
+      workout: w,
       programme,
       catalogueExercises: catalogue,
-      savedWorkout: w,
-      lastSameWorkout: null,
     });
 
     setRows(built);
@@ -78,10 +72,12 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   // Dirty tracking (ignore initial hydration)
   useEffect(() => {
     if (!originalWorkout) return;
+
     if (!didHydrateRef.current) {
       didHydrateRef.current = true;
       return;
     }
+
     setIsDirty(true);
   }, [rows, originalWorkout]);
 
@@ -110,7 +106,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     const nextExercises = serializeWorkoutExercisesFromRows(rows);
 
     const ok = updateWorkout(originalWorkout.id, {
-      // keep identity + date
       ...originalWorkout,
       exercises: nextExercises,
     });
@@ -208,12 +203,18 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             key={exercise.id || `${exercise.name}-${idx}`}
             className="rounded-2xl border border-zinc-800 bg-zinc-900/30"
           >
-            {/* Reuse existing Home UI card */}
             <ExerciseCard
               exercise={exercise}
               lastWorkoutData={exercise.lastWorkoutData}
-              onSetComplete={() => {
-                // Optional: if your ExerciseCard calls this, keep it harmless
+              onSetComplete={(ex, set, levelUp) => {
+                // optional; harmless
+                if (levelUp) {
+                  setPrCelebration({
+                    exercise: ex?.name || "Exercise",
+                    newWeight: set?.weight,
+                    oldWeight: null,
+                  });
+                }
               }}
               onWeightChange={handleWeightChange}
               onNotesChange={handleNotesChange}
