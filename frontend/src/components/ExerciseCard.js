@@ -18,7 +18,8 @@ const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 const normalizeGoalReps = (goalReps, setsCount) => {
   const arr = Array.isArray(goalReps) ? goalReps.map((x) => toNum(x, 8)) : [];
   const safe = arr.length ? arr : [8];
-  if (safe.length < setsCount) return [...safe, ...Array.from({ length: setsCount - safe.length }, () => 8)];
+  if (safe.length < setsCount)
+    return [...safe, ...Array.from({ length: setsCount - safe.length }, () => 8)];
   if (safe.length > setsCount) return safe.slice(0, setsCount);
   return safe;
 };
@@ -26,8 +27,8 @@ const normalizeGoalReps = (goalReps, setsCount) => {
 const normalizeSetsData = (setsData, setsCount) => {
   const arr = Array.isArray(setsData) ? setsData : [];
   const base = arr.map((s) => ({
-    weight: toNum(s?.weight, 0),
-    reps: toNum(s?.reps, 0),
+    weight: s?.weight === "" ? "" : toNum(s?.weight, 0),
+    reps: s?.reps === "" ? "" : toNum(s?.reps, 0),
     completed: !!s?.completed,
   }));
 
@@ -51,6 +52,8 @@ const abs1 = (n) => {
   return Math.abs(x);
 };
 
+const normalize = (s) => String(s || "").trim().toLowerCase();
+
 const ExerciseCard = ({
   exercise,
   lastWorkoutData,
@@ -64,34 +67,43 @@ const ExerciseCard = ({
   const [videoLink, setVideoLink] = useState("");
   const [notes, setNotes] = useState("");
 
-  // ✅ IMPORTANT: hydrate from exercise.setsData
-  const [sets, setSets] = useState(() => {
-    const setsCount = clampInt(toNum(exercise?.sets, 3), 1, 12);
-    const goalReps = normalizeGoalReps(exercise?.goalReps, setsCount);
-    const base = normalizeSetsData(exercise?.setsData, setsCount);
+  const setsCount = clampInt(toNum(exercise?.sets, 3), 1, 12);
 
+  const goalReps = useMemo(
+    () => normalizeGoalReps(exercise?.goalReps, setsCount),
+    [exercise?.goalReps, setsCount]
+  );
+
+  // ✅ hydrate from exercise.setsData
+  const [sets, setSets] = useState(() => {
+    const base = normalizeSetsData(exercise?.setsData, setsCount);
     return base.map((s, idx) => ({
       ...s,
       goalReps: goalReps[idx] ?? 8,
     }));
   });
 
-  const lastHydratedKeyRef = useRef("");
+  // ✅ Weighted/Assisted mode
+  // - assisted => store weights as NEGATIVE, display as absolute
+  const inferModeFromSets = (setsArr) => {
+    const anyNeg = (setsArr || []).some((s) => toNum(s?.weight, 0) < 0);
+    return anyNeg ? "assisted" : "weighted";
+  };
 
-  const setsCount = clampInt(toNum(exercise?.sets, 3), 1, 12);
-  const goalReps = useMemo(
-    () => normalizeGoalReps(exercise?.goalReps, setsCount),
-    [exercise?.goalReps, setsCount]
-  );
+  const [weightMode, setWeightMode] = useState(() => inferModeFromSets(exercise?.setsData));
+
+  const lastHydratedKeyRef = useRef("");
 
   // hydrate video + notes + sets when exercise changes OR when parent updates setsData
   useEffect(() => {
     const links = getVideoLinks();
     setVideoLink(links?.[exercise?.id] || "");
-
     setNotes(exercise?.userNotes || "");
 
-    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(exercise?.setsData || [])}__${JSON.stringify(goalReps)}`;
+    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(
+      exercise?.setsData || []
+    )}__${JSON.stringify(goalReps)}`;
+
     if (key === lastHydratedKeyRef.current) return;
     lastHydratedKeyRef.current = key;
 
@@ -103,6 +115,9 @@ const ExerciseCard = ({
         goalReps: goalReps[idx] ?? 8,
       }))
     );
+
+    // ✅ also re-infer mode if incoming data changed sign pattern
+    setWeightMode(inferModeFromSets(base));
   }, [exercise?.id, setsCount, exercise?.setsData, goalReps]);
 
   // handy: top set abs weight
@@ -110,6 +125,11 @@ const ExerciseCard = ({
     const first = sets?.[0]?.weight ?? 0;
     return abs1(first);
   }, [sets]);
+
+  const completedCount = useMemo(
+    () => (sets || []).filter((s) => s.completed).length,
+    [sets]
+  );
 
   const handleNotesBlur = () => {
     onNotesChange?.(exercise, notes);
@@ -120,12 +140,25 @@ const ExerciseCard = ({
 
     // remove goalReps before sending upward (parent stores setsData only)
     const setsData = nextSets.map((s) => ({
-      weight: toNum(s.weight, 0),
-      reps: toNum(s.reps, 0),
+      weight: s.weight === "" ? 0 : toNum(s.weight, 0),
+      reps: s.reps === "" ? 0 : toNum(s.reps, 0),
       completed: !!s.completed,
     }));
 
     onWeightChange?.(exercise, setsData);
+  };
+
+  const toSignedWeight = (value, mode) => {
+    if (value === "") return "";
+    const n = toNum(value, 0);
+    const a = Math.abs(n);
+    return mode === "assisted" ? -a : a;
+  };
+
+  const displayWeight = (storedWeight, mode) => {
+    if (storedWeight === "") return "";
+    const n = toNum(storedWeight, 0);
+    return mode === "assisted" ? Math.abs(n) : n;
   };
 
   const toggleComplete = (idx) => {
@@ -135,18 +168,27 @@ const ExerciseCard = ({
     pushSetsUp(next);
 
     const set = next[idx];
-    const levelUp = false; // keep your current behavior
+    const levelUp = false;
     onSetComplete?.(exercise, set, levelUp);
   };
 
   const updateField = (idx, field, value) => {
-    const next = sets.map((s, i) =>
-      i === idx ? { ...s, [field]: value } : s
-    );
+    const next = sets.map((s, i) => {
+      if (i !== idx) return s;
+
+      if (field === "weight") {
+        // store signed depending on mode
+        if (value === "") return { ...s, weight: "" };
+        return { ...s, weight: toSignedWeight(value, weightMode) };
+      }
+
+      // reps (keep as user input; pushSetsUp converts to number)
+      if (value === "") return { ...s, [field]: "" };
+      return { ...s, [field]: value };
+    });
+
     pushSetsUp(next);
   };
-
-  const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
 
   const openVideo = (e) => {
     e.stopPropagation();
@@ -172,6 +214,22 @@ const ExerciseCard = ({
     });
   };
 
+  const handleToggleMode = (nextMode) => {
+    if (nextMode === weightMode) return;
+
+    setWeightMode(nextMode);
+
+    // convert all current weights to match chosen mode sign
+    const converted = sets.map((s) => {
+      if (s.weight === "") return s;
+      const n = toNum(s.weight, 0);
+      const a = Math.abs(n);
+      return { ...s, weight: nextMode === "assisted" ? -a : a };
+    });
+
+    pushSetsUp(converted);
+  };
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg">
       {/* Header */}
@@ -186,10 +244,45 @@ const ExerciseCard = ({
               {exercise?.name || "Exercise"}
             </h3>
 
-            <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{completedCount}/{setsCount} sets</span>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                {completedCount}/{setsCount} sets
+              </span>
               <span>•</span>
               <span>Top: {topSetAbs}</span>
+
+              {/* ✅ Weighted / Assisted toggle */}
+              <span>•</span>
+              <div
+                className="inline-flex rounded-lg border border-border bg-muted/30 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleToggleMode("weighted")}
+                  className={`px-2 py-1 text-[11px] font-semibold transition ${
+                    weightMode === "weighted"
+                      ? "bg-primary/20 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Weighted (store positive weight)"
+                >
+                  Weighted
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleMode("assisted")}
+                  className={`px-2 py-1 text-[11px] font-semibold transition ${
+                    weightMode === "assisted"
+                      ? "bg-primary/20 text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Assisted (stores negative weight)"
+                >
+                  Assisted
+                </button>
+              </div>
+
               {exercise?.repScheme ? (
                 <>
                   <span>•</span>
@@ -201,9 +294,8 @@ const ExerciseCard = ({
             </div>
           </div>
 
-          {/* ✅ Right-side icons (always visible even when collapsed) */}
+          {/* Right-side icons */}
           <div className="flex items-center gap-1 shrink-0">
-            {/* ✅ VIDEO ICON (this is what you’re missing) */}
             {videoLink ? (
               <Button
                 variant="ghost"
@@ -239,15 +331,27 @@ const ExerciseCard = ({
 
                 <Input
                   type="number"
-                  value={set.weight ?? ""}
-                  onChange={(e) => updateField(idx, "weight", e.target.value === "" ? "" : Number(e.target.value))}
-                  placeholder="Weight"
+                  value={displayWeight(set.weight, weightMode)}
+                  onChange={(e) =>
+                    updateField(
+                      idx,
+                      "weight",
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
+                  placeholder={weightMode === "assisted" ? "Assist" : "Weight"}
                 />
 
                 <Input
                   type="number"
                   value={set.reps ?? ""}
-                  onChange={(e) => updateField(idx, "reps", e.target.value === "" ? "" : Number(e.target.value))}
+                  onChange={(e) =>
+                    updateField(
+                      idx,
+                      "reps",
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
                   placeholder={`Reps (goal ${goalReps[idx] ?? 8})`}
                 />
 
@@ -294,7 +398,14 @@ const ExerciseCard = ({
               </Button>
             ) : null}
 
-            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleSuggestIncrement(); }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSuggestIncrement();
+              }}
+            >
               <Award className="w-4 h-4 mr-2" />
               Progression
             </Button>
