@@ -1,8 +1,16 @@
 // src/pages/HomePage.js
-import React, { useEffect, useRef, useState } from "react";
-import { Calendar, Flame, RotateCcw, ChevronDown } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Calendar, Flame, RotateCcw, ChevronDown, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+
 import ExerciseCard from "../components/ExerciseCard";
 import RestTimer from "../components/RestTimer";
 import PRCelebration from "../components/PRCelebration";
@@ -14,7 +22,6 @@ import {
   updatePersonalRecord,
   getPersonalRecords,
   getProgrammes,
-  getVideoLinks,
   getProgressionSettings,
   peekNextWorkoutTypeFromPattern,
   advanceWorkoutPatternIndex,
@@ -22,14 +29,46 @@ import {
   saveWorkoutDraft,
   clearWorkoutDraft,
   isWorkoutDraftForToday,
-  setDraftWorkoutType, // ✅ keeps today's workout pinned when you manually switch
+  setDraftWorkoutType,
+  getExercises, // ✅ used for Add Exercise
 } from "../utils/storage";
 
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
+// ---------------------------
+// Helpers
+// ---------------------------
+const norm = (s) => String(s || "").trim().toLowerCase();
+const upper = (s) => String(s || "").trim().toUpperCase();
+
+const getWeekKey = (date) => {
+  // ISO-ish week key (YYYY-W##), stable for streak tracking
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+
+  // Thursday in current week decides the year.
+  const thursday = new Date(d);
+  thursday.setHours(0, 0, 0, 0);
+  thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
+
+  const week1 = new Date(thursday.getFullYear(), 0, 4);
+  week1.setHours(0, 0, 0, 0);
+  const weekNo = 1 + Math.round(((thursday - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+
+  return `${thursday.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+};
+
+const buildExerciseDefaultSetsData = (setsCount) =>
+  Array.from({ length: setsCount }, () => ({ weight: "", reps: "", completed: false }));
+
+const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
+
+// ---------------------------
+// HomePage
+// ---------------------------
 const HomePage = ({ onDataChange, onSaved }) => {
-  const { weightUnit, toggleWeightUnit } = useSettings();
+  const { weightUnit } = useSettings(); // still used for PR toast text / increments etc
 
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [workoutData, setWorkoutData] = useState([]);
@@ -47,28 +86,18 @@ const HomePage = ({ onDataChange, onSaved }) => {
   // Prevent "dirty" being set during initial hydration
   const didHydrateRef = useRef(false);
 
-  // avoid eslint-disable rule names entirely
   const loadRef = useRef(null);
 
-  // ✅ manual switcher
+  // manual switcher
   const [manualWorkoutType, setManualWorkoutType] = useState("");
+
+  // Add exercise UI
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
 
   const getUsableProgrammes = () => {
     const programmes = getProgrammes() || [];
     return programmes.filter((p) => Array.isArray(p.exercises) && p.exercises.length > 0);
-  };
-
-  // Some older code used name-based keys for videos; support both.
-  const buildVideoUrl = (ex, links) => {
-    const byId = links?.[ex?.id];
-    if (byId) return byId;
-
-    const byNameKey = String(ex?.name || "")
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "_");
-
-    return links?.[byNameKey] || "";
   };
 
   const loadTodaysWorkout = () => {
@@ -86,29 +115,20 @@ const HomePage = ({ onDataChange, onSaved }) => {
     const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
 
     const workout =
-      usableProgrammes.find(
-        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
-      ) || usableProgrammes[0];
+      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || usableProgrammes[0];
 
     if (!workout) {
       toast.error("No programmes found. Please create a programme first.");
       return;
     }
 
-    const lastSameWorkout = workouts.find(
-      (w) => String(w.type).toUpperCase() === String(workout.type).toUpperCase()
-    );
-
-    const videoLinks = getVideoLinks();
+    const lastSameWorkout = workouts.find((w) => upper(w.type) === upper(workout.type));
 
     setCurrentWorkout(workout);
     setManualWorkoutType(workout.type);
 
     // Restore draft if today + same type
-    if (
-      hasTodaysDraft &&
-      String(draft.workoutType).toUpperCase() === String(workout.type).toUpperCase()
-    ) {
+    if (hasTodaysDraft && upper(draft.workoutType) === upper(workout.type)) {
       const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
 
       setWorkoutData(
@@ -120,7 +140,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
           return {
             ...ex,
-            videoUrl: buildVideoUrl(ex, videoLinks),
             userNotes: draftEx?.userNotes || "",
             setsData: draftEx?.setsData || [],
             lastWorkoutData: lastExerciseData || null,
@@ -146,7 +165,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
         );
         return {
           ...ex,
-          videoUrl: buildVideoUrl(ex, videoLinks),
           userNotes: "",
           setsData: [],
           lastWorkoutData: lastExerciseData || null,
@@ -187,8 +205,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setFinishedSaved(false);
   }, [workoutData, currentWorkout?.type]);
 
-  // Auto-save workout draft as the user enters data (protects against refresh)
-  // IMPORTANT: this MUST NOT change button UI state.
+  // Auto-save workout draft (protects against refresh)
   useEffect(() => {
     if (!currentWorkout) return;
 
@@ -196,7 +213,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
-          ex.setsData.some((set) => (set.weight ?? 0) !== 0 || (set.reps ?? 0) !== 0))
+          ex.setsData.some((set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== ""))
     );
 
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
@@ -229,9 +246,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
   useEffect(() => {
     const hasData = workoutData.some(
       (ex) =>
-        ex.setsData &&
-        ex.setsData.length > 0 &&
-        ex.setsData.some((set) => (set.weight ?? 0) !== 0 || (set.reps ?? 0) !== 0)
+        Array.isArray(ex.setsData) &&
+        ex.setsData.some((set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== "")
     );
     onDataChange?.(hasData);
   }, [workoutData, onDataChange]);
@@ -248,22 +264,23 @@ const HomePage = ({ onDataChange, onSaved }) => {
         : progressionSettings.globalIncrementKg;
 
     if (levelUp) {
-      const suggestedWeight = (set.weight ?? 0) + suggestedIncrement;
-      toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, {
-        duration: 5000,
-      });
+      const suggestedWeight = (Number(set.weight) || 0) + suggestedIncrement;
+      toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, { duration: 3500 });
     }
 
-    // PR check (raw number compare)
+    // PR check
     const prs = getPersonalRecords();
     const currentPR = prs?.[exercise.id];
 
-    if (!currentPR || (set.weight ?? 0) > (currentPR.weight ?? 0)) {
-      const wasNew = updatePersonalRecord(exercise.id, set.weight, set.reps);
+    const w = Number(set.weight);
+    if (!Number.isFinite(w)) return;
+
+    if (!currentPR || w > Number(currentPR.weight ?? -Infinity)) {
+      const wasNew = updatePersonalRecord(exercise.id, w, Number(set.reps) || 0);
       if (wasNew) {
         setPrCelebration({
           exercise: exercise.name,
-          newWeight: set.weight,
+          newWeight: w,
           oldWeight: currentPR?.weight,
         });
       }
@@ -271,7 +288,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
   };
 
   const handleWeightChange = (exercise, setsData) => {
-    setWorkoutData((prev) => prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex)));
+    setWorkoutData((prev) =>
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
+    );
   };
 
   const handleNotesChange = (exercise, notes) => {
@@ -340,39 +359,31 @@ const HomePage = ({ onDataChange, onSaved }) => {
     loadRef.current?.();
   };
 
-  // ✅ manual switch (does NOT advance pattern)
+  // manual switch (does NOT advance pattern)
   const handleManualSwitchWorkout = (nextType) => {
     if (!nextType) return;
 
     if (isDirty) {
       const ok = window.confirm(
-        "You have unsaved changes.\n\nSwitching will keep them as a draft, but you may want to press Save Draft first.\n\nSwitch anyway?"
+        "You have unsaved changes.\n\nSwitching will keep them as a draft.\n\nSwitch anyway?"
       );
       if (!ok) return;
     }
 
     const usableProgrammes = getUsableProgrammes();
-    const picked =
-      usableProgrammes.find(
-        (p) => String(p.type).toUpperCase() === String(nextType).toUpperCase()
-      ) || null;
+    const picked = usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || null;
 
     if (!picked) {
       toast.error("That workout type isn't available yet.");
       return;
     }
 
-    // ✅ lock today to chosen workout via draft key
     setDraftWorkoutType(picked.type);
-
     loadRef.current?.();
 
-    toast.message("Switched workout", {
-      description: `Now showing: ${picked.name}`,
-    });
+    toast.message("Switched workout", { description: `Now showing: ${picked.name}` });
   };
 
-  // ✅ return to the pattern’s next workout (does NOT advance)
   const handleReturnToSequence = () => {
     const next = peekNextWorkoutTypeFromPattern();
     if (!next) {
@@ -382,36 +393,123 @@ const HomePage = ({ onDataChange, onSaved }) => {
     handleManualSwitchWorkout(next);
   };
 
-  const getStreak = () => {
+  // ✅ Weekly streak
+  const weeklyStreak = useMemo(() => {
     const workouts = getWorkouts();
-    if (workouts.length === 0) return 0;
+    if (!workouts.length) return 0;
 
-    let streak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const weeks = workouts
+      .map((w) => getWeekKey(w.date))
+      .filter(Boolean);
 
-    for (let i = 0; i < workouts.length; i++) {
-      const workoutDate = new Date(workouts[i].date);
-      workoutDate.setHours(0, 0, 0, 0);
+    // unique weeks in chronological descending order (workouts are usually newest-first)
+    const uniq = [];
+    const seen = new Set();
+    for (const wk of weeks) {
+      if (!seen.has(wk)) {
+        seen.add(wk);
+        uniq.push(wk);
+      }
+    }
 
-      const daysDiff = Math.floor((today - workoutDate) / (1000 * 60 * 60 * 24));
-      if (daysDiff <= 1 + i) streak++;
+    // streak = consecutive week keys with no gap (approx by 7-day stepping)
+    // We'll do this by comparing the Monday of each week.
+    const weekStart = (weekKey) => {
+      const [y, w] = String(weekKey).split("-W");
+      const year = Number(y);
+      const week = Number(w);
+      if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
+
+      // ISO week start: Monday of week
+      const simple = new Date(year, 0, 1 + (week - 1) * 7);
+      const dow = simple.getDay();
+      const isoMonday = new Date(simple);
+      const diff = (dow <= 4 ? 1 - (dow || 7) : 8 - dow);
+      isoMonday.setDate(simple.getDate() + diff);
+      isoMonday.setHours(0, 0, 0, 0);
+      return isoMonday;
+    };
+
+    const starts = uniq
+      .map((wk) => weekStart(wk))
+      .filter((d) => d && !Number.isNaN(d.getTime()));
+
+    if (!starts.length) return 0;
+
+    let streak = 1;
+    for (let i = 0; i < starts.length - 1; i++) {
+      const a = starts[i];
+      const b = starts[i + 1];
+      const diffDays = Math.round((a - b) / 86400000);
+      // consecutive weeks should be ~7 days apart
+      if (diffDays >= 6 && diffDays <= 8) streak++;
       else break;
     }
+
+    // If you haven’t trained this week, streak should still show the run up to last trained week.
     return streak;
-  };
+  }, [finishedSaved]); // recompute after saves; cheap
 
   const getDaysSinceLastWorkout = () => {
     const workouts = getWorkouts();
-    if (workouts.length === 0) return null;
-
+    if (!workouts.length) return null;
     const lastWorkout = new Date(workouts[0].date);
     const today = new Date();
     return Math.floor((today - lastWorkout) / (1000 * 60 * 60 * 24));
   };
 
-  const streak = getStreak();
   const daysSince = getDaysSinceLastWorkout();
+
+  // ---------------------------
+  // Add Exercise feature
+  // ---------------------------
+  const allLibraryExercises = useMemo(() => {
+    const list = getExercises() || [];
+    // show by name
+    return list
+      .slice()
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }, [showAddDialog]);
+
+  const addCandidates = useMemo(() => {
+    const q = norm(addSearch);
+    const existingIds = new Set((workoutData || []).map((e) => norm(e.id)));
+
+    return allLibraryExercises
+      .filter((ex) => {
+        if (!ex?.id) return false;
+        if (existingIds.has(norm(ex.id))) return false; // prevent duplicates
+        if (!q) return true;
+        return norm(ex.name).includes(q) || norm(ex.id).includes(q);
+      })
+      .slice(0, 50);
+  }, [allLibraryExercises, addSearch, workoutData]);
+
+  const handleAddExerciseToToday = (ex) => {
+    if (!ex?.id) return;
+
+    const setsCount = clampInt(Number(ex.sets ?? 3), 1, 12);
+
+    const newRow = {
+      id: ex.id,
+      name: ex.name || ex.id,
+      repScheme: ex.repScheme || "RPT",
+      goalReps: Array.isArray(ex.goalReps) ? ex.goalReps : undefined,
+      sets: setsCount,
+      restTime: ex.restTime ?? 120,
+      notes: ex.notes ?? "",
+
+      userNotes: "",
+      setsData: buildExerciseDefaultSetsData(setsCount),
+      lastWorkoutData: null,
+    };
+
+    setWorkoutData((prev) => [...prev, newRow]);
+    setShowAddDialog(false);
+    setAddSearch("");
+
+    toast.success("Exercise added", { description: `${newRow.name} added to Today` });
+  };
 
   if (!currentWorkout) return null;
 
@@ -435,14 +533,18 @@ const HomePage = ({ onDataChange, onSaved }) => {
                 })}
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleWeightUnit}
-              className="font-semibold"
-            >
-              {weightUnit}
-            </Button>
+
+            {/* ✅ Removed kg/lb switcher */}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowAddDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add
+              </Button>
+
+              <Button variant="ghost" size="sm" onClick={() => loadRef.current?.()}>
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Stats */}
@@ -450,10 +552,13 @@ const HomePage = ({ onDataChange, onSaved }) => {
             <div className="bg-muted/50 rounded-lg p-4 border border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Flame className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Streak</span>
+                <span className="text-xs text-muted-foreground">Weekly streak</span>
               </div>
-              <div className="text-2xl font-bold text-foreground">{streak} days</div>
+              <div className="text-2xl font-bold text-foreground">
+                {weeklyStreak} weeks
+              </div>
             </div>
+
             <div className="bg-muted/50 rounded-lg p-4 border border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Calendar className="w-4 h-4 text-primary" />
@@ -476,7 +581,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                   {currentWorkout.focus}
                 </Badge>
 
-                {/* ✅ Manual switcher */}
+                {/* Manual switcher */}
                 <div className="mt-3 space-y-2">
                   <div className="text-xs text-muted-foreground">
                     Next in sequence:{" "}
@@ -507,7 +612,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                      disabled={!manualWorkoutType || manualWorkoutType === currentWorkout.type}
+                      disabled={!manualWorkoutType || upper(manualWorkoutType) === upper(currentWorkout.type)}
                       className="shrink-0"
                     >
                       Switch
@@ -517,11 +622,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       variant="outline"
                       size="sm"
                       onClick={handleReturnToSequence}
-                      disabled={
-                        !nextInSequence ||
-                        String(nextInSequence).toUpperCase() ===
-                          String(currentWorkout.type).toUpperCase()
-                      }
+                      disabled={!nextInSequence || upper(nextInSequence) === upper(currentWorkout.type)}
                       className="shrink-0"
                     >
                       Next
@@ -530,9 +631,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
                 </div>
               </div>
 
-              <Button variant="ghost" size="sm" onClick={() => loadRef.current?.()}>
-                <RotateCcw className="w-4 h-4" />
-              </Button>
+              {/* (refresh button moved to top right) */}
             </div>
           </div>
         </div>
@@ -563,6 +662,55 @@ const HomePage = ({ onDataChange, onSaved }) => {
         onSaveFinish={handleSaveAndFinishWorkout}
         disableFinish={!currentWorkout}
       />
+
+      {/* Add Exercise Dialog */}
+      <Dialog
+        open={showAddDialog}
+        onOpenChange={(open) => {
+          setShowAddDialog(open);
+          if (!open) setAddSearch("");
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Exercise</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              value={addSearch}
+              onChange={(e) => setAddSearch(e.target.value)}
+              placeholder="Search exercise library..."
+            />
+
+            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+              {addCandidates.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-6 text-center">
+                  No matches (or already added).
+                </div>
+              ) : (
+                addCandidates.map((ex) => (
+                  <button
+                    key={ex.id}
+                    type="button"
+                    onClick={() => handleAddExerciseToToday(ex)}
+                    className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
+                  >
+                    <div className="font-semibold text-foreground">{ex.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              Added exercises only affect Today (they won’t auto-edit your programme unless we wire that in).
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Rest Timer */}
       {restTimer && (
