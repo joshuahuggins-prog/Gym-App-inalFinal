@@ -706,7 +706,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Added exercises only affect Today (they won’t auto-edit your programme unless we wire that in).
+              Added exercises only affect Today (they won’t be added into your programme).
             </div>
           </div>
         </DialogContent>
