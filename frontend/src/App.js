@@ -21,14 +21,6 @@ import EditWorkoutPage from "./pages/EditWorkoutPage";
 
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "./components/ui/dialog";
-import { Button } from "./components/ui/button";
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState("home");
@@ -36,52 +28,13 @@ const App = () => {
   // Edit workout page state
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
 
-  // Unsaved workout protection (Home only)
-  const [hasUnsavedData, setHasUnsavedData] = useState(false);
-  const [showNavigationWarning, setShowNavigationWarning] = useState(false);
-  const [pendingPage, setPendingPage] = useState(null);
-
   const isEditMode = currentPage === "edit-workout";
 
   const handleNavigate = (page) => {
-    // Block leaving Home if unsaved workout data
-    if (currentPage === "home" && hasUnsavedData && page !== "home") {
-      setPendingPage(page);
-      setShowNavigationWarning(true);
-      return;
-    }
-
     setCurrentPage(page);
-
-    // Reset unsaved state when leaving Home
-    if (page !== "home") setHasUnsavedData(false);
 
     // If navigating away from edit screen, clear selected workout
     if (page !== "edit-workout") setEditingWorkoutId(null);
-  };
-
-  const handleConfirmNavigation = () => {
-    const next = pendingPage || "home";
-    setShowNavigationWarning(false);
-    setPendingPage(null);
-
-    setCurrentPage(next);
-    setHasUnsavedData(false);
-
-    if (next !== "edit-workout") setEditingWorkoutId(null);
-  };
-
-  const handleCancelNavigation = () => {
-    setShowNavigationWarning(false);
-    setPendingPage(null);
-  };
-
-  const handleWorkoutDataChange = (hasData) => {
-    setHasUnsavedData(!!hasData);
-  };
-
-  const handleWorkoutSaved = () => {
-    setHasUnsavedData(false);
   };
 
   // Called by HistoryPage pencil button
@@ -99,12 +52,7 @@ const App = () => {
   const renderPage = () => {
     switch (currentPage) {
       case "home":
-        return (
-          <HomePage
-            onDataChange={handleWorkoutDataChange}
-            onSaved={handleWorkoutSaved}
-          />
-        );
+        return <HomePage />;
 
       case "history":
         return <HistoryPage onEditWorkout={openEditWorkout} />;
@@ -130,12 +78,7 @@ const App = () => {
         return <ImportExportPage />;
 
       default:
-        return (
-          <HomePage
-            onDataChange={handleWorkoutDataChange}
-            onSaved={handleWorkoutSaved}
-          />
-        );
+        return <HomePage />;
     }
   };
 
@@ -198,37 +141,6 @@ const App = () => {
             </div>
           </nav>
         )}
-
-        {/* Unsaved Workout Warning (Home only) */}
-        <Dialog open={showNavigationWarning} onOpenChange={setShowNavigationWarning}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold">
-                Unsaved Workout Data
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="py-4 space-y-3">
-              <p>
-                You have unsaved workout data. Leaving now will discard your progress.
-              </p>
-              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
-                <p className="text-sm text-destructive font-semibold">
-                  ⚠️ Sets, weights, and reps will be lost.
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter className="flex gap-3">
-              <Button variant="outline" onClick={handleCancelNavigation} className="flex-1">
-                Go Back
-              </Button>
-              <Button variant="destructive" onClick={handleConfirmNavigation} className="flex-1">
-                Leave Anyway
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         <Toaster />
       </div>
