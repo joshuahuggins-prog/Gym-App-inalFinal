@@ -118,6 +118,19 @@ export const setDraftWorkoutType = (workoutType) => {
 // ============================
 // Workouts
 // ============================
+export const getLastFinishedWorkoutType = () => {
+  const workouts = getWorkouts();
+  const last = workouts[0];
+  return last?.type ? String(last.type).toUpperCase() : null;
+};
+
+export const getNextWorkoutTypeFromHistoryAB = () => {
+  const last = getLastFinishedWorkoutType();
+  if (!last) return null;
+  if (last === "A") return "B";
+  if (last === "B") return "A";
+  return null;
+};
 
 export const getWorkouts = () => getStorageData(STORAGE_KEYS.WORKOUTS) || [];
 
