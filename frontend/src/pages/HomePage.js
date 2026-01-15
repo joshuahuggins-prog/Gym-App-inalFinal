@@ -120,8 +120,8 @@ const HomePage = () => {
     }
 
     const nextType = hasTodaysDraft
-      ? draft.workoutType
-      : peekNextWorkoutTypeFromPattern();
+  ? draft.workoutType
+  : (getNextWorkoutTypeFromHistoryAB() || peekNextWorkoutTypeFromPattern());
 
     const workout =
       usableProgrammes.find((p) => upper(p.type) === upper(nextType)) ||
