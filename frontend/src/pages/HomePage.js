@@ -54,20 +54,28 @@ const getWeekKey = (date) => {
 
   const week1 = new Date(thursday.getFullYear(), 0, 4);
   week1.setHours(0, 0, 0, 0);
-  const weekNo = 1 + Math.round(((thursday - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  const weekNo =
+    1 +
+    Math.round(
+      ((thursday - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+    );
 
   return `${thursday.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 };
 
 const buildExerciseDefaultSetsData = (setsCount) =>
-  Array.from({ length: setsCount }, () => ({ weight: "", reps: "", completed: false }));
+  Array.from({ length: setsCount }, () => ({
+    weight: "",
+    reps: "",
+    completed: false,
+  }));
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
 // ---------------------------
 // HomePage
 // ---------------------------
-const HomePage = ({ onDataChange, onSaved }) => {
+const HomePage = () => {
   const { weightUnit } = useSettings(); // still used for PR toast text / increments etc
 
   const [currentWorkout, setCurrentWorkout] = useState(null);
@@ -78,13 +86,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
   // Draft autosave debounce
   const draftSaveTimerRef = useRef(null);
 
-  // UI state for floating buttons
-  const [isDirty, setIsDirty] = useState(false);
-  const [draftSaved, setDraftSaved] = useState(false);
+  // Used only to force weekly streak recompute after finish
   const [finishedSaved, setFinishedSaved] = useState(false);
-
-  // Prevent "dirty" being set during initial hydration
-  const didHydrateRef = useRef(false);
 
   const loadRef = useRef(null);
 
@@ -97,7 +100,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
   const getUsableProgrammes = () => {
     const programmes = getProgrammes() || [];
-    return programmes.filter((p) => Array.isArray(p.exercises) && p.exercises.length > 0);
+    return programmes.filter(
+      (p) => Array.isArray(p.exercises) && p.exercises.length > 0
+    );
   };
 
   const loadTodaysWorkout = () => {
@@ -108,21 +113,28 @@ const HomePage = ({ onDataChange, onSaved }) => {
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
 
     if (usableProgrammes.length === 0) {
-      toast.error("No usable programmes found. Add at least 1 exercise to a programme.");
+      toast.error(
+        "No usable programmes found. Add at least 1 exercise to a programme."
+      );
       return;
     }
 
-    const nextType = hasTodaysDraft ? draft.workoutType : peekNextWorkoutTypeFromPattern();
+    const nextType = hasTodaysDraft
+      ? draft.workoutType
+      : peekNextWorkoutTypeFromPattern();
 
     const workout =
-      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || usableProgrammes[0];
+      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) ||
+      usableProgrammes[0];
 
     if (!workout) {
       toast.error("No programmes found. Please create a programme first.");
       return;
     }
 
-    const lastSameWorkout = workouts.find((w) => upper(w.type) === upper(workout.type));
+    const lastSameWorkout = workouts.find(
+      (w) => upper(w.type) === upper(workout.type)
+    );
 
     setCurrentWorkout(workout);
     setManualWorkoutType(workout.type);
@@ -151,9 +163,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
         description: "We loaded your in-progress session after refresh.",
       });
 
-      setDraftSaved(true);
-      setIsDirty(false);
-      setFinishedSaved(false);
       return;
     }
 
@@ -171,10 +180,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
         };
       })
     );
-
-    setDraftSaved(false);
-    setIsDirty(false);
-    setFinishedSaved(false);
   };
 
   useEffect(() => {
@@ -185,26 +190,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
     loadRef.current?.();
   }, []);
 
-  useEffect(() => {
-    didHydrateRef.current = false;
-    setIsDirty(false);
-    setDraftSaved(false);
-    setFinishedSaved(false);
-  }, [currentWorkout?.type]);
-
-  useEffect(() => {
-    if (!currentWorkout) return;
-
-    if (!didHydrateRef.current) {
-      didHydrateRef.current = true;
-      return;
-    }
-
-    setIsDirty(true);
-    setDraftSaved(false);
-    setFinishedSaved(false);
-  }, [workoutData, currentWorkout?.type]);
-
   // Auto-save workout draft (protects against refresh)
   useEffect(() => {
     if (!currentWorkout) return;
@@ -213,7 +198,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
-          ex.setsData.some((set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== ""))
+          ex.setsData.some(
+            (set) =>
+              (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
+          ))
     );
 
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
@@ -243,18 +231,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
     };
   }, [currentWorkout, workoutData]);
 
-  useEffect(() => {
-    const hasData = workoutData.some(
-      (ex) =>
-        Array.isArray(ex.setsData) &&
-        ex.setsData.some((set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== "")
-    );
-    onDataChange?.(hasData);
-  }, [workoutData, onDataChange]);
-
   const handleSetComplete = (exercise, set, levelUp) => {
     const progressionSettings = getProgressionSettings();
-    const exerciseSpecificIncrement = progressionSettings.exerciseSpecific?.[exercise.id];
+    const exerciseSpecificIncrement =
+      progressionSettings.exerciseSpecific?.[exercise.id];
 
     const suggestedIncrement =
       exerciseSpecificIncrement && exerciseSpecificIncrement > 0
@@ -265,7 +245,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
     if (levelUp) {
       const suggestedWeight = (Number(set.weight) || 0) + suggestedIncrement;
-      toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, { duration: 3500 });
+      toast.success(
+        `Level Up! Try ${suggestedWeight}${weightUnit} next time!`,
+        { duration: 3500 }
+      );
     }
 
     // PR check
@@ -276,7 +259,11 @@ const HomePage = ({ onDataChange, onSaved }) => {
     if (!Number.isFinite(w)) return;
 
     if (!currentPR || w > Number(currentPR.weight ?? -Infinity)) {
-      const wasNew = updatePersonalRecord(exercise.id, w, Number(set.reps) || 0);
+      const wasNew = updatePersonalRecord(
+        exercise.id,
+        w,
+        Number(set.reps) || 0
+      );
       if (wasNew) {
         setPrCelebration({
           exercise: exercise.name,
@@ -295,7 +282,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+      prev.map((ex) =>
+        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
+      )
     );
   };
 
@@ -313,31 +302,6 @@ const HomePage = ({ onDataChange, onSaved }) => {
     })),
   });
 
-  const handleSaveDraft = () => {
-    if (!currentWorkout) return;
-
-    saveWorkoutDraft({
-      workoutType: currentWorkout.type,
-      programmeName: currentWorkout.name,
-      focus: currentWorkout.focus,
-      exercises: workoutData.map((ex) => ({
-        id: ex.id,
-        name: ex.name,
-        repScheme: ex.repScheme,
-        userNotes: ex.userNotes || "",
-        setsData: ex.setsData || [],
-      })),
-    });
-
-    setDraftSaved(true);
-    setIsDirty(false);
-    setFinishedSaved(false);
-
-    toast.success("Workout saved as draft ✅", {
-      description: "You can refresh without losing your entries.",
-    });
-  };
-
   const handleSaveAndFinishWorkout = () => {
     if (!currentWorkout) return;
 
@@ -347,15 +311,13 @@ const HomePage = ({ onDataChange, onSaved }) => {
     clearWorkoutDraft();
     advanceWorkoutPatternIndex();
 
-    setFinishedSaved(true);
-    setIsDirty(false);
-    setDraftSaved(false);
+    // Toggle so weekly streak recomputes
+    setFinishedSaved((v) => !v);
 
     toast.success("Workout saved! Great job! 💪", {
       description: `${currentWorkout.name} completed`,
     });
 
-    onSaved?.();
     loadRef.current?.();
   };
 
@@ -363,15 +325,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
   const handleManualSwitchWorkout = (nextType) => {
     if (!nextType) return;
 
-    if (isDirty) {
-      const ok = window.confirm(
-        "You have unsaved changes.\n\nSwitching will keep them as a draft.\n\nSwitch anyway?"
-      );
-      if (!ok) return;
-    }
-
     const usableProgrammes = getUsableProgrammes();
-    const picked = usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || null;
+    const picked =
+      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || null;
 
     if (!picked) {
       toast.error("That workout type isn't available yet.");
@@ -381,7 +337,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setDraftWorkoutType(picked.type);
     loadRef.current?.();
 
-    toast.message("Switched workout", { description: `Now showing: ${picked.name}` });
+    toast.message("Switched workout", {
+      description: `Now showing: ${picked.name}`,
+    });
   };
 
   const handleReturnToSequence = () => {
@@ -398,9 +356,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
     const workouts = getWorkouts();
     if (!workouts.length) return 0;
 
-    const weeks = workouts
-      .map((w) => getWeekKey(w.date))
-      .filter(Boolean);
+    const weeks = workouts.map((w) => getWeekKey(w.date)).filter(Boolean);
 
     // unique weeks in chronological descending order (workouts are usually newest-first)
     const uniq = [];
@@ -424,7 +380,7 @@ const HomePage = ({ onDataChange, onSaved }) => {
       const simple = new Date(year, 0, 1 + (week - 1) * 7);
       const dow = simple.getDay();
       const isoMonday = new Date(simple);
-      const diff = (dow <= 4 ? 1 - (dow || 7) : 8 - dow);
+      const diff = dow <= 4 ? 1 - (dow || 7) : 8 - dow;
       isoMonday.setDate(simple.getDate() + diff);
       isoMonday.setHours(0, 0, 0, 0);
       return isoMonday;
@@ -460,6 +416,20 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
   const daysSince = getDaysSinceLastWorkout();
 
+  // Derived: can we finish? (Option B – require at least one set)
+  const canFinish = useMemo(
+    () =>
+      workoutData.some(
+        (ex) =>
+          Array.isArray(ex.setsData) &&
+          ex.setsData.some(
+            (set) =>
+              (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
+          )
+      ),
+    [workoutData]
+  );
+
   // ---------------------------
   // Add Exercise feature
   // ---------------------------
@@ -468,7 +438,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
     // show by name
     return list
       .slice()
-      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      .sort((a, b) =>
+        String(a.name || "").localeCompare(String(b.name || ""))
+      );
   }, [showAddDialog]);
 
   const addCandidates = useMemo(() => {
@@ -508,7 +480,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
     setShowAddDialog(false);
     setAddSearch("");
 
-    toast.success("Exercise added", { description: `${newRow.name} added to Today` });
+    toast.success("Exercise added", {
+      description: `${newRow.name} added to Today`,
+    });
   };
 
   if (!currentWorkout) return null;
@@ -534,14 +508,21 @@ const HomePage = ({ onDataChange, onSaved }) => {
               </p>
             </div>
 
-            {/* ✅ Removed kg/lb switcher */}
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowAddDialog(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddDialog(true)}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Add
               </Button>
 
-              <Button variant="ghost" size="sm" onClick={() => loadRef.current?.()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => loadRef.current?.()}
+              >
                 <RotateCcw className="w-4 h-4" />
               </Button>
             </div>
@@ -552,7 +533,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
             <div className="bg-muted/50 rounded-lg p-4 border border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Flame className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Weekly streak</span>
+                <span className="text-xs text-muted-foreground">
+                  Weekly streak
+                </span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 {weeklyStreak} weeks
@@ -562,10 +545,16 @@ const HomePage = ({ onDataChange, onSaved }) => {
             <div className="bg-muted/50 rounded-lg p-4 border border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Calendar className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Last Trained</span>
+                <span className="text-xs text-muted-foreground">
+                  Last Trained
+                </span>
               </div>
               <div className="text-2xl font-bold text-foreground">
-                {daysSince === null ? "Never" : daysSince === 0 ? "Today" : `${daysSince}d ago`}
+                {daysSince === null
+                  ? "Never"
+                  : daysSince === 0
+                  ? "Today"
+                  : `${daysSince}d ago`}
               </div>
             </div>
           </div>
@@ -595,7 +584,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       <div className="relative">
                         <select
                           value={manualWorkoutType || ""}
-                          onChange={(e) => setManualWorkoutType(e.target.value)}
+                          onChange={(e) =>
+                            setManualWorkoutType(e.target.value)
+                          }
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
                         >
                           {getUsableProgrammes().map((p) => (
@@ -611,8 +602,13 @@ const HomePage = ({ onDataChange, onSaved }) => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                      disabled={!manualWorkoutType || upper(manualWorkoutType) === upper(currentWorkout.type)}
+                      onClick={() =>
+                        handleManualSwitchWorkout(manualWorkoutType)
+                      }
+                      disabled={
+                        !manualWorkoutType ||
+                        upper(manualWorkoutType) === upper(currentWorkout.type)
+                      }
                       className="shrink-0"
                     >
                       Switch
@@ -622,7 +618,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
                       variant="outline"
                       size="sm"
                       onClick={handleReturnToSequence}
-                      disabled={!nextInSequence || upper(nextInSequence) === upper(currentWorkout.type)}
+                      disabled={
+                        !nextInSequence ||
+                        upper(nextInSequence) === upper(currentWorkout.type)
+                      }
                       className="shrink-0"
                     >
                       Next
@@ -653,14 +652,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
         ))}
       </div>
 
-      {/* Floating Save Buttons */}
+      {/* Floating Save Button */}
       <WorkoutActionBar
-        isDirty={isDirty}
-        isDraftSaved={draftSaved}
-        isFinishedSaved={finishedSaved}
-        onSaveDraft={handleSaveDraft}
         onSaveFinish={handleSaveAndFinishWorkout}
-        disableFinish={!currentWorkout}
+        disableFinish={!currentWorkout || !canFinish}
       />
 
       {/* Add Exercise Dialog */}
@@ -696,7 +691,9 @@ const HomePage = ({ onDataChange, onSaved }) => {
                     onClick={() => handleAddExerciseToToday(ex)}
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
-                    <div className="font-semibold text-foreground">{ex.name}</div>
+                    <div className="font-semibold text-foreground">
+                      {ex.name}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
                     </div>
@@ -706,7 +703,8 @@ const HomePage = ({ onDataChange, onSaved }) => {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Added exercises only affect Today (they won’t be added into your programme).
+              Added exercises only affect Today (they won’t be added into your
+              programme).
             </div>
           </div>
         </DialogContent>
@@ -726,7 +724,10 @@ const HomePage = ({ onDataChange, onSaved }) => {
 
       {/* PR Celebration */}
       {prCelebration && (
-        <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />
+        <PRCelebration
+          {...prCelebration}
+          onClose={() => setPrCelebration(null)}
+        />
       )}
     </div>
   );
