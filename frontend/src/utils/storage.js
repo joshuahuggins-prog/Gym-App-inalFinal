@@ -45,15 +45,14 @@ const STORAGE_KEYS = {
 // Base storage helpers
 // ============================
 
-export const getWorkouts = () => {
-  const arr = getStorageData(STORAGE_KEYS.WORKOUTS) || [];
-  if (!Array.isArray(arr)) return [];
-
-  return [...arr].sort((a, b) => {
-    const da = new Date(a?.date || 0).getTime();
-    const db = new Date(b?.date || 0).getTime();
-    return db - da;
-  });
+export const getStorageData = (key) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : null;
+  } catch (error) {
+    console.error(`Error reading ${key} from localStorage:`, error);
+    return null;
+  }
 };
 
 export const setStorageData = (key, value) => {
@@ -114,48 +113,22 @@ export const setDraftWorkoutType = (workoutType) => {
     exercises: Array.isArray(draft.exercises) ? draft.exercises : [],
   });
 };
-export const syncPatternIndexToHistory = () => {
-  const finalPattern = (function () {
-    const usable = getUsableProgrammes();
-    if (usable.length === 0) return [];
-    const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
-    const pattern = parseWorkoutPattern(getWorkoutPattern());
-    const safe = pattern.length ? pattern : Array.from(usableTypes).sort();
-    const filtered = safe.filter((t) => usableTypes.has(t));
-    return filtered.length ? filtered : Array.from(usableTypes).sort();
-  })();
 
-  if (finalPattern.length === 0) return false;
-
-  const last = getLastFinishedWorkoutType();
-  if (!last) return false;
-
-  // next should be the item AFTER last
-  const lastIdx = finalPattern.indexOf(last);
-  if (lastIdx === -1) return false;
-
-  const nextIdx = (lastIdx + 1) % finalPattern.length;
-  setWorkoutPatternIndex(nextIdx);
-  return true;
-};
 // ============================
 // Workouts
 // ============================
-export const getLastFinishedWorkoutType = () => {
-  const workouts = getWorkouts();
-  const last = workouts[0];
-  return last?.type ? String(last.type).toUpperCase() : null;
-};
 
-export const getNextWorkoutTypeFromHistoryAB = () => {
-  const last = getLastFinishedWorkoutType();
-  if (!last) return null;
-  if (last === "A") return "B";
-  if (last === "B") return "A";
-  return null;
-};
+// ✅ ONE AND ONLY ONE getWorkouts (sorted newest-first)
+export const getWorkouts = () => {
+  const arr = getStorageData(STORAGE_KEYS.WORKOUTS) || [];
+  if (!Array.isArray(arr)) return [];
 
-export const getWorkouts = () => getStorageData(STORAGE_KEYS.WORKOUTS) || [];
+  return [...arr].sort((a, b) => {
+    const da = new Date(a?.date || 0).getTime();
+    const db = new Date(b?.date || 0).getTime();
+    return db - da;
+  });
+};
 
 export const saveWorkout = (workout) => {
   const workouts = getWorkouts();
@@ -341,7 +314,6 @@ const buildStockExercisesFromWorkouts = () => {
         map.set(id, {
           ...ex,
           id,
-          // keep these if your UI uses them
           hidden: !!ex.hidden,
           assignedTo: Array.isArray(ex.assignedTo) ? ex.assignedTo : [],
         });
@@ -403,7 +375,6 @@ export const saveExercise = (exercise) => {
 
 // Delete override.
 // If it's a stock exercise, we "hide" it by writing an override {hidden:true}
-// so it stays gone in the UI (optional but usually expected).
 export const deleteExercise = (id) => {
   const target = normId(id);
   if (!target) return false;
@@ -488,6 +459,7 @@ const getResolvedPatternList = () => {
   return finalPattern;
 };
 
+// ✅ OLD behavior (index-based)
 export const peekNextWorkoutTypeFromPattern = () => {
   const finalPattern = getResolvedPatternList();
   if (finalPattern.length === 0) return null;
@@ -505,6 +477,30 @@ export const advanceWorkoutPatternIndex = () => {
   return true;
 };
 
+// ✅ NEW: Smart next type based on most recent saved workout.
+// If history exists, pick the type AFTER the last workout type in your pattern.
+// If not, fall back to index-based.
+export const peekNextWorkoutTypeSmart = () => {
+  const finalPattern = getResolvedPatternList();
+  if (finalPattern.length === 0) return null;
+
+  const workouts = getWorkouts();
+  const lastType = workouts?.[0]?.type ? String(workouts[0].type).toUpperCase() : null;
+
+  if (!lastType) {
+    return peekNextWorkoutTypeFromPattern();
+  }
+
+  const lastIdx = finalPattern.findIndex((t) => String(t).toUpperCase() === lastType);
+  if (lastIdx === -1) {
+    return peekNextWorkoutTypeFromPattern();
+  }
+
+  const nextIdx = (lastIdx + 1) % finalPattern.length;
+  return finalPattern[nextIdx];
+};
+
+// Keep existing helper if anything still calls it
 export const getNextWorkoutTypeFromPattern = () => {
   const next = peekNextWorkoutTypeFromPattern();
   if (!next) return null;
@@ -652,10 +648,7 @@ export const exportAllDataToJSON = () => {
         personalRecords: getPersonalRecords(),
         videoLinks: getVideoLinks(),
         programmes: getProgrammes(),
-
-        // Export overrides only (keeps backups small + portable)
         exerciseOverrides: getExerciseOverrides(),
-
         progressionSettings: getProgressionSettings(),
         workoutPattern: typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
         workoutPatternIndex:
@@ -712,7 +705,7 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     if (Array.isArray(data.exerciseOverrides)) {
       setStorageData(STORAGE_KEYS.EXERCISES, data.exerciseOverrides);
     }
-    // Backward compat: if old backups contain full "exercises", accept them as overrides
+    // Backward compat
     else if (Array.isArray(data.exercises)) {
       setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
     }
@@ -720,10 +713,10 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     if (data.progressionSettings)
       setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, data.progressionSettings);
 
-    if (data.workoutPattern != null && STORAGE_KEYS.WORKOUT_PATTERN) {
+    if (data.workoutPattern != null) {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern);
     }
-    if (data.workoutPatternIndex != null && STORAGE_KEYS.WORKOUT_PATTERN_INDEX) {
+    if (data.workoutPatternIndex != null) {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, data.workoutPatternIndex);
     }
 
