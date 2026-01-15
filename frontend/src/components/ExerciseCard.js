@@ -54,14 +54,18 @@ const ExerciseCard = ({
     normalizeSets(exercise?.setsData, setsCount)
   );
 
-  // assisted if any saved weight is negative
+  // ✅ mode is user-controlled; only auto-derived when exercise changes
   const [mode, setMode] = useState(() =>
     (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
       ? "assisted"
       : "weighted"
   );
 
-  const hydrateKey = useRef("");
+  // When user taps toggle, lock mode so hydration doesn't override it.
+  const userChoseModeRef = useRef(false);
+
+  // track last exercise id to know when we're switching exercises
+  const lastExerciseIdRef = useRef(exercise?.id || "");
 
   // PR (display only)
   const pr = useMemo(() => {
@@ -78,27 +82,30 @@ const ExerciseCard = ({
     return Math.max(...nums.map((n) => Math.abs(n)));
   }, [sets]);
 
-  // hydrate when parent provides updated exercise object
+  // ✅ Hydrate sets/notes/video when parent updates the exercise data
+  // BUT do not keep forcing mode on every edit.
   useEffect(() => {
-    const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(
-      exercise?.setsData || []
-    )}__${JSON.stringify(exercise?.goalReps || [])}`;
-
-    if (key === hydrateKey.current) return;
-    hydrateKey.current = key;
-
     setSets(normalizeSets(exercise?.setsData, setsCount));
     setNotes(exercise?.userNotes || "");
 
     const links = getVideoLinks();
     setVideoLink(links?.[exercise?.id] || "");
+  }, [exercise?.setsData, exercise?.userNotes, exercise?.id, setsCount]);
 
-    setMode(
-      (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
-        ? "assisted"
-        : "weighted"
-    );
-  }, [exercise, setsCount]);
+  // ✅ Only auto-derive mode when exercise id changes (new card / different exercise)
+  useEffect(() => {
+    const currentId = exercise?.id || "";
+    if (currentId !== lastExerciseIdRef.current) {
+      lastExerciseIdRef.current = currentId;
+      userChoseModeRef.current = false;
+
+      setMode(
+        (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
+          ? "assisted"
+          : "weighted"
+      );
+    }
+  }, [exercise?.id, exercise?.setsData]);
 
   const pushUp = (nextSets) => {
     setSets(nextSets);
@@ -113,7 +120,7 @@ const ExerciseCard = ({
     );
   };
 
-  // ✅ IMPORTANT: header must ignore clicks on interactive elements
+  // ✅ Header must ignore clicks on interactive elements
   const handleHeaderToggle = (e) => {
     const interactive = e.target.closest(
       "button, a, input, textarea, select, [data-no-toggle]"
@@ -124,6 +131,8 @@ const ExerciseCard = ({
 
   const toggleMode = (nextMode) => {
     if (nextMode === mode) return;
+
+    userChoseModeRef.current = true;
     setMode(nextMode);
 
     const converted = sets.map((s) => {
@@ -183,7 +192,7 @@ const ExerciseCard = ({
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
-      {/* Header (NOT a <button> to avoid nested button bugs) */}
+      {/* Header */}
       <div
         role="button"
         tabIndex={0}
@@ -234,14 +243,6 @@ const ExerciseCard = ({
                     ? "bg-primary/20 text-primary"
                     : "text-muted-foreground hover:bg-muted/40"
                 }`}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -259,14 +260,6 @@ const ExerciseCard = ({
                     ? "bg-orange-500/20 text-orange-600"
                     : "text-muted-foreground hover:bg-muted/40"
                 }`}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -457,4 +450,3 @@ const ExerciseCard = ({
 };
 
 export default ExerciseCard;
-```0
