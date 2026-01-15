@@ -78,6 +78,7 @@ const ExerciseCard = ({
     return Math.max(...nums.map((n) => Math.abs(n)));
   }, [sets]);
 
+  // hydrate when parent provides updated exercise object
   useEffect(() => {
     const key = `${exercise?.id || ""}__${setsCount}__${JSON.stringify(
       exercise?.setsData || []
@@ -111,17 +112,16 @@ const ExerciseCard = ({
       }))
     );
   };
-  
-const handleHeaderToggle = (e) => {
-  // If the tap/click started inside any interactive element, do NOT toggle expand/collapse
-  const interactive = e.target.closest(
-    "button, a, input, textarea, select, [data-no-toggle]"
-  );
-  if (interactive) return;
 
-  setExpanded((v) => !v);
-};
-  
+  // ✅ IMPORTANT: header must ignore clicks on interactive elements
+  const handleHeaderToggle = (e) => {
+    const interactive = e.target.closest(
+      "button, a, input, textarea, select, [data-no-toggle]"
+    );
+    if (interactive) return;
+    setExpanded((v) => !v);
+  };
+
   const toggleMode = (nextMode) => {
     if (nextMode === mode) return;
     setMode(nextMode);
@@ -141,7 +141,8 @@ const handleHeaderToggle = (e) => {
   );
 
   const maxLabel = useMemo(() => {
-    const best = pr?.weight != null ? Math.abs(Number(pr.weight)) : bestFromWorkout;
+    const best =
+      pr?.weight != null ? Math.abs(Number(pr.weight)) : bestFromWorkout;
     if (!Number.isFinite(best) || best === 0) return null;
     const label = mode === "assisted" ? "Assist max" : "Max";
     return `${label}: ${best}`;
@@ -187,7 +188,7 @@ const handleHeaderToggle = (e) => {
         role="button"
         tabIndex={0}
         className="w-full text-left p-4 cursor-pointer select-none"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={handleHeaderToggle}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -223,30 +224,51 @@ const handleHeaderToggle = (e) => {
             {/* Row 3 toggle */}
             <div
               className="mt-2 inline-flex border border-border rounded-md overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
+              data-no-toggle
             >
               <button
                 type="button"
+                data-no-toggle
                 className={`px-2 py-1 text-[11px] ${
                   mode === "weighted"
                     ? "bg-primary/20 text-primary"
                     : "text-muted-foreground hover:bg-muted/40"
                 }`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   toggleMode("weighted");
                 }}
               >
                 Weighted
               </button>
+
               <button
                 type="button"
+                data-no-toggle
                 className={`px-2 py-1 text-[11px] ${
                   mode === "assisted"
                     ? "bg-orange-500/20 text-orange-600"
                     : "text-muted-foreground hover:bg-muted/40"
                 }`}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   toggleMode("assisted");
                 }}
@@ -305,7 +327,9 @@ const handleHeaderToggle = (e) => {
                 key={i}
                 className="grid grid-cols-[60px_1fr_1fr_40px] gap-2 items-center"
               >
-                <span className="text-xs text-muted-foreground">Set {i + 1}</span>
+                <span className="text-xs text-muted-foreground">
+                  Set {i + 1}
+                </span>
 
                 <Input
                   type="number"
@@ -383,7 +407,9 @@ const handleHeaderToggle = (e) => {
               <div className="text-[11px] font-semibold text-foreground mb-1">
                 Exercise notes
               </div>
-              <div className="whitespace-pre-wrap">{String(exercise.notes).trim()}</div>
+              <div className="whitespace-pre-wrap">
+                {String(exercise.notes).trim()}
+              </div>
             </div>
           )}
 
@@ -414,10 +440,12 @@ const handleHeaderToggle = (e) => {
           {/* Last workout */}
           {lastWorkoutData ? (
             <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-              <div className="font-semibold text-foreground mb-1">Last time</div>
-              {(lastWorkoutData.sets || []).map((s, idx) => (
+              <div className="font-semibold text-foreground mb-1">
+                Last time
+              </div>
+              {(lastWorkoutData.sets || []).map((s2, idx) => (
                 <div key={idx}>
-                  Set {idx + 1}: {s.weight} × {s.reps}
+                  Set {idx + 1}: {s2.weight} × {s2.reps}
                 </div>
               ))}
             </div>
@@ -429,3 +457,4 @@ const handleHeaderToggle = (e) => {
 };
 
 export default ExerciseCard;
+```0
