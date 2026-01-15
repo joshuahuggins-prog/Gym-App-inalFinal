@@ -114,7 +114,30 @@ export const setDraftWorkoutType = (workoutType) => {
     exercises: Array.isArray(draft.exercises) ? draft.exercises : [],
   });
 };
+export const syncPatternIndexToHistory = () => {
+  const finalPattern = (function () {
+    const usable = getUsableProgrammes();
+    if (usable.length === 0) return [];
+    const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
+    const pattern = parseWorkoutPattern(getWorkoutPattern());
+    const safe = pattern.length ? pattern : Array.from(usableTypes).sort();
+    const filtered = safe.filter((t) => usableTypes.has(t));
+    return filtered.length ? filtered : Array.from(usableTypes).sort();
+  })();
 
+  if (finalPattern.length === 0) return false;
+
+  const last = getLastFinishedWorkoutType();
+  if (!last) return false;
+
+  // next should be the item AFTER last
+  const lastIdx = finalPattern.indexOf(last);
+  if (lastIdx === -1) return false;
+
+  const nextIdx = (lastIdx + 1) % finalPattern.length;
+  setWorkoutPatternIndex(nextIdx);
+  return true;
+};
 // ============================
 // Workouts
 // ============================
