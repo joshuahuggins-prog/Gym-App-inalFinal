@@ -30,29 +30,25 @@ import {
   clearWorkoutDraft,
   isWorkoutDraftForToday,
   setDraftWorkoutType,
-  getExercises, // ✅ used for Add Exercise
+  getExercises,
 } from "../utils/storage";
 
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
-import {
-  ...
-  getNextWorkoutTypeFromHistoryAB,
-  ...
-} from "../utils/storage";
 
 // ---------------------------
 // Helpers
 // ---------------------------
 const norm = (s) => String(s || "").trim().toLowerCase();
 const upper = (s) => String(s || "").trim().toUpperCase();
+const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
 const getWeekKey = (date) => {
-  // ISO-ish week key (YYYY-W##), stable for streak tracking
+  // ISO-ish week key (YYYY-W##)
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return null;
 
-  // Thursday in current week decides the year.
+  // Thursday in current week decides the year
   const thursday = new Date(d);
   thursday.setHours(0, 0, 0, 0);
   thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
@@ -75,28 +71,36 @@ const buildExerciseDefaultSetsData = (setsCount) =>
     completed: false,
   }));
 
-const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
+// ✅ Next workout type based on most recent saved workout (simple A/B flip).
+// If you change your pattern later (e.g. A,B,A,C) you can use the pattern functions,
+// but for now this fixes “wrong compared to my last workout”.
+const getNextWorkoutTypeFromHistoryAB = () => {
+  const workouts = getWorkouts();
+  const lastType = workouts?.[0]?.type ? upper(workouts[0].type) : null;
+  if (!lastType) return null;
+  if (lastType === "A") return "B";
+  if (lastType === "B") return "A";
+  return null;
+};
 
 // ---------------------------
 // HomePage
 // ---------------------------
 const HomePage = () => {
-  const { weightUnit } = useSettings(); // still used for PR toast text / increments etc
+  const { weightUnit } = useSettings();
 
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [workoutData, setWorkoutData] = useState([]);
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
 
-  // Draft autosave debounce
   const draftSaveTimerRef = useRef(null);
 
-  // Used only to force weekly streak recompute after finish
-  const [finishedSaved, setFinishedSaved] = useState(false);
+  // used to force weekly streak recompute after save
+  const [finishedSavedToggle, setFinishedSavedToggle] = useState(false);
 
   const loadRef = useRef(null);
 
-  // manual switcher
   const [manualWorkoutType, setManualWorkoutType] = useState("");
 
   // Add exercise UI
@@ -124,9 +128,10 @@ const HomePage = () => {
       return;
     }
 
+    // ✅ draft wins; else use last workout history A/B; else use pattern fallback
     const nextType = hasTodaysDraft
-  ? draft.workoutType
-  : (getNextWorkoutTypeFromHistoryAB() || peekNextWorkoutTypeFromPattern());
+      ? draft.workoutType
+      : getNextWorkoutTypeFromHistoryAB() || peekNextWorkoutTypeFromPattern();
 
     const workout =
       usableProgrammes.find((p) => upper(p.type) === upper(nextType)) ||
@@ -204,8 +209,7 @@ const HomePage = () => {
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
           ex.setsData.some(
-            (set) =>
-              (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
+            (set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
           ))
     );
 
@@ -250,10 +254,9 @@ const HomePage = () => {
 
     if (levelUp) {
       const suggestedWeight = (Number(set.weight) || 0) + suggestedIncrement;
-      toast.success(
-        `Level Up! Try ${suggestedWeight}${weightUnit} next time!`,
-        { duration: 3500 }
-      );
+      toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, {
+        duration: 3500,
+      });
     }
 
     // PR check
@@ -287,9 +290,7 @@ const HomePage = () => {
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      prev.map((ex) =>
-        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
-      )
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
     );
   };
 
@@ -316,8 +317,7 @@ const HomePage = () => {
     clearWorkoutDraft();
     advanceWorkoutPatternIndex();
 
-    // Toggle so weekly streak recomputes
-    setFinishedSaved((v) => !v);
+    setFinishedSavedToggle((v) => !v);
 
     toast.success("Workout saved! Great job! 💪", {
       description: `${currentWorkout.name} completed`,
@@ -326,7 +326,6 @@ const HomePage = () => {
     loadRef.current?.();
   };
 
-  // manual switch (does NOT advance pattern)
   const handleManualSwitchWorkout = (nextType) => {
     if (!nextType) return;
 
@@ -363,7 +362,6 @@ const HomePage = () => {
 
     const weeks = workouts.map((w) => getWeekKey(w.date)).filter(Boolean);
 
-    // unique weeks in chronological descending order (workouts are usually newest-first)
     const uniq = [];
     const seen = new Set();
     for (const wk of weeks) {
@@ -373,15 +371,12 @@ const HomePage = () => {
       }
     }
 
-    // streak = consecutive week keys with no gap (approx by 7-day stepping)
-    // We'll do this by comparing the Monday of each week.
     const weekStart = (weekKey) => {
       const [y, w] = String(weekKey).split("-W");
       const year = Number(y);
       const week = Number(w);
       if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
 
-      // ISO week start: Monday of week
       const simple = new Date(year, 0, 1 + (week - 1) * 7);
       const dow = simple.getDay();
       const isoMonday = new Date(simple);
@@ -402,14 +397,12 @@ const HomePage = () => {
       const a = starts[i];
       const b = starts[i + 1];
       const diffDays = Math.round((a - b) / 86400000);
-      // consecutive weeks should be ~7 days apart
       if (diffDays >= 6 && diffDays <= 8) streak++;
       else break;
     }
 
-    // If you haven’t trained this week, streak should still show the run up to last trained week.
     return streak;
-  }, [finishedSaved]); // recompute after saves; cheap
+  }, [finishedSavedToggle]);
 
   const getDaysSinceLastWorkout = () => {
     const workouts = getWorkouts();
@@ -421,31 +414,24 @@ const HomePage = () => {
 
   const daysSince = getDaysSinceLastWorkout();
 
-  // Derived: can we finish? (Option B – require at least one set)
   const canFinish = useMemo(
     () =>
       workoutData.some(
         (ex) =>
           Array.isArray(ex.setsData) &&
           ex.setsData.some(
-            (set) =>
-              (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
+            (set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
           )
       ),
     [workoutData]
   );
 
-  // ---------------------------
-  // Add Exercise feature
-  // ---------------------------
+  // Add Exercise candidates
   const allLibraryExercises = useMemo(() => {
     const list = getExercises() || [];
-    // show by name
     return list
       .slice()
-      .sort((a, b) =>
-        String(a.name || "").localeCompare(String(b.name || ""))
-      );
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
   }, [showAddDialog]);
 
   const addCandidates = useMemo(() => {
@@ -455,7 +441,7 @@ const HomePage = () => {
     return allLibraryExercises
       .filter((ex) => {
         if (!ex?.id) return false;
-        if (existingIds.has(norm(ex.id))) return false; // prevent duplicates
+        if (existingIds.has(norm(ex.id))) return false;
         if (!q) return true;
         return norm(ex.name).includes(q) || norm(ex.id).includes(q);
       })
@@ -550,9 +536,7 @@ const HomePage = () => {
             <div className="bg-muted/50 rounded-lg p-4 border border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Calendar className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">
-                  Last Trained
-                </span>
+                <span className="text-xs text-muted-foreground">Last Trained</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 {daysSince === null
@@ -589,9 +573,7 @@ const HomePage = () => {
                       <div className="relative">
                         <select
                           value={manualWorkoutType || ""}
-                          onChange={(e) =>
-                            setManualWorkoutType(e.target.value)
-                          }
+                          onChange={(e) => setManualWorkoutType(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
                         >
                           {getUsableProgrammes().map((p) => (
@@ -607,9 +589,7 @@ const HomePage = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        handleManualSwitchWorkout(manualWorkoutType)
-                      }
+                      onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
                       disabled={
                         !manualWorkoutType ||
                         upper(manualWorkoutType) === upper(currentWorkout.type)
@@ -634,8 +614,6 @@ const HomePage = () => {
                   </div>
                 </div>
               </div>
-
-              {/* (refresh button moved to top right) */}
             </div>
           </div>
         </div>
@@ -696,9 +674,7 @@ const HomePage = () => {
                     onClick={() => handleAddExerciseToToday(ex)}
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
-                    <div className="font-semibold text-foreground">
-                      {ex.name}
-                    </div>
+                    <div className="font-semibold text-foreground">{ex.name}</div>
                     <div className="text-xs text-muted-foreground">
                       {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
                     </div>
