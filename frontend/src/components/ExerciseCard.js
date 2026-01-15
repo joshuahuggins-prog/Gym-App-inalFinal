@@ -111,7 +111,17 @@ const ExerciseCard = ({
       }))
     );
   };
+  
+const handleHeaderToggle = (e) => {
+  // If the tap/click started inside any interactive element, do NOT toggle expand/collapse
+  const interactive = e.target.closest(
+    "button, a, input, textarea, select, [data-no-toggle]"
+  );
+  if (interactive) return;
 
+  setExpanded((v) => !v);
+};
+  
   const toggleMode = (nextMode) => {
     if (nextMode === mode) return;
     setMode(nextMode);
