@@ -45,14 +45,15 @@ const STORAGE_KEYS = {
 // Base storage helpers
 // ============================
 
-export const getStorageData = (key) => {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : null;
-  } catch (error) {
-    console.error(`Error reading ${key} from localStorage:`, error);
-    return null;
-  }
+export const getWorkouts = () => {
+  const arr = getStorageData(STORAGE_KEYS.WORKOUTS) || [];
+  if (!Array.isArray(arr)) return [];
+
+  return [...arr].sort((a, b) => {
+    const da = new Date(a?.date || 0).getTime();
+    const db = new Date(b?.date || 0).getTime();
+    return db - da;
+  });
 };
 
 export const setStorageData = (key, value) => {
