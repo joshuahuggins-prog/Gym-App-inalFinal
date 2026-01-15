@@ -50,11 +50,15 @@ const ExerciseCard = ({
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(exercise?.userNotes || "");
   const [videoLink, setVideoLink] = useState("");
-  const [sets, setSets] = useState(() => normalizeSets(exercise?.setsData, setsCount));
+  const [sets, setSets] = useState(() =>
+    normalizeSets(exercise?.setsData, setsCount)
+  );
 
   // assisted if any saved weight is negative
   const [mode, setMode] = useState(() =>
-    (exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted"
+    (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
+      ? "assisted"
+      : "weighted"
   );
 
   const hydrateKey = useRef("");
@@ -121,7 +125,10 @@ const ExerciseCard = ({
     pushUp(converted);
   };
 
-  const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
+  const completedCount = useMemo(
+    () => sets.filter((s) => s.completed).length,
+    [sets]
+  );
 
   const maxLabel = useMemo(() => {
     const best = pr?.weight != null ? Math.abs(Number(pr.weight)) : bestFromWorkout;
@@ -130,7 +137,9 @@ const ExerciseCard = ({
     return `${label}: ${best}`;
   }, [pr, bestFromWorkout, mode]);
 
-  const showExerciseInfoNotes = !!(exercise?.notes && String(exercise.notes).trim().length > 0);
+  const showExerciseInfoNotes = !!(
+    exercise?.notes && String(exercise.notes).trim().length > 0
+  );
 
   const showAlternativesToast = () => {
     const id = exercise?.id;
@@ -143,7 +152,6 @@ const ExerciseCard = ({
       return;
     }
 
-    // sonner description can be a React node, so we can render a compact list
     toast.message("Alternatives", {
       description: (
         <div className="mt-1 space-y-1">
@@ -164,11 +172,18 @@ const ExerciseCard = ({
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
-      {/* Header */}
-      <button
-        type="button"
-        className="w-full text-left p-4"
+      {/* Header (NOT a <button> to avoid nested button bugs) */}
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full text-left p-4 cursor-pointer select-none"
         onClick={() => setExpanded((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        }}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -207,7 +222,10 @@ const ExerciseCard = ({
                     ? "bg-primary/20 text-primary"
                     : "text-muted-foreground hover:bg-muted/40"
                 }`}
-                onClick={() => toggleMode("weighted")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMode("weighted");
+                }}
               >
                 Weighted
               </button>
@@ -218,7 +236,10 @@ const ExerciseCard = ({
                     ? "bg-orange-500/20 text-orange-600"
                     : "text-muted-foreground hover:bg-muted/40"
                 }`}
-                onClick={() => toggleMode("assisted")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMode("assisted");
+                }}
               >
                 Assisted
               </button>
@@ -248,7 +269,7 @@ const ExerciseCard = ({
             )}
           </div>
         </div>
-      </button>
+      </div>
 
       {/* Body */}
       {expanded && (
