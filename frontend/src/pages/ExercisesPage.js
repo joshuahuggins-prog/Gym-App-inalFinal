@@ -244,7 +244,7 @@ const ExercisesPage = () => {
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-gradient-primary mb-2">
+              <h1 className="text-3xl font-bold text--primary">
                 Exercise Library
               </h1>
               <p className="text-sm text-muted-foreground">
