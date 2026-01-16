@@ -1,1 +1,170 @@
+/*
+  Theme overrides
+  ----------------
+  The default (dark) theme tokens live in :root inside index.css.
+  Any theme below overrides the same token names.
 
+  Apply a theme by setting:
+    document.documentElement.dataset.theme = "green" | "yellow" | "greyRed" | "dark"
+*/
+
+@layer base {
+  /* Optional explicit dark theme (empty; :root provides the values). */
+  [data-theme="dark"] {}
+
+  /* Pale green background with grass green primary */
+  [data-theme="green"] {
+    --background: 140 30% 96%;
+    --foreground: 140 20% 12%;
+
+    --card: 140 25% 92%;
+    --card-foreground: 140 20% 12%;
+
+    --popover: 140 25% 92%;
+    --popover-foreground: 140 20% 12%;
+
+    --primary: 144 55% 32%;
+    --primary-foreground: 140 30% 96%;
+    --primary-glow: 144 60% 44%;
+
+    --gold: 45 85% 45%;
+    --gold-foreground: 140 20% 12%;
+
+    --secondary: 140 20% 88%;
+    --secondary-foreground: 140 20% 12%;
+
+    --muted: 140 18% 90%;
+    --muted-foreground: 140 10% 35%;
+
+    --accent: 144 55% 32%;
+    --accent-foreground: 140 30% 96%;
+
+    --destructive: 0 75% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 140 15% 80%;
+    --input: 140 15% 80%;
+    --ring: 144 55% 32%;
+
+    --success: 142 60% 35%;
+    --success-foreground: 0 0% 100%;
+
+    --chart-1: 144 55% 32%;
+    --chart-2: 45 85% 45%;
+    --chart-3: 142 60% 35%;
+    --chart-4: 262 60% 52%;
+    --chart-5: 0 75% 45%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(144 55% 32%), hsl(144 60% 44%));
+    --gradient-gold: linear-gradient(135deg, hsl(45 85% 45%), hsl(35 80% 44%));
+    --gradient-hero: linear-gradient(180deg, hsl(140 30% 96%), hsl(140 25% 92%));
+
+    --shadow-elegant: 0 10px 30px -10px hsl(144 55% 32% / 0.22);
+    --shadow-glow: 0 0 40px hsl(144 60% 44% / 0.25);
+    --shadow-gold: 0 10px 30px -10px hsl(45 85% 45% / 0.20);
+  }
+
+  /* Pale yellow background with mustard primary */
+  [data-theme="yellow"] {
+    --background: 52 55% 95%;
+    --foreground: 40 25% 12%;
+
+    --card: 50 45% 90%;
+    --card-foreground: 40 25% 12%;
+
+    --popover: 50 45% 90%;
+    --popover-foreground: 40 25% 12%;
+
+    --primary: 45 90% 45%;
+    --primary-foreground: 40 25% 12%;
+    --primary-glow: 45 95% 55%;
+
+    --gold: 40 95% 50%;
+    --gold-foreground: 40 25% 12%;
+
+    --secondary: 50 35% 86%;
+    --secondary-foreground: 40 25% 12%;
+
+    --muted: 50 30% 88%;
+    --muted-foreground: 40 15% 32%;
+
+    --accent: 45 90% 45%;
+    --accent-foreground: 40 25% 12%;
+
+    --destructive: 0 75% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 45 25% 78%;
+    --input: 45 25% 78%;
+    --ring: 45 90% 45%;
+
+    --success: 142 55% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --chart-1: 45 90% 45%;
+    --chart-2: 189 65% 40%;
+    --chart-3: 142 55% 38%;
+    --chart-4: 262 60% 52%;
+    --chart-5: 0 75% 45%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(45 90% 45%), hsl(45 95% 55%));
+    --gradient-gold: linear-gradient(135deg, hsl(40 95% 50%), hsl(35 90% 48%));
+    --gradient-hero: linear-gradient(180deg, hsl(52 55% 95%), hsl(50 45% 90%));
+
+    --shadow-elegant: 0 10px 30px -10px hsl(45 90% 45% / 0.20);
+    --shadow-glow: 0 0 40px hsl(45 95% 55% / 0.22);
+    --shadow-gold: 0 10px 30px -10px hsl(40 95% 50% / 0.18);
+  }
+
+  /* Medium grey background with red primary */
+  [data-theme="greyRed"] {
+    --background: 220 10% 94%;
+    --foreground: 220 20% 14%;
+
+    --card: 220 10% 88%;
+    --card-foreground: 220 20% 14%;
+
+    --popover: 220 10% 88%;
+    --popover-foreground: 220 20% 14%;
+
+    --primary: 0 72% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 0 75% 55%;
+
+    --gold: 45 85% 48%;
+    --gold-foreground: 220 20% 14%;
+
+    --secondary: 220 10% 84%;
+    --secondary-foreground: 220 20% 14%;
+
+    --muted: 220 10% 86%;
+    --muted-foreground: 220 10% 32%;
+
+    --accent: 0 72% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 10% 75%;
+    --input: 220 10% 75%;
+    --ring: 0 72% 45%;
+
+    --success: 142 55% 35%;
+    --success-foreground: 0 0% 100%;
+
+    --chart-1: 0 72% 45%;
+    --chart-2: 189 65% 40%;
+    --chart-3: 142 55% 35%;
+    --chart-4: 262 60% 52%;
+    --chart-5: 45 85% 48%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(0 72% 45%), hsl(0 75% 55%));
+    --gradient-gold: linear-gradient(135deg, hsl(45 85% 48%), hsl(35 80% 46%));
+    --gradient-hero: linear-gradient(180deg, hsl(220 10% 94%), hsl(220 10% 88%));
+
+    --shadow-elegant: 0 10px 30px -10px hsl(0 72% 45% / 0.18);
+    --shadow-glow: 0 0 40px hsl(0 75% 55% / 0.18);
+    --shadow-gold: 0 10px 30px -10px hsl(45 85% 48% / 0.16);
+  }
+}
