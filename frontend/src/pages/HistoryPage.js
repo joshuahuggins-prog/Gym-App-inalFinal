@@ -7,16 +7,21 @@ import { getWorkouts, deleteWorkout } from "../utils/storage";
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
+const ensureArray = (v) => (Array.isArray(v) ? v : []);
+
 const HistoryPage = ({ onEditWorkout }) => {
   const { weightUnit } = useSettings();
-  const [workouts, setWorkouts] = useState([]);
+
+  // ✅ Read workouts synchronously on first render to avoid "No workouts yet" flicker
+  const [workouts, setWorkouts] = useState(() => ensureArray(getWorkouts()));
   const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
 
+  // Keep in sync on mount (covers edge cases if storage changes between renders)
   useEffect(() => {
-    setWorkouts(getWorkouts());
+    setWorkouts(ensureArray(getWorkouts()));
   }, []);
 
-  const reload = () => setWorkouts(getWorkouts());
+  const reload = () => setWorkouts(ensureArray(getWorkouts()));
 
   const handleDelete = (id) => {
     if (window.confirm("Delete this workout?")) {
@@ -36,7 +41,7 @@ const HistoryPage = ({ onEditWorkout }) => {
 
   const groupedWorkouts = useMemo(() => {
     const grouped = {};
-    (workouts || []).forEach((workout) => {
+    ensureArray(workouts).forEach((workout) => {
       const d = new Date(workout?.date);
       if (Number.isNaN(d.getTime())) return;
 
@@ -47,23 +52,21 @@ const HistoryPage = ({ onEditWorkout }) => {
     return grouped;
   }, [workouts]);
 
+  const totalCount = ensureArray(workouts).length;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-gradient-to-b from-card to-background border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gradient-primary mb-2">
-            Workout History
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {(workouts || []).length} total workouts logged
-          </p>
+          <h1 className="text-3xl font-bold text-gradient-primary mb-2">Workout History</h1>
+          <p className="text-sm text-muted-foreground">{totalCount} total workouts logged</p>
         </div>
       </div>
 
       {/* History List */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {(workouts || []).length === 0 ? (
+        {totalCount === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">💪</div>
             <p className="text-lg text-muted-foreground mb-2">No workouts yet</p>
@@ -83,18 +86,18 @@ const HistoryPage = ({ onEditWorkout }) => {
                   {monthName}
                 </h2>
 
-                {monthWorkouts.map((workout) => {
+                {ensureArray(monthWorkouts).map((workout) => {
                   const isExpanded = expandedWorkouts.has(workout?.id);
 
-                  const exercises = Array.isArray(workout?.exercises) ? workout.exercises : [];
+                  const exercises = ensureArray(workout?.exercises);
 
                   const completedSets = exercises.reduce((sum, ex) => {
-                    const sets = Array.isArray(ex?.sets) ? ex.sets : [];
+                    const sets = ensureArray(ex?.sets);
                     return sum + sets.filter((s) => !!s?.completed).length;
                   }, 0);
 
                   const totalSets = exercises.reduce((sum, ex) => {
-                    const sets = Array.isArray(ex?.sets) ? ex.sets : [];
+                    const sets = ensureArray(ex?.sets);
                     return sum + sets.length;
                   }, 0);
 
@@ -175,7 +178,7 @@ const HistoryPage = ({ onEditWorkout }) => {
                       {isExpanded && (
                         <div className="px-4 pb-4 space-y-3 animate-fadeIn">
                           {exercises.map((exercise, exIndex) => {
-                            const sets = Array.isArray(exercise?.sets) ? exercise.sets : [];
+                            const sets = ensureArray(exercise?.sets);
                             return (
                               <div
                                 key={`${exercise?.id || exercise?.name || exIndex}`}
@@ -187,10 +190,7 @@ const HistoryPage = ({ onEditWorkout }) => {
 
                                 <div className="space-y-2">
                                   {sets.map((set, setIndex) => (
-                                    <div
-                                      key={setIndex}
-                                      className="flex justify-between text-sm"
-                                    >
+                                    <div key={setIndex} className="flex justify-between text-sm">
                                       <span className="text-muted-foreground">
                                         Set {setIndex + 1}
                                       </span>
