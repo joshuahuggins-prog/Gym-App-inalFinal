@@ -95,7 +95,7 @@ const ProgrammesPage = () => {
         <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gradient-primary mb-2">
+              <h1 className="text-3xl font-bold text-primary">
                 Programmes
               </h1>
               <p className="text-sm text-muted-foreground">
