@@ -27,7 +27,10 @@ import {
 } from "../utils/storage";
 
 const SettingsPage = () => {
-  const { weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } = useSettings();
+  const { settings, updateSetting, weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } =
+    useSettings();
+
+  const themeValue = settings?.theme || "dark";
 
   const [progressionSettings, setProgressionSettingsState] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
@@ -98,9 +101,47 @@ const SettingsPage = () => {
           <TrendingUp className="h-4 w-4" />
           Units
         </h2>
-        <Button onClick={toggleWeightUnit}>
-          Switch to {weightUnit === "kg" ? "lbs" : "kg"}
-        </Button>
+        <Button onClick={toggleWeightUnit}>Switch to {weightUnit === "kg" ? "lbs" : "kg"}</Button>
+      </div>
+
+      {/* Theme */}
+      <div className="space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <SettingsIcon className="h-4 w-4" />
+          Theme
+        </h2>
+
+        <div className="rounded-xl border border-border p-4 space-y-3 bg-card">
+          <div className="text-sm text-muted-foreground">
+            Pick a colour theme. This changes the whole app instantly.
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: "dark", label: "Dark (default)" },
+              { key: "green", label: "Green" },
+              { key: "yellow", label: "Yellow" },
+              { key: "greyRed", label: "Grey / Red" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => updateSetting("theme", key)}
+                className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  themeValue === key
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-foreground border-border hover:bg-muted/50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-[11px] text-muted-foreground">
+            Current: <span className="font-medium text-foreground">{themeValue}</span>
+          </div>
+        </div>
       </div>
 
       {/* Stats Metric */}
@@ -111,9 +152,7 @@ const SettingsPage = () => {
         </h2>
 
         <div className="rounded-xl border border-border p-4 space-y-3 bg-card">
-          <div className="text-sm text-muted-foreground">
-            Choose how charts show progress.
-          </div>
+          <div className="text-sm text-muted-foreground">Choose how charts show progress.</div>
 
           <div className="flex gap-2">
             <button
@@ -149,7 +188,6 @@ const SettingsPage = () => {
             Save stats metric
           </Button>
 
-          {/* Small “current value” helper */}
           <div className="text-[11px] text-muted-foreground">
             Current:{" "}
             <span className="font-medium text-foreground">
@@ -211,15 +249,15 @@ const SettingsPage = () => {
       </div>
 
       {/* Force Update */}
-      <div className="rounded-xl border border-red-500/40 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-red-500">
+      <div className="rounded-xl border border-destructive/40 p-4 space-y-3 bg-card">
+        <div className="flex items-center gap-2 text-destructive">
           <AlertTriangle className="h-5 w-5" />
           <h2 className="font-semibold">Force Update</h2>
         </div>
 
         <p className="text-sm opacity-80">
-          Back up your data, reset local storage, then restore the backup.
-          Use this if something looks stuck after an update.
+          Back up your data, reset local storage, then restore the backup. Use this if something
+          looks stuck after an update.
         </p>
 
         <Button variant="destructive" onClick={handleResetWithBackup}>
