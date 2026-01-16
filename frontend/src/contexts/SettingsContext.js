@@ -36,6 +36,15 @@ export const SettingsProvider = ({ children }) => {
     setSettings(getSettings());
   }, []);
 
+  // Apply theme tokens to the DOM (CSS variables are defined in index.css + theme.css)
+  useEffect(() => {
+    const theme = settings?.theme || "dark";
+    document.documentElement.dataset.theme = theme;
+
+    // Helps the browser pick correct form control colours on light themes.
+    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
+  }, [settings?.theme]);
+
   const updateSetting = (key, value) => {
     const next = { ...settings, [key]: value };
     setSettings(next);
