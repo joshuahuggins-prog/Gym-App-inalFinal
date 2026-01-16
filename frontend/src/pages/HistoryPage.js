@@ -59,7 +59,7 @@ const HistoryPage = ({ onEditWorkout }) => {
       {/* Header */}
       <div className="bg-gradient-to-b from-card to-background border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gradient-primary mb-2">Workout History</h1>
+          <h1 className="text-3xl font-bold text-primary">Workout History</h1>
           <p className="text-sm text-muted-foreground">{totalCount} total workouts logged</p>
         </div>
       </div>
