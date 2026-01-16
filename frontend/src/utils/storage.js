@@ -174,37 +174,35 @@ export const rebuildPersonalRecordsFromWorkouts = () => {
         if (!key) continue;
 
         for (const s of ex?.sets || []) {
-  const completed = s?.completed === true;
+          const completed = s?.completed === true;
 
-  const weightRaw = s?.weight;
-  const repsRaw = s?.reps;
+          const weight = Number(s?.weight);
+          const reps = Number(s?.reps);
 
-  const weight = Number(weightRaw);
-  const reps = Number(repsRaw);
+          // ✅ Only count performed sets
+          if (!completed) continue;
+          if (!Number.isFinite(reps) || reps <= 0) continue;
+          if (!Number.isFinite(weight)) continue;
 
-  // ✅ Only count sets that represent a real performed set
-  if (!completed) continue;
-  if (!Number.isFinite(reps) || reps <= 0) continue;
-  if (!Number.isFinite(weight)) continue;
+          // ✅ Ignore weight 0 (usually means empty/unentered)
+          if (weight === 0) continue;
 
-  // ✅ Optional but recommended: ignore "0" weights (usually means not entered)
-  if (weight === 0) continue;
+          const prev = prs[key];
+          const prevW = prev ? Number(prev.weight) : -Infinity;
 
-  const prev = prs[key];
-  const prevW = prev ? Number(prev.weight) : -Infinity;
-
-  // Same PR rule: higher numeric weight wins
-  // (assisted is negative, so -10 beats -20, and positives beat negatives)
-  if (!prev || weight > prevW) {
-    prs[key] = {
-      exerciseName: ex?.name || ex?.id || key,
-      weight,
-      reps,
-      date: wDate,
-      previousWeight: prev?.weight ?? null,
-    };
-  }
-}
+          // Higher numeric weight wins (assisted is negative)
+          if (!prev || weight > prevW) {
+            prs[key] = {
+              exerciseName: ex?.name || ex?.id || key,
+              weight,
+              reps,
+              date: wDate,
+              previousWeight: prev?.weight ?? null,
+            };
+          }
+        }
+      }
+    }
 
     return setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, prs);
   } catch (e) {
@@ -223,7 +221,7 @@ export const saveWorkout = (workout) => {
   workouts.unshift(newWorkout);
 
   const ok = setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
-  if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ keep Progress in sync
+  if (ok) rebuildPersonalRecordsFromWorkouts();
   return ok;
 };
 
@@ -234,7 +232,7 @@ export const updateWorkout = (id, updates) => {
     workouts[index] = { ...workouts[index], ...updates };
 
     const ok = setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
-    if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ key change
+    if (ok) rebuildPersonalRecordsFromWorkouts();
     return ok;
   }
   return false;
@@ -245,7 +243,7 @@ export const deleteWorkout = (id) => {
   const filtered = workouts.filter((w) => w.id !== id);
 
   const ok = setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
-  if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ keep Progress in sync
+  if (ok) rebuildPersonalRecordsFromWorkouts();
   return ok;
 };
 
@@ -677,7 +675,7 @@ export const importFromCSV = (csvText) => {
     const combined = [...importedWorkouts, ...existing];
 
     const ok = setStorageData(STORAGE_KEYS.WORKOUTS, combined);
-    if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ keep Progress in sync
+    if (ok) rebuildPersonalRecordsFromWorkouts();
 
     return {
       success: true,
@@ -724,14 +722,14 @@ export const exportAllDataToJSON = () => {
         personalRecords: getPersonalRecords(),
         videoLinks: getVideoLinks(),
         programmes: getProgrammes(),
+
+        // Export overrides only (keeps backups small + portable)
         exerciseOverrides: getExerciseOverrides(),
+
         progressionSettings: getProgressionSettings(),
-        workoutPattern:
-          typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
+        workoutPattern: typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
         workoutPatternIndex:
-          typeof getWorkoutPatternIndex === "function"
-            ? getWorkoutPatternIndex()
-            : null,
+          typeof getWorkoutPatternIndex === "function" ? getWorkoutPatternIndex() : null,
       },
     };
 
@@ -778,19 +776,16 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     }
 
     if (data.settings) setStorageData(STORAGE_KEYS.SETTINGS, data.settings);
-    if (Array.isArray(data.bodyWeights))
-      setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
-    if (data.personalRecords)
-      setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
+    if (Array.isArray(data.bodyWeights)) setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
+    if (data.personalRecords) setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
     if (data.videoLinks) setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
-    if (Array.isArray(data.programmes))
-      setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
+    if (Array.isArray(data.programmes)) setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
 
     // New format: overrides-only
     if (Array.isArray(data.exerciseOverrides)) {
       setStorageData(STORAGE_KEYS.EXERCISES, data.exerciseOverrides);
     }
-    // Backward compat
+    // Backward compat: if old backups contain full "exercises", accept them as overrides
     else if (Array.isArray(data.exercises)) {
       setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
     }
