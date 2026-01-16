@@ -174,28 +174,37 @@ export const rebuildPersonalRecordsFromWorkouts = () => {
         if (!key) continue;
 
         for (const s of ex?.sets || []) {
-          const weight = Number(s?.weight);
-          const reps = Number(s?.reps);
+  const completed = s?.completed === true;
 
-          if (!Number.isFinite(weight)) continue;
+  const weightRaw = s?.weight;
+  const repsRaw = s?.reps;
 
-          const prev = prs[key];
-          const prevW = prev ? Number(prev.weight) : -Infinity;
+  const weight = Number(weightRaw);
+  const reps = Number(repsRaw);
 
-          // Same rule as your current PR logic: higher numeric weight wins
-          // (assisted is negative, so it won't override positive PRs)
-          if (!prev || weight > prevW) {
-            prs[key] = {
-              exerciseName: ex?.name || ex?.id || key,
-              weight,
-              reps: Number.isFinite(reps) ? reps : 0,
-              date: wDate,
-              previousWeight: prev?.weight ?? null,
-            };
-          }
-        }
-      }
-    }
+  // ✅ Only count sets that represent a real performed set
+  if (!completed) continue;
+  if (!Number.isFinite(reps) || reps <= 0) continue;
+  if (!Number.isFinite(weight)) continue;
+
+  // ✅ Optional but recommended: ignore "0" weights (usually means not entered)
+  if (weight === 0) continue;
+
+  const prev = prs[key];
+  const prevW = prev ? Number(prev.weight) : -Infinity;
+
+  // Same PR rule: higher numeric weight wins
+  // (assisted is negative, so -10 beats -20, and positives beat negatives)
+  if (!prev || weight > prevW) {
+    prs[key] = {
+      exerciseName: ex?.name || ex?.id || key,
+      weight,
+      reps,
+      date: wDate,
+      previousWeight: prev?.weight ?? null,
+    };
+  }
+}
 
     return setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, prs);
   } catch (e) {
