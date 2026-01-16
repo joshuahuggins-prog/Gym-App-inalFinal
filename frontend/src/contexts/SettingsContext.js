@@ -38,12 +38,18 @@ export const SettingsProvider = ({ children }) => {
 
   // Apply theme tokens to the DOM (CSS variables are defined in index.css + theme.css)
   useEffect(() => {
-    const theme = settings?.theme || "dark";
-    document.documentElement.dataset.theme = theme;
+  const theme = settings?.theme || "dark";
 
-    // Helps the browser pick correct form control colours on light themes.
-    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
-  }, [settings?.theme]);
+  document.documentElement.dataset.theme = theme;
+
+  if (theme === "dark") {
+    document.documentElement.classList.add("dark");
+    document.documentElement.style.colorScheme = "dark";
+  } else {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.style.colorScheme = "light";
+  }
+}, [settings?.theme]);
 
   const updateSetting = (key, value) => {
     const next = { ...settings, [key]: value };
