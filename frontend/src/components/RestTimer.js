@@ -42,22 +42,27 @@ const RestTimer = ({ duration, onComplete, onClose }) => {
   const dash = c * (1 - progress / 100);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-background/70 backdrop-blur-sm">
-      {/* Positions the modal about 1/3 up the screen */}
-      <div className="w-full flex justify-center pb-[33vh]">
-        <div className="relative w-[92vw] max-w-sm rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-[slideUp_.22s_ease-out]">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-background/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      {/* Bottom sheet positioned ~1/3 up the screen */}
+      <div
+        className="w-full flex justify-center pb-[33vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative w-[92vw] max-w-sm rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-[restSlideUp_.22s_ease-out]">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div>
-              <div className="text-sm font-semibold text-foreground">
-                Rest Timer
-              </div>
+              <div className="text-sm font-semibold text-foreground">Rest Timer</div>
               <div className="text-xs text-muted-foreground">
                 {timeLeft === 0 ? "Done" : "Counting down"}
               </div>
             </div>
 
             <button
+              type="button"
               onClick={onClose}
               className="text-muted-foreground hover:text-foreground"
               aria-label="Close"
@@ -67,7 +72,7 @@ const RestTimer = ({ duration, onComplete, onClose }) => {
             </button>
           </div>
 
-          {/* Body (taller) */}
+          {/* Body */}
           <div className="px-5 py-6 space-y-5">
             {/* Ring + time */}
             <div className="grid place-items-center">
@@ -96,8 +101,8 @@ const RestTimer = ({ duration, onComplete, onClose }) => {
 
                 <div className="absolute inset-0 grid place-items-center">
                   <div className="text-center">
-                    {/* ✅ Theme-matching text (best option) */}
-                    <div className="text-4xl font-extrabold text-foreground">
+                    {/* ✅ Theme-matching (primary) */}
+                    <div className="text-4xl font-extrabold text-primary">
                       {fmt(Math.max(0, timeLeft))}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
