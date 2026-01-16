@@ -487,8 +487,8 @@ const HomePage = () => {
         <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">
-               Gym Strength Programme
+              <h1 className="text-3xl font-bold text-primary">
+                Gym Strength Programme
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {new Date().toLocaleDateString("en-US", {
