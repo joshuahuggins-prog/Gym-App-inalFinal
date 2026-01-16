@@ -24,9 +24,10 @@
     color: #61dafb;
 }
 
-@keyframes restSheetUp {
+/* add to src/index.css (or your global css) */
+@keyframes slideUp {
   from {
-    transform: translateY(140px);
+    transform: translateY(16px);
     opacity: 0;
   }
   to {
