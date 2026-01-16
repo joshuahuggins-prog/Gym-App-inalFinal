@@ -216,8 +216,7 @@
   }
 }
 
-/* RestTimer slide-up animation */
-@keyframes slideUp {
+@keyframes restSlideUp {
   from {
     transform: translateY(24px);
     opacity: 0;
