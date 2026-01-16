@@ -6,10 +6,7 @@ import ExerciseCard from "../components/ExerciseCard";
 import { toast } from "sonner";
 
 import { getWorkouts, updateWorkout, getProgrammes, getExercises } from "../utils/storage";
-import {
-  buildWorkoutExerciseRows,
-  serializeWorkoutExercisesFromRows,
-} from "../utils/workoutBuilder";
+import { buildWorkoutExerciseRows, serializeWorkoutExercisesFromRows } from "../utils/workoutBuilder";
 
 const formatDateLong = (iso) => {
   try {
@@ -128,15 +125,15 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 pb-24">
+    <div className="min-h-screen bg-background text-foreground pb-24">
       {/* Header */}
-      <div className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+      <div className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-sm text-zinc-400">Editing</div>
-              <h1 className="text-lg font-bold text-yellow-300 truncate">{headerTitle}</h1>
-              <div className="text-xs text-zinc-400 mt-1">
+              <div className="text-sm text-muted-foreground">Editing</div>
+              <h1 className="text-lg font-bold text-gold truncate">{headerTitle}</h1>
+              <div className="text-xs text-muted-foreground mt-1">
                 Edit sets / reps / weight, then save.
               </div>
             </div>
@@ -145,7 +142,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
               variant="outline"
               size="sm"
               onClick={handleCancel}
-              className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+              className="border-border hover:bg-muted/50"
               title="Close"
             >
               <X className="w-4 h-4" />
@@ -155,7 +152,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
           <div className="flex gap-2">
             <Button
               onClick={handleSave}
-              className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-300"
+              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={!isDirty}
             >
               <Save className="w-4 h-4 mr-2" />
@@ -165,7 +162,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             <Button
               variant="outline"
               onClick={handleCancel}
-              className="flex-1 border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+              className="flex-1 border-border hover:bg-muted/50"
             >
               Cancel
             </Button>
@@ -178,7 +175,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
         {rows.map((exercise, idx) => (
           <div
             key={exercise.id || `${exercise.name}-${idx}`}
-            className="rounded-2xl border border-zinc-800 bg-zinc-900/30"
+            className="rounded-2xl border border-border bg-card/40"
           >
             <ExerciseCard
               exercise={exercise}
