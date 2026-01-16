@@ -130,6 +130,80 @@ export const getWorkouts = () => {
   });
 };
 
+// ============================
+// Personal Records (PRs)
+// ============================
+
+export const getPersonalRecords = () =>
+  getStorageData(STORAGE_KEYS.PERSONAL_RECORDS) || {};
+
+export const updatePersonalRecord = (exerciseName, weight, reps, date) => {
+  const prs = getPersonalRecords();
+  const key = String(exerciseName || "").toLowerCase().replace(/\s+/g, "_");
+
+  if (!prs[key] || weight > prs[key].weight) {
+    prs[key] = {
+      exerciseName,
+      weight,
+      reps,
+      date: date || new Date().toISOString(),
+      previousWeight: prs[key]?.weight || null,
+    };
+    setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, prs);
+    return true;
+  }
+  return false;
+};
+
+// ✅ NEW: rebuild PRs from ALL workouts (so editing history updates Progress)
+export const rebuildPersonalRecordsFromWorkouts = () => {
+  try {
+    const workouts = getWorkouts(); // newest-first
+    const prs = {};
+
+    for (const w of workouts) {
+      const wDate = w?.date || new Date().toISOString();
+
+      for (const ex of w?.exercises || []) {
+        // Prefer stable id; fallback to name
+        const key = String(ex?.id || ex?.name || "")
+          .toLowerCase()
+          .replace(/\s+/g, "_")
+          .trim();
+
+        if (!key) continue;
+
+        for (const s of ex?.sets || []) {
+          const weight = Number(s?.weight);
+          const reps = Number(s?.reps);
+
+          if (!Number.isFinite(weight)) continue;
+
+          const prev = prs[key];
+          const prevW = prev ? Number(prev.weight) : -Infinity;
+
+          // Same rule as your current PR logic: higher numeric weight wins
+          // (assisted is negative, so it won't override positive PRs)
+          if (!prev || weight > prevW) {
+            prs[key] = {
+              exerciseName: ex?.name || ex?.id || key,
+              weight,
+              reps: Number.isFinite(reps) ? reps : 0,
+              date: wDate,
+              previousWeight: prev?.weight ?? null,
+            };
+          }
+        }
+      }
+    }
+
+    return setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, prs);
+  } catch (e) {
+    console.error("Failed to rebuild personal records", e);
+    return false;
+  }
+};
+
 export const saveWorkout = (workout) => {
   const workouts = getWorkouts();
   const newWorkout = {
@@ -138,7 +212,10 @@ export const saveWorkout = (workout) => {
     date: workout.date || new Date().toISOString(),
   };
   workouts.unshift(newWorkout);
-  return setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
+
+  const ok = setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
+  if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ keep Progress in sync
+  return ok;
 };
 
 export const updateWorkout = (id, updates) => {
@@ -146,7 +223,10 @@ export const updateWorkout = (id, updates) => {
   const index = workouts.findIndex((w) => w.id === id);
   if (index !== -1) {
     workouts[index] = { ...workouts[index], ...updates };
-    return setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
+
+    const ok = setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
+    if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ key change
+    return ok;
   }
   return false;
 };
@@ -154,7 +234,10 @@ export const updateWorkout = (id, updates) => {
 export const deleteWorkout = (id) => {
   const workouts = getWorkouts();
   const filtered = workouts.filter((w) => w.id !== id);
-  return setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
+
+  const ok = setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
+  if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ keep Progress in sync
+  return ok;
 };
 
 // ============================
@@ -187,7 +270,8 @@ export const setStatsMetric = (statsMetric) => updateSettings({ statsMetric });
 // Body Weight Tracking
 // ============================
 
-export const getBodyWeights = () => getStorageData(STORAGE_KEYS.BODY_WEIGHT) || [];
+export const getBodyWeights = () =>
+  getStorageData(STORAGE_KEYS.BODY_WEIGHT) || [];
 
 export const addBodyWeight = (weight, note = "") => {
   const weights = getBodyWeights();
@@ -205,30 +289,6 @@ export const deleteBodyWeight = (id) => {
   const weights = getBodyWeights();
   const filtered = weights.filter((w) => w.id !== id);
   return setStorageData(STORAGE_KEYS.BODY_WEIGHT, filtered);
-};
-
-// ============================
-// Personal Records
-// ============================
-
-export const getPersonalRecords = () => getStorageData(STORAGE_KEYS.PERSONAL_RECORDS) || {};
-
-export const updatePersonalRecord = (exerciseName, weight, reps, date) => {
-  const prs = getPersonalRecords();
-  const key = String(exerciseName || "").toLowerCase().replace(/\s+/g, "_");
-
-  if (!prs[key] || weight > prs[key].weight) {
-    prs[key] = {
-      exerciseName,
-      weight,
-      reps,
-      date: date || new Date().toISOString(),
-      previousWeight: prs[key]?.weight || null,
-    };
-    setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, prs);
-    return true;
-  }
-  return false;
 };
 
 // ============================
@@ -423,7 +483,9 @@ export const updateProgressionSettings = (settings) => {
 // Workout Pattern
 // ============================
 
-export const getWorkoutPattern = () => getStorageData(STORAGE_KEYS.WORKOUT_PATTERN) || "A,B";
+export const getWorkoutPattern = () =>
+  getStorageData(STORAGE_KEYS.WORKOUT_PATTERN) || "A,B";
+
 export const setWorkoutPattern = (patternString) =>
   setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, patternString);
 
@@ -441,7 +503,9 @@ export const parseWorkoutPattern = (patternString) => {
 };
 
 export const getUsableProgrammes = () => {
-  return getProgrammes().filter((p) => Array.isArray(p.exercises) && p.exercises.length > 0);
+  return getProgrammes().filter(
+    (p) => Array.isArray(p.exercises) && p.exercises.length > 0
+  );
 };
 
 const getResolvedPatternList = () => {
@@ -452,9 +516,11 @@ const getResolvedPatternList = () => {
   const patternStr = getWorkoutPattern();
   const pattern = parseWorkoutPattern(patternStr);
 
-  const safePattern = pattern.length > 0 ? pattern : Array.from(usableTypes).sort();
+  const safePattern =
+    pattern.length > 0 ? pattern : Array.from(usableTypes).sort();
   const filtered = safePattern.filter((t) => usableTypes.has(t));
-  const finalPattern = filtered.length > 0 ? filtered : Array.from(usableTypes).sort();
+  const finalPattern =
+    filtered.length > 0 ? filtered : Array.from(usableTypes).sort();
 
   return finalPattern;
 };
@@ -478,23 +544,21 @@ export const advanceWorkoutPatternIndex = () => {
 };
 
 // ✅ NEW: Smart next type based on most recent saved workout.
-// If history exists, pick the type AFTER the last workout type in your pattern.
-// If not, fall back to index-based.
 export const peekNextWorkoutTypeSmart = () => {
   const finalPattern = getResolvedPatternList();
   if (finalPattern.length === 0) return null;
 
   const workouts = getWorkouts();
-  const lastType = workouts?.[0]?.type ? String(workouts[0].type).toUpperCase() : null;
+  const lastType = workouts?.[0]?.type
+    ? String(workouts[0].type).toUpperCase()
+    : null;
 
-  if (!lastType) {
-    return peekNextWorkoutTypeFromPattern();
-  }
+  if (!lastType) return peekNextWorkoutTypeFromPattern();
 
-  const lastIdx = finalPattern.findIndex((t) => String(t).toUpperCase() === lastType);
-  if (lastIdx === -1) {
-    return peekNextWorkoutTypeFromPattern();
-  }
+  const lastIdx = finalPattern.findIndex(
+    (t) => String(t).toUpperCase() === lastType
+  );
+  if (lastIdx === -1) return peekNextWorkoutTypeFromPattern();
 
   const nextIdx = (lastIdx + 1) % finalPattern.length;
   return finalPattern[nextIdx];
@@ -541,7 +605,9 @@ export const exportToCSV = () => {
 export const importFromCSV = (csvText) => {
   try {
     const lines = csvText.trim().split("\n");
-    if (lines.length < 2) return { success: false, error: "CSV file is empty or invalid" };
+    if (lines.length < 2) {
+      return { success: false, error: "CSV file is empty or invalid" };
+    }
 
     const headers = lines[0].split(",").map((h) => h.trim());
     const requiredHeaders = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps"];
@@ -601,7 +667,8 @@ export const importFromCSV = (csvText) => {
     const existing = getWorkouts();
     const combined = [...importedWorkouts, ...existing];
 
-    setStorageData(STORAGE_KEYS.WORKOUTS, combined);
+    const ok = setStorageData(STORAGE_KEYS.WORKOUTS, combined);
+    if (ok) rebuildPersonalRecordsFromWorkouts(); // ✅ keep Progress in sync
 
     return {
       success: true,
@@ -650,9 +717,12 @@ export const exportAllDataToJSON = () => {
         programmes: getProgrammes(),
         exerciseOverrides: getExerciseOverrides(),
         progressionSettings: getProgressionSettings(),
-        workoutPattern: typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
+        workoutPattern:
+          typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
         workoutPatternIndex:
-          typeof getWorkoutPatternIndex === "function" ? getWorkoutPatternIndex() : null,
+          typeof getWorkoutPatternIndex === "function"
+            ? getWorkoutPatternIndex()
+            : null,
       },
     };
 
@@ -678,7 +748,10 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       data.progressionSettings;
 
     if (!looksValid) {
-      return { success: false, error: "This file doesn't look like a valid full backup." };
+      return {
+        success: false,
+        error: "This file doesn't look like a valid full backup.",
+      };
     }
 
     // Workouts: overwrite or merge by id
@@ -696,10 +769,13 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     }
 
     if (data.settings) setStorageData(STORAGE_KEYS.SETTINGS, data.settings);
-    if (Array.isArray(data.bodyWeights)) setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
-    if (data.personalRecords) setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
+    if (Array.isArray(data.bodyWeights))
+      setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
+    if (data.personalRecords)
+      setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
     if (data.videoLinks) setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
-    if (Array.isArray(data.programmes)) setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
+    if (Array.isArray(data.programmes))
+      setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
 
     // New format: overrides-only
     if (Array.isArray(data.exerciseOverrides)) {
@@ -710,8 +786,9 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
     }
 
-    if (data.progressionSettings)
+    if (data.progressionSettings) {
       setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, data.progressionSettings);
+    }
 
     if (data.workoutPattern != null) {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern);
@@ -719,6 +796,9 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     if (data.workoutPatternIndex != null) {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, data.workoutPatternIndex);
     }
+
+    // ✅ IMPORTANT: after importing workouts, rebuild PRs so Progress matches history edits
+    rebuildPersonalRecordsFromWorkouts();
 
     return { success: true };
   } catch (e) {
