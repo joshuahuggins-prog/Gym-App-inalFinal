@@ -228,6 +228,27 @@ export const getNextWorkoutTypeFromPattern = () => {
   return nextType;
 };
 
+
+// Same as getNextWorkoutTypeFromPattern, but does NOT advance the pattern index.
+// Useful for showing/choosing the next workout without committing the rotation.
+export const peekNextWorkoutTypeFromPattern = () => {
+  const usable = getUsableProgrammes();
+  if (usable.length === 0) return null;
+
+  const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
+  const pattern = parseWorkoutPattern(getWorkoutPattern());
+
+  const safePattern =
+    pattern.length > 0 ? pattern : Array.from(usableTypes).sort();
+
+  const filtered = safePattern.filter((t) => usableTypes.has(t));
+  const finalPattern =
+    filtered.length > 0 ? filtered : Array.from(usableTypes).sort();
+
+  const i = getWorkoutPatternIndex() % finalPattern.length;
+  return finalPattern[i];
+};
+
 // =====================
 // Workouts
 // =====================
