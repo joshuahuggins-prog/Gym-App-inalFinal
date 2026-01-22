@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   PROGRESSION_SETTINGS: "gym_progression_settings",
   WORKOUT_PATTERN: "gym_workout_pattern",
   WORKOUT_PATTERN_INDEX: "gym_workout_pattern_index",
+  WORKOUT_DRAFT: "gym_workout_draft",
 };
 
 // =====================
@@ -89,6 +90,28 @@ export const setStorageData = (key, value) => {
     return true;
   } catch (e) {
     console.error(`Failed to write ${key}`, e);
+    return false;
+  }
+};
+// =====================
+// Workout Draft (unsaved session state)
+// =====================
+// Used to preserve in-progress workout data across refresh / accidental close.
+// Stored as a single object; callers can choose structure (e.g., { programmeId, startedAt, exercises: [...] }).
+export const getWorkoutDraft = () => {
+  return getStorageData(STORAGE_KEYS.WORKOUT_DRAFT);
+};
+
+export const setWorkoutDraft = (draft) => {
+  return setStorageData(STORAGE_KEYS.WORKOUT_DRAFT, draft);
+};
+
+export const clearWorkoutDraft = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.WORKOUT_DRAFT);
+    return true;
+  } catch (e) {
+    console.error("Failed to clear workout draft", e);
     return false;
   }
 };
