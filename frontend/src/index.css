@@ -1,4 +1,3 @@
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
@@ -6,68 +5,223 @@
 @tailwind utilities;
 
 @layer base {
+  /* 
+    Theme system:
+    - colour theme is set on the App wrapper with: data-theme="blue|yellow|green|red"
+    - mode is set with Tailwind's dark class: class="dark"
+    - all tokens are HSL (no hsl() wrapper here) so Tailwind can do: hsl(var(--token))
+  */
+
+  /* ===== Default: BLUE (Light mode) ===== */
   :root {
-    /* Dark Mode Fitness Theme - HSL Format */
-    --background: 222 47% 7%;  /* Deep navy-black #0A0E1A */
-    --foreground: 210 40% 98%;  /* Off-white for text */
-    
-    --card: 222 40% 11%;  /* Slightly lighter than background #151923 */
-    --card-foreground: 210 40% 98%;
-    
-    --popover: 222 40% 11%;
-    --popover-foreground: 210 40% 98%;
-    
-    /* Electric Cyan Primary */
-    --primary: 189 94% 50%;  /* Vibrant cyan #06BAE8 */
-    --primary-foreground: 222 47% 7%;
-    --primary-glow: 189 94% 65%;  /* Lighter cyan for glow */
-    
-    /* Gold Accent for Achievements */
-    --gold: 45 93% 58%;  /* Warm gold #F59E0B */
-    --gold-foreground: 222 47% 7%;
-    
-    --secondary: 222 30% 18%;  /* Muted card */
-    --secondary-foreground: 210 40% 98%;
-    
-    --muted: 222 30% 18%;
-    --muted-foreground: 215 20% 65%;
-    
-    --accent: 189 94% 50%;
-    --accent-foreground: 222 47% 7%;
-    
-    --destructive: 0 84% 60%;
+    --background: 200 35% 96%;
+    --foreground: 222 47% 10%;
+
+    --card: 200 30% 99%;
+    --card-foreground: 222 47% 10%;
+
+    --popover: 200 30% 99%;
+    --popover-foreground: 222 47% 10%;
+
+    /* Primary (blue/cyan) */
+    --primary: 189 94% 40%;
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 189 94% 55%;
+
+    --gold: 45 93% 58%;
+    --gold-foreground: 222 47% 10%;
+
+    --secondary: 200 18% 92%;
+    --secondary-foreground: 222 47% 10%;
+
+    --muted: 200 20% 92%;
+    --muted-foreground: 222 20% 40%;
+
+    --accent: 189 94% 40%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84% 55%;
     --destructive-foreground: 210 40% 98%;
-    
-    --border: 222 30% 20%;
-    --input: 222 30% 20%;
-    --ring: 189 94% 50%;
-    
-    /* Success state (green) */
-    --success: 142 76% 45%;
+
+    --border: 200 18% 85%;
+    --input: 200 18% 85%;
+    --ring: 189 94% 40%;
+
+    --success: 142 76% 38%;
     --success-foreground: 210 40% 98%;
-    
+
     /* Chart colors */
-    --chart-1: 189 94% 50%;  /* Cyan */
-    --chart-2: 45 93% 58%;   /* Gold */
-    --chart-3: 142 76% 45%;  /* Green */
-    --chart-4: 262 83% 58%;  /* Purple */
-    --chart-5: 0 84% 60%;    /* Red */
-    
+    --chart-1: 189 94% 40%;
+    --chart-2: 45 93% 55%;
+    --chart-3: 142 76% 38%;
+    --chart-4: 262 83% 55%;
+    --chart-5: 0 84% 55%;
+
     /* Custom Design Tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(189 94% 50%), hsl(189 94% 65%));
-    --gradient-gold: linear-gradient(135deg, hsl(45 93% 58%), hsl(35 90% 55%));
-    --gradient-hero: linear-gradient(180deg, hsl(222 47% 7%), hsl(222 40% 11%));
-    
-    --shadow-elegant: 0 10px 30px -10px hsl(189 94% 50% / 0.3);
-    --shadow-glow: 0 0 40px hsl(189 94% 65% / 0.4);
-    --shadow-gold: 0 10px 30px -10px hsl(45 93% 58% / 0.3);
-    
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-gold: linear-gradient(135deg, hsl(var(--gold)), hsl(35 90% 55%));
+    --gradient-hero: linear-gradient(180deg, hsl(var(--background)), hsl(var(--card)));
+
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.18);
+    --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.22);
+    --shadow-gold: 0 10px 30px -10px hsl(var(--gold) / 0.18);
+
     --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    
+
     --radius: 0.75rem;
   }
+
+  /* ===== BLUE (Dark mode) ===== */
+  .dark {
+    --background: 222 38% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 30% 12%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 30% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 189 94% 50%;
+    --primary-foreground: 222 38% 8%;
+    --primary-glow: 189 94% 65%;
+
+    --gold: 45 93% 58%;
+    --gold-foreground: 222 38% 8%;
+
+    --secondary: 222 22% 18%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 22% 18%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 189 94% 50%;
+    --accent-foreground: 222 38% 8%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 22% 20%;
+    --input: 222 22% 20%;
+    --ring: 189 94% 50%;
+
+    --success: 142 76% 45%;
+    --success-foreground: 210 40% 98%;
+
+    --chart-1: 189 94% 50%;
+    --chart-2: 45 93% 58%;
+    --chart-3: 142 76% 45%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 0 84% 60%;
+  }
+
+  /* ===== YELLOW ===== */
+  [data-theme="yellow"] {
+    --background: 45 35% 96%;
+    --card: 45 30% 99%;
+    --popover: 45 30% 99%;
+
+    --primary: 45 93% 50%;
+    --primary-glow: 45 93% 62%;
+    --primary-foreground: 222 47% 10%;
+
+    --accent: 45 93% 50%;
+    --accent-foreground: 222 47% 10%;
+
+    --gold: 45 93% 58%;
+    --gold-foreground: 222 47% 10%;
+
+    --ring: 45 93% 50%;
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.16);
+    --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.20);
+  }
+
+  .dark[data-theme="yellow"] {
+    --background: 45 30% 8%;
+    --card: 45 22% 12%;
+    --popover: 45 22% 12%;
+
+    --primary: 45 93% 58%;
+    --primary-glow: 45 93% 70%;
+    --primary-foreground: 45 30% 8%;
+
+    --accent: 45 93% 58%;
+    --accent-foreground: 45 30% 8%;
+
+    --gold: 45 93% 58%;
+    --gold-foreground: 45 30% 8%;
+
+    --ring: 45 93% 58%;
+  }
+
+  /* ===== GREEN ===== */
+  [data-theme="green"] {
+    --background: 142 28% 96%;
+    --card: 142 22% 99%;
+    --popover: 142 22% 99%;
+
+    --primary: 142 76% 34%;
+    --primary-glow: 142 76% 48%;
+    --primary-foreground: 210 40% 98%;
+
+    --accent: 142 76% 34%;
+    --accent-foreground: 210 40% 98%;
+
+    --success: 142 76% 34%;
+    --ring: 142 76% 34%;
+  }
+
+  .dark[data-theme="green"] {
+    --background: 142 25% 8%;
+    --card: 142 20% 12%;
+    --popover: 142 20% 12%;
+
+    --primary: 142 76% 45%;
+    --primary-glow: 142 76% 58%;
+    --primary-foreground: 142 25% 8%;
+
+    --accent: 142 76% 45%;
+    --accent-foreground: 142 25% 8%;
+
+    --success: 142 76% 45%;
+    --ring: 142 76% 45%;
+  }
+
+  /* ===== RED ===== */
+  [data-theme="red"] {
+    --background: 0 30% 96%;
+    --card: 0 24% 99%;
+    --popover: 0 24% 99%;
+
+    --primary: 0 84% 50%;
+    --primary-glow: 0 84% 62%;
+    --primary-foreground: 210 40% 98%;
+
+    --accent: 0 84% 50%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84% 55%;
+    --ring: 0 84% 50%;
+  }
+
+  .dark[data-theme="red"] {
+    --background: 0 28% 8%;
+    --card: 0 22% 12%;
+    --popover: 0 22% 12%;
+
+    --primary: 0 84% 60%;
+    --primary-glow: 0 84% 70%;
+    --primary-foreground: 0 28% 8%;
+
+    --accent: 0 84% 60%;
+    --accent-foreground: 0 28% 8%;
+
+    --destructive: 0 84% 60%;
+    --ring: 0 84% 60%;
+  }
 }
+
 
 @layer base {
   * {
@@ -213,16 +367,5 @@
     border-right-color: inherit;
     border-top-color: inherit;
     border-bottom-color: inherit;
-  }
-}
-
-@keyframes restSlideUp {
-  from {
-    transform: translateY(24px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
   }
 }
