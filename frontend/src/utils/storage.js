@@ -29,6 +29,19 @@ export const STORAGE_KEYS = {
 // =====================
 // Helpers
 // =====================
+// Set / change the draft workout type without overwriting the rest of the draft
+export const setDraftWorkoutType = (type) => {
+  const t = (type || "").toString().trim().toUpperCase();
+  const draft = getWorkoutDraft();
+
+  const nextDraft =
+    draft && typeof draft === "object"
+      ? { ...draft, type: t }
+      : { type: t, startedAt: new Date().toISOString(), date: new Date().toISOString().slice(0, 10) };
+
+  return setWorkoutDraft(nextDraft);
+};
+
 export const advanceWorkoutPatternIndex = () => {
   const usable = getUsableProgrammes();
   const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
