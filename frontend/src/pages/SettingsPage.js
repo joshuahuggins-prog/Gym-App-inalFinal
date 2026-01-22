@@ -1,19 +1,30 @@
 // src/pages/SettingsPage.js
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Save,
-  TrendingUp,
-  Settings as SettingsIcon,
   AlertTriangle,
   ListOrdered,
-  BarChart3,
+  Save,
+  Settings as SettingsIcon,
+  TrendingUp,
+  Palette,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { toast } from "sonner";
-
+import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { useSettings } from "../contexts/SettingsContext";
+import { toast } from "sonner";
 
 import {
   getProgressionSettings,
@@ -26,40 +37,56 @@ import {
   resetWithBackup,
 } from "../utils/storage";
 
+// ✅ App version display (CRA/CRACO supports importing package.json)
+import pkg from "../../package.json";
+
+const numberOrFallback = (value, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const SettingsPage = () => {
-  const { settings, updateSetting, weightUnit, toggleWeightUnit, statsMetric, setStatsMetric } =
-    useSettings();
+  const { weightUnit, toggleWeightUnit, colorMode, colorTheme, setColorMode, setColorTheme } = useSettings();
 
-  const themeValue = settings?.theme || "dark";
-
-  const [progressionSettings, setProgressionSettingsState] = useState(null);
+  const [progressionSettings, setProgressionSettings] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
 
-  // Local UI draft so user can select then hit "Save"
-  const [statsMetricDraft, setStatsMetricDraft] = useState(statsMetric || "maxWeight");
+  const usableProgrammeTypes = useMemo(() => {
+    return getUsableProgrammes().map((p) => String(p.type).toUpperCase());
+  }, []);
 
   useEffect(() => {
-    setProgressionSettingsState(getProgressionSettings());
+    setProgressionSettings(getProgressionSettings());
     setWorkoutPatternState(getWorkoutPattern());
-    setStatsMetricDraft(statsMetric || "maxWeight");
-  }, [statsMetric]);
-
-  const statsMetricLabel = useMemo(() => {
-    return statsMetricDraft === "e1rm" ? "Weight + Reps (e1RM)" : "Max Weight";
-  }, [statsMetricDraft]);
+  }, []);
 
   const handleSaveProgression = () => {
-    updateProgressionSettings(progressionSettings);
+    if (!progressionSettings) return;
+
+    const cleaned = {
+      ...progressionSettings,
+      globalIncrementKg: numberOrFallback(progressionSettings.globalIncrementKg, 2.5),
+      globalIncrementLbs: numberOrFallback(progressionSettings.globalIncrementLbs, 5),
+      rptSet2Percentage: numberOrFallback(progressionSettings.rptSet2Percentage, 90),
+      rptSet3Percentage: numberOrFallback(progressionSettings.rptSet3Percentage, 80),
+      exerciseSpecific: progressionSettings.exerciseSpecific || {},
+    };
+
+    updateProgressionSettings(cleaned);
+    setProgressionSettings(cleaned);
     toast.success("Progression settings saved");
   };
 
   const handleSavePattern = () => {
     const parsed = parseWorkoutPattern(workoutPattern);
-    const usable = getUsableProgrammes().map((p) => String(p.type).toUpperCase());
+    if (parsed.length === 0) {
+      toast.error("Please enter a pattern like A,B,A,B");
+      return;
+    }
 
-    const valid = parsed.every((p) => usable.includes(String(p).toUpperCase()));
+    const valid = parsed.every((p) => usableProgrammeTypes.includes(p));
     if (!valid) {
-      toast.error("Workout pattern contains invalid workout letters");
+      toast.error(`Invalid letters. Allowed: ${usableProgrammeTypes.join(", ")}`);
       return;
     }
 
@@ -68,20 +95,15 @@ const SettingsPage = () => {
     toast.success("Workout pattern saved");
   };
 
-  const handleSaveStatsMetric = () => {
-    setStatsMetric(statsMetricDraft);
-    toast.success(`Stats metric saved: ${statsMetricLabel}`);
-  };
-
-  const handleResetWithBackup = async () => {
+  const handleForceUpdate = async () => {
     const ok = window.confirm(
-      "This will back up your data, reset the app storage, then restore the backup.\n\nUse this only if something looks broken after an update.\n\nPlease also export your data manually first in the Data tab.\n\nContinue?"
+      "Force Update will:\n\n1) Back up your data\n2) Reset local app storage\n3) Restore your backup\n\nThis is safe for history, but please export a manual backup first (Data tab), just in case.\n\nContinue?"
     );
     if (!ok) return;
 
     const res = await resetWithBackup({ merge: false });
     if (!res?.success) {
-      alert(res?.error || "Reset failed");
+      alert(res?.error || "Force Update failed");
     }
   };
 
@@ -89,181 +111,157 @@ const SettingsPage = () => {
 
   return (
     <div className="space-y-8 p-4 max-w-xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <SettingsIcon className="h-6 w-6" />
-        <h1 className="text-xl font-bold">Settings</h1>
+      {/* ===== Header ===== */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <SettingsIcon className="h-6 w-6" />
+          <h1 className="text-xl font-bold">Settings</h1>
+        </div>
+
+        {/* ✅ Version */}
+        <div className="text-xs text-muted-foreground">
+          Version {pkg?.version || "unknown"}
+        </div>
       </div>
 
-      {/* Units */}
-      <div className="space-y-2">
+      {/* ===== Units ===== */}
+      <section className="space-y-2">
         <h2 className="font-semibold flex items-center gap-2">
           <TrendingUp className="h-4 w-4" />
           Units
         </h2>
-        <Button onClick={toggleWeightUnit}>Switch to {weightUnit === "kg" ? "lbs" : "kg"}</Button>
-      </div>
+        <Button onClick={toggleWeightUnit}>
+          Switch to {weightUnit === "kg" ? "lbs" : "kg"}
+        </Button>
+      </section>
 
-      {/* Theme */}
-      <div className="space-y-3">
+      
+      {/* ===== Appearance ===== */}
+      <section className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
-          <SettingsIcon className="h-4 w-4" />
-          Theme
+          <Palette className="h-4 w-4" />
+          Appearance
         </h2>
 
-        <div className="rounded-xl border border-border p-4 space-y-3 bg-card">
-          <div className="text-sm text-muted-foreground">
-            Pick a colour theme. This changes the whole app instantly.
+        <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                {colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                <div className="font-medium">Dark mode</div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Toggle between light and dark UI.
+              </div>
+            </div>
+
+            <Switch
+              checked={colorMode === "dark"}
+              onCheckedChange={(checked) => setColorMode(checked ? "dark" : "light")}
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { key: "dark", label: "Dark (default)" },
-              { key: "green", label: "Green" },
-              { key: "yellow", label: "Yellow" },
-              { key: "greyRed", label: "Grey / Red" },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => updateSetting("theme", key)}
-                className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                  themeValue === key
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-foreground border-border hover:bg-muted/50"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <div className="space-y-2">
+            <Label className="text-sm">Colour theme</Label>
+            <Select value={colorTheme || "blue"} onValueChange={(v) => setColorTheme(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a theme" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="blue">Blue</SelectItem>
+                <SelectItem value="yellow">Yellow</SelectItem>
+                <SelectItem value="green">Green</SelectItem>
+                <SelectItem value="red">Red</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <div className="text-[11px] text-muted-foreground">
-            Current: <span className="font-medium text-foreground">{themeValue}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Metric */}
-      <div className="space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
-          Stats metric
-        </h2>
-
-        <div className="rounded-xl border border-border p-4 space-y-3 bg-card">
-          <div className="text-sm text-muted-foreground">Choose how charts show progress.</div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStatsMetricDraft("maxWeight")}
-              className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                statsMetricDraft === "maxWeight"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background text-foreground border-border hover:bg-muted/50"
-              }`}
-            >
-              Max Weight
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatsMetricDraft("e1rm")}
-              className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                statsMetricDraft === "e1rm"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background text-foreground border-border hover:bg-muted/50"
-              }`}
-            >
-              Weight + Reps (e1RM)
-            </button>
-          </div>
-
-          <div className="text-xs text-muted-foreground">
-            e1RM uses Epley: <span className="font-mono">weight × (1 + reps/30)</span>
-          </div>
-
-          <Button onClick={handleSaveStatsMetric} variant="outline">
-            Save stats metric
-          </Button>
-
-          <div className="text-[11px] text-muted-foreground">
-            Current:{" "}
-            <span className="font-medium text-foreground">
-              {statsMetric === "e1rm" ? "Weight + Reps (e1RM)" : "Max Weight"}
-            </span>
+            <div className="text-xs text-muted-foreground">
+              The background, cards and accents tint to match your chosen colour.
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Progression */}
-      <div className="space-y-3">
+      </section>
+{/* ===== Progression Settings ===== */}
+      <section className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <Save className="h-4 w-4" />
           Progression
         </h2>
 
         <div className="grid grid-cols-2 gap-2">
-          <Input
-            type="number"
-            value={progressionSettings.globalIncrementKg}
-            onChange={(e) =>
-              setProgressionSettingsState({
-                ...progressionSettings,
-                globalIncrementKg: Number(e.target.value),
-              })
-            }
-            placeholder="Kg increment"
-          />
-          <Input
-            type="number"
-            value={progressionSettings.globalIncrementLbs}
-            onChange={(e) =>
-              setProgressionSettingsState({
-                ...progressionSettings,
-                globalIncrementLbs: Number(e.target.value),
-              })
-            }
-            placeholder="Lb increment"
-          />
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">Global increment (kg)</div>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={progressionSettings.globalIncrementKg ?? ""}
+              onChange={(e) =>
+                setProgressionSettings((prev) => ({
+                  ...prev,
+                  globalIncrementKg: e.target.value,
+                }))
+              }
+              placeholder="2.5"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">Global increment (lbs)</div>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={progressionSettings.globalIncrementLbs ?? ""}
+              onChange={(e) =>
+                setProgressionSettings((prev) => ({
+                  ...prev,
+                  globalIncrementLbs: e.target.value,
+                }))
+              }
+              placeholder="5"
+            />
+          </div>
         </div>
 
         <Button onClick={handleSaveProgression}>Save progression</Button>
-      </div>
+      </section>
 
-      {/* Workout Pattern */}
-      <div className="space-y-3">
+      {/* ===== Workout Pattern ===== */}
+      <section className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <ListOrdered className="h-4 w-4" />
           Workout pattern
         </h2>
 
+        <div className="text-xs text-muted-foreground">
+          Allowed: {usableProgrammeTypes.join(", ")} (e.g. A,B,A,B)
+        </div>
+
         <Input
           value={workoutPattern}
           onChange={(e) => setWorkoutPatternState(e.target.value)}
           placeholder="e.g. A,B,A,B"
+          autoCapitalize="characters"
         />
 
         <Button onClick={handleSavePattern}>Save pattern</Button>
-      </div>
+      </section>
 
-      {/* Force Update */}
-      <div className="rounded-xl border border-destructive/40 p-4 space-y-3 bg-card">
-        <div className="flex items-center gap-2 text-destructive">
+      {/* ===== Force Update ===== */}
+      <section className="rounded-xl border border-red-500/40 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-red-500">
           <AlertTriangle className="h-5 w-5" />
           <h2 className="font-semibold">Force Update</h2>
         </div>
 
         <p className="text-sm opacity-80">
-          Back up your data, reset local storage, then restore the backup. Use this if something
-          looks stuck after an update.
+          Rebuilds local app data after an update by backing up, resetting storage,
+          then restoring your backup. Use only if something looks stuck.
         </p>
 
-        <Button variant="destructive" onClick={handleResetWithBackup}>
-          Reset app (keep data)
+        <Button variant="destructive" onClick={handleForceUpdate}>
+          Force Update (keep data)
         </Button>
-      </div>
+      </section>
     </div>
   );
 };
