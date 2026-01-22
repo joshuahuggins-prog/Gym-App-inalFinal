@@ -576,11 +576,12 @@ export default function ProgressPage() {
                                   </div>
 
                                   <div className="text-foreground">
-                                    <BarChart
-                                      points={ex.points}
-                                      unitLabel={unitLabel}
-                                      allowNegative={true}
+                                    <LineChart
+                                     points={ex.points}
+                                     unitLabel={unitLabel}
+                                     allowNegative={true}
                                     />
+
                                   </div>
 
                                   <div className="mt-3 grid grid-cols-2 gap-2">
