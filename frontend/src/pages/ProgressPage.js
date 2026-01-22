@@ -6,11 +6,6 @@ import { getProgrammes, getWorkouts, getSettings } from "../utils/storage";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
-/**
- * Metric:
- * - "max": best set weight
- * - "e1rm": estimated 1RM using Epley: w * (1 + reps/30)
- */
 const e1rm = (w, r) => {
   const ww = Number(w);
   const rr = Number(r);
@@ -38,106 +33,222 @@ const startOfRange = (rangeKey) => {
 const formatNumber = (n) => {
   const x = Number(n);
   if (!Number.isFinite(x)) return "-";
-  // keep it neat
-  return x >= 100 ? Math.round(x).toString() : (Math.round(x * 10) / 10).toString();
+  // compact but readable
+  if (Math.abs(x) >= 100) return Math.round(x).toString();
+  return (Math.round(x * 10) / 10).toString();
 };
 
-function Sparkline({ points = [], height = 24, padding = 2 }) {
-  // points: [{x: Date, y: number}]
-  const ys = points.map((p) => p.y).filter((v) => Number.isFinite(v));
-  const minY = ys.length ? Math.min(...ys) : 0;
-  const maxY = ys.length ? Math.max(...ys) : 1;
+const monthShort = (d) =>
+  d.toLocaleDateString(undefined, { month: "short" });
 
-  const w = 120;
+const monthYearShort = (d) =>
+  d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+
+const normKey = (nameOrId) =>
+  (nameOrId || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+
+/**
+ * Build bar chart points: one point per workout-date (YYYY-MM-DD), keep MAX for that day.
+ * Points: [{ x: Date, y: number }]
+ */
+const compressByDayMax = (pts) => {
+  const m = new Map(); // yyyy-mm-dd -> max
+  pts.forEach((p) => {
+    const k = p.x.toISOString().slice(0, 10);
+    const prev = m.get(k);
+    if (prev == null || p.y > prev) m.set(k, p.y);
+  });
+  return Array.from(m.entries())
+    .map(([k, y]) => ({ x: new Date(k), y }))
+    .sort((a, b) => a.x - b.x);
+};
+
+function BarChart({
+  points = [],
+  unitLabel = "kg",
+  height = 220,
+  maxXTicks = 6,
+  allowNegative = true,
+}) {
+  // SVG bar chart with axes + dotted grid
+  const w = 860;
   const h = height;
-
-  const norm = (y) => {
-    if (maxY === minY) return h / 2;
-    const t = (y - minY) / (maxY - minY);
-    return h - padding - t * (h - padding * 2);
-  };
-
-  const step = points.length > 1 ? (w - padding * 2) / (points.length - 1) : 0;
-  const d = points
-    .map((p, i) => {
-      const x = padding + i * step;
-      const y = norm(p.y);
-      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block">
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.9" />
-    </svg>
-  );
-}
-
-function BigLineChart({ points = [] }) {
-  // Simple larger SVG line chart with dots + month labels
-  const w = 900;
-  const h = 260;
-  const pad = 28;
+  const padL = 54;
+  const padR = 16;
+  const padT = 16;
+  const padB = 44;
 
   const ys = points.map((p) => p.y).filter((v) => Number.isFinite(v));
-  const minY = ys.length ? Math.min(...ys) : 0;
-  const maxY = ys.length ? Math.max(...ys) : 1;
+  const minData = ys.length ? Math.min(...ys) : 0;
+  const maxData = ys.length ? Math.max(...ys) : 1;
 
-  const normY = (y) => {
-    if (maxY === minY) return h / 2;
+  // Make room around values + allow negative
+  let minY = allowNegative ? Math.min(minData, 0) : Math.max(minData, 0);
+  let maxY = Math.max(maxData, 0);
+
+  if (minY === maxY) {
+    // avoid flatline
+    minY -= 1;
+    maxY += 1;
+  }
+
+  // little padding
+  const range = maxY - minY;
+  minY -= range * 0.08;
+  maxY += range * 0.08;
+
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  const yToPx = (y) => {
     const t = (y - minY) / (maxY - minY);
-    return h - pad - t * (h - pad * 2);
+    return padT + (1 - t) * plotH;
   };
 
-  const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+  const zeroY = yToPx(0);
 
-  const pathD = points
-    .map((p, i) => {
-      const x = pad + i * step;
-      const y = normY(p.y);
-      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
+  const n = points.length;
+  const gap = n > 0 ? Math.max(6, Math.min(14, plotW / (n * 2))) : 8;
+  const barW = n > 0 ? Math.max(6, (plotW - gap * (n - 1)) / n) : 10;
 
-  // sparse labels: show ~6 labels max
-  const labelEvery = Math.max(1, Math.floor(points.length / 6));
-  const formatLabel = (d) =>
-    d
-      ? d.toLocaleDateString(undefined, { month: "short", year: "2-digit" })
-      : "";
+  // grid lines
+  const gridLines = 4;
+  const grid = Array.from({ length: gridLines + 1 }, (_, i) => i);
+
+  // x labels
+  const every = Math.max(1, Math.floor(n / maxXTicks));
 
   return (
     <div className="w-full overflow-x-auto">
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block">
-        {/* axis baseline */}
-        <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="currentColor" opacity="0.15" />
-        <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="currentColor" opacity="0.15" />
+        {/* background plot area */}
+        <rect
+          x={padL}
+          y={padT}
+          width={plotW}
+          height={plotH}
+          fill="transparent"
+        />
 
-        {/* line */}
-        <path d={pathD} fill="none" stroke="currentColor" strokeWidth="3" opacity="0.95" />
+        {/* horizontal dotted grid + y labels */}
+        {grid.map((i) => {
+          const t = i / gridLines;
+          const yVal = minY + (1 - t) * (maxY - minY);
+          const y = yToPx(yVal);
 
-        {/* dots */}
-        {points.map((p, i) => {
-          const x = pad + i * step;
-          const y = normY(p.y);
-          return <circle key={i} cx={x} cy={y} r="4" fill="currentColor" opacity="0.95" />;
+          return (
+            <g key={i}>
+              <line
+                x1={padL}
+                y1={y}
+                x2={w - padR}
+                y2={y}
+                stroke="currentColor"
+                opacity="0.12"
+                strokeDasharray="3 6"
+              />
+              <text
+                x={padL - 10}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="11"
+                fill="currentColor"
+                opacity="0.65"
+              >
+                {formatNumber(yVal)}
+              </text>
+            </g>
+          );
         })}
 
-        {/* labels */}
+        {/* axes */}
+        <line
+          x1={padL}
+          y1={padT}
+          x2={padL}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+        <line
+          x1={padL}
+          y1={h - padB}
+          x2={w - padR}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+
+        {/* zero line (if visible) */}
+        {zeroY >= padT && zeroY <= h - padB && (
+          <line
+            x1={padL}
+            y1={zeroY}
+            x2={w - padR}
+            y2={zeroY}
+            stroke="currentColor"
+            opacity="0.25"
+            strokeDasharray="2 4"
+          />
+        )}
+
+        {/* y-axis unit label */}
+        <text
+          x={padL}
+          y={12}
+          textAnchor="start"
+          fontSize="12"
+          fill="currentColor"
+          opacity="0.75"
+        >
+          {unitLabel}
+        </text>
+
+        {/* bars */}
         {points.map((p, i) => {
-          if (i % labelEvery !== 0 && i !== points.length - 1) return null;
-          const x = pad + i * step;
+          const x = padL + i * (barW + gap);
+          const y = yToPx(p.y);
+          const y0 = zeroY;
+
+          const top = Math.min(y, y0);
+          const bottom = Math.max(y, y0);
+          const bh = Math.max(2, bottom - top);
+
+          return (
+            <g key={i}>
+              <rect
+                x={x}
+                y={top}
+                width={barW}
+                height={bh}
+                rx="4"
+                fill="currentColor"
+                opacity="0.9"
+              />
+            </g>
+          );
+        })}
+
+        {/* x labels */}
+        {points.map((p, i) => {
+          if (i % every !== 0 && i !== points.length - 1) return null;
+          const x = padL + i * (barW + gap) + barW / 2;
+
           return (
             <text
-              key={`t-${i}`}
+              key={`x-${i}`}
               x={x}
-              y={h - 8}
+              y={h - 16}
               textAnchor="middle"
-              fontSize="12"
+              fontSize="11"
               fill="currentColor"
-              opacity="0.7"
+              opacity="0.65"
             >
-              {formatLabel(p.x)}
+              {monthYearShort(p.x)}
             </text>
           );
         })}
@@ -149,35 +260,26 @@ function BigLineChart({ points = [] }) {
 export default function ProgressPage() {
   const settings = getSettings();
   const weightUnit = settings?.weightUnit || "kg";
-
-  // NEW: progress metric setting (defaults to max)
   const progressMetric = settings?.progressMetric === "e1rm" ? "e1rm" : "max";
+  const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
 
-  const [range, setRange] = useState("all"); // all | 3m | 6m | 1y
-  const [selected, setSelected] = useState(null); // { programmeType, exerciseKey, exerciseName }
+  const [range, setRange] = useState("all");
+  const [expanded, setExpanded] = useState(null); // { programmeKey, exerciseKey }
 
-  const data = useMemo(() => {
+  const computed = useMemo(() => {
     const programmes = getProgrammes() || [];
     const workoutsRaw = getWorkouts() || [];
 
-    // Filter workouts by time range
     const start = startOfRange(range);
+
     const workouts = workoutsRaw
       .map((w) => ({ ...w, _dateObj: toDate(w.date) }))
       .filter((w) => w._dateObj)
       .filter((w) => (start ? w._dateObj >= start : true))
-      .sort((a, b) => a._dateObj - b._dateObj); // ascending for charts
+      .sort((a, b) => a._dateObj - b._dateObj);
 
-    // Build map: exerciseKey -> [{x: Date, y: number}] where y is best per workout
-    // We'll key by normalised exercise name primarily (safe with older data)
+    // Build series by exercise key across filtered workouts
     const seriesByKey = new Map();
-
-    const normKey = (nameOrId) =>
-      (nameOrId || "")
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "_");
 
     const addPoint = (key, x, y) => {
       if (!key || !x || !Number.isFinite(y)) return;
@@ -191,8 +293,7 @@ export default function ProgressPage() {
         const exName = ex?.name || ex?.id || "";
         const key = normKey(exName);
 
-        // Determine best set metric within this exercise on this workout
-        let best = 0;
+        let best = -Infinity;
 
         (ex.sets || []).forEach((s) => {
           const ww = Number(s?.weight);
@@ -200,131 +301,127 @@ export default function ProgressPage() {
 
           if (!Number.isFinite(ww)) return;
 
+          let v;
           if (progressMetric === "e1rm") {
-            const v = e1rm(ww, rr);
-            if (v > best) best = v;
+            v = e1rm(ww, rr);
           } else {
-            // max weight
-            if (ww > best) best = ww;
+            v = ww;
           }
+
+          if (Number.isFinite(v) && v > best) best = v;
         });
 
-        if (best > 0) addPoint(key, x, best);
+        // Allow negative values too (assisted)
+        if (best !== -Infinity) addPoint(key, x, best);
       });
     });
 
-    // compress per workout date so we don’t get multiple points same day (take max)
-    const compress = (pts) => {
-      const m = new Map(); // yyyy-mm-dd -> max
-      pts.forEach((p) => {
-        const k = p.x.toISOString().slice(0, 10);
-        const prev = m.get(k) ?? 0;
-        if (p.y > prev) m.set(k, p.y);
-      });
-      return Array.from(m.entries())
-        .map(([k, y]) => ({ x: new Date(k), y }))
-        .sort((a, b) => a.x - b.x);
-    };
-
     const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compress(pts)));
+    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compressByDayMax(pts)));
 
-    // Programme -> exercises list with computed summary
     const programmeCards = programmes.map((p) => {
       const type = String(p?.type || "").toUpperCase();
+      const programmeKey = normKey(type || p?.name || p?.title || `programme_${Math.random()}`);
+
+      const displayName =
+        p?.name ||
+        p?.title ||
+        p?.label ||
+        (type ? `Workout ${type}` : "Workout");
+
       const exercises = (p?.exercises || []).map((ex) => {
         const name = ex?.name || ex?.id || "";
         const key = normKey(name);
         const pts = compressedByKey.get(key) || [];
-        const maxVal = pts.reduce((m, v) => (v.y > m ? v.y : m), 0);
 
+        const maxVal = pts.reduce((m, v) => (v.y > m ? v.y : m), -Infinity);
         const first = pts.length ? pts[0].y : null;
         const latest = pts.length ? pts[pts.length - 1].y : null;
-        const delta = first != null && latest != null ? latest - first : null;
+        const delta =
+          first != null && latest != null ? latest - first : null;
 
         return {
           key,
           name,
           points: pts,
-          maxVal,
+          maxVal: maxVal === -Infinity ? null : maxVal,
           first,
           latest,
           delta,
         };
       });
 
-      return { type, exercises };
+      return { programmeKey, type, displayName, exercises };
     });
 
-    // Build “most progress” / “needs attention” lists across ALL programme exercises
+    // Top progress/attention across everything
     const flat = programmeCards.flatMap((pc) =>
-      pc.exercises.map((e) => ({
-        programmeType: pc.type,
-        ...e,
-      }))
+      pc.exercises.map((e) => ({ programme: pc.displayName, programmeKey: pc.programmeKey, ...e }))
     );
 
     const withDelta = flat
       .filter((e) => Number.isFinite(e.delta))
       .sort((a, b) => b.delta - a.delta);
 
-    const mostProgress = withDelta.slice(0, 5);
-    const needsAttention = [...withDelta].reverse().slice(0, 5);
+    const mostProgress = withDelta.slice(0, 2);
+    const needsAttention = [...withDelta].reverse().slice(0, 2);
 
-    return {
-      programmeCards,
-      mostProgress,
-      needsAttention,
-    };
+    return { programmeCards, mostProgress, needsAttention };
   }, [range, progressMetric]);
 
-  const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
-  const unitLabel = progressMetric === "e1rm" ? weightUnit : weightUnit; // both are still in kg/lbs numbers
+  const unitLabel = weightUnit; // Max and E1RM both use the chosen unit display
 
-  const handleSelectExercise = (programmeType, ex) => {
-    setSelected({
-      programmeType,
-      exerciseKey: ex.key,
-      exerciseName: ex.name,
-    });
+  const rangeButtons = [
+    { k: "all", label: "All time" },
+    { k: "3m", label: "3 months" },
+    { k: "6m", label: "6 months" },
+    { k: "1y", label: "1 year" },
+  ];
+
+  const onToggleExercise = (programmeKey, exerciseKey) => {
+    const same =
+      expanded?.programmeKey === programmeKey &&
+      expanded?.exerciseKey === exerciseKey;
+
+    setExpanded(same ? null : { programmeKey, exerciseKey });
   };
 
-  const selectedPoints = useMemo(() => {
-    if (!selected?.exerciseKey) return [];
-    // search current computed data
-    for (const pc of data.programmeCards) {
-      for (const ex of pc.exercises) {
-        if (ex.key === selected.exerciseKey) return ex.points || [];
-      }
-    }
-    return [];
-  }, [selected, data.programmeCards]);
-
-  const selectedFirst = selectedPoints.length ? selectedPoints[0].y : null;
-  const selectedLatest = selectedPoints.length ? selectedPoints[selectedPoints.length - 1].y : null;
+  const getExpandedExercise = (programmeKey) => {
+    if (!expanded || expanded.programmeKey !== programmeKey) return null;
+    const pc = computed.programmeCards.find((x) => x.programmeKey === programmeKey);
+    if (!pc) return null;
+    return pc.exercises.find((x) => x.key === expanded.exerciseKey) || null;
+  };
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Progress</h1>
-          <p className="text-sm text-muted-foreground">
-            Metric: <span className="font-medium text-foreground">{metricLabel}</span> • Range:{" "}
-            <span className="font-medium text-foreground">{range === "all" ? "All time" : range}</span>
-          </p>
+    <div className="p-0">
+      {/* Header (matches your other pages style: title + divider) */}
+      <div className="px-4 pt-4 pb-3 bg-card">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-primary">Progress</h1>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Metric:{" "}
+              <span className="font-medium text-foreground">{metricLabel}</span>
+              <span className="mx-2 opacity-50">•</span>
+              Unit: <span className="font-medium text-foreground">{unitLabel}</span>
+            </div>
+
+            <div className="mt-2">
+              <Badge className="bg-primary/15 text-primary border border-primary/30">
+                {metricLabel}
+              </Badge>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {[
-            { k: "all", label: "All time" },
-            { k: "3m", label: "3 months" },
-            { k: "6m", label: "6 months" },
-            { k: "1y", label: "1 year" },
-          ].map((r) => (
+        {/* Range buttons UNDER metric (wrap so they never go off-screen) */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {rangeButtons.map((r) => (
             <Button
               key={r.k}
-              variant={range === r.k ? "default" : "secondary"}
               size="sm"
+              variant={range === r.k ? "default" : "secondary"}
               onClick={() => setRange(r.k)}
             >
               {r.label}
@@ -333,38 +430,43 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      {/* Top summaries */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* Divider line */}
+      <div className="border-b border-border" />
+
+      <div className="p-4 space-y-3">
+        {/* Most progress (top 2) */}
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-5 h-5 text-success" />
             <h2 className="font-semibold">Most progress</h2>
-            <Badge className="ml-auto bg-success/15 text-success border border-success/30">Top</Badge>
+            <Badge className="ml-auto bg-success/15 text-success border border-success/30">
+              Top
+            </Badge>
           </div>
 
-          {data.mostProgress.length === 0 ? (
+          {computed.mostProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
           ) : (
             <div className="space-y-2">
-              {data.mostProgress.map((e) => (
-                <button
-                  key={`${e.programmeType}-${e.key}`}
-                  onClick={() => handleSelectExercise(e.programmeType, e)}
-                  className="w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30 hover:bg-muted/50 transition"
+              {computed.mostProgress.map((e) => (
+                <div
+                  key={`${e.programmeKey}-${e.key}`}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
                 >
-                  <div className="text-left">
-                    <div className="text-sm font-medium">{e.name}</div>
-                    <div className="text-xs text-muted-foreground">{e.programmeType}</div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{e.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
                   </div>
-                  <div className="text-sm font-semibold text-success">
+                  <div className="text-sm font-semibold text-success whitespace-nowrap">
                     +{formatNumber(e.delta)} {unitLabel}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
         </div>
 
+        {/* Needs attention (top 2) */}
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-5 h-5 text-destructive" />
@@ -374,136 +476,141 @@ export default function ProgressPage() {
             </Badge>
           </div>
 
-          {data.needsAttention.length === 0 ? (
+          {computed.needsAttention.length === 0 ? (
             <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
           ) : (
             <div className="space-y-2">
-              {data.needsAttention.map((e) => (
-                <button
-                  key={`${e.programmeType}-${e.key}`}
-                  onClick={() => handleSelectExercise(e.programmeType, e)}
-                  className="w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30 hover:bg-muted/50 transition"
+              {computed.needsAttention.map((e) => (
+                <div
+                  key={`${e.programmeKey}-${e.key}`}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
                 >
-                  <div className="text-left">
-                    <div className="text-sm font-medium">{e.name}</div>
-                    <div className="text-xs text-muted-foreground">{e.programmeType}</div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{e.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
                   </div>
-                  <div className={cx("text-sm font-semibold", e.delta < 0 ? "text-destructive" : "text-muted-foreground")}>
+                  <div className={cx(
+                    "text-sm font-semibold whitespace-nowrap",
+                    e.delta < 0 ? "text-destructive" : "text-muted-foreground"
+                  )}>
                     {formatNumber(e.delta)} {unitLabel}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Programme containers */}
-      <div className="space-y-3">
-        {data.programmeCards.map((pc) => (
-          <div key={pc.type} className="rounded-xl border border-border bg-card">
-            <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Programme {pc.type}</h3>
-              <span className="ml-auto text-xs text-muted-foreground">
-                Tap an exercise to drill down
-              </span>
-            </div>
+        {/* Programme containers */}
+        <div className="space-y-3">
+          {computed.programmeCards.map((pc) => {
+            const expandedExercise = getExpandedExercise(pc.programmeKey);
 
-            <div className="p-3 space-y-2">
-              {pc.exercises.length === 0 ? (
-                <p className="text-sm text-muted-foreground px-2 py-2">
-                  No exercises assigned to this programme.
-                </p>
-              ) : (
-                pc.exercises.map((ex) => {
-                  const isActive = selected?.exerciseKey === ex.key;
-                  return (
-                    <button
-                      key={ex.key}
-                      onClick={() => handleSelectExercise(pc.type, ex)}
-                      className={cx(
-                        "w-full rounded-lg border px-3 py-3 text-left transition",
-                        isActive
-                          ? "border-primary bg-primary/10"
-                          : "border-border bg-background/40 hover:bg-muted/30"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold">{ex.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {metricLabel} in range:{" "}
-                            <span className="font-medium text-foreground">
-                              {formatNumber(ex.maxVal)} {unitLabel}
-                            </span>
-                          </div>
+            return (
+              <div key={pc.programmeKey} className="rounded-xl border border-border bg-card">
+                <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-primary" />
+                  <h3 className="font-semibold">{pc.displayName}</h3>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    Tap an exercise to expand
+                  </span>
+                </div>
+
+                <div className="p-3 space-y-2">
+                  {pc.exercises.length === 0 ? (
+                    <p className="text-sm text-muted-foreground px-2 py-2">
+                      No exercises assigned to this programme.
+                    </p>
+                  ) : (
+                    pc.exercises.map((ex) => {
+                      const isOpen =
+                        expanded?.programmeKey === pc.programmeKey &&
+                        expanded?.exerciseKey === ex.key;
+
+                      return (
+                        <div key={ex.key} className="space-y-2">
+                          <button
+                            onClick={() => onToggleExercise(pc.programmeKey, ex.key)}
+                            className={cx(
+                              "w-full rounded-lg border px-3 py-3 text-left transition",
+                              isOpen
+                                ? "border-primary bg-primary/10"
+                                : "border-border bg-background/40 hover:bg-muted/30"
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold truncate">{ex.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {metricLabel} in range:{" "}
+                                  <span className="font-medium text-foreground">
+                                    {ex.maxVal == null ? "-" : `${formatNumber(ex.maxVal)} ${unitLabel}`}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* tiny inline “trend” hint: just show last/first arrow feel via delta */}
+                              <div className={cx(
+                                "text-xs font-semibold whitespace-nowrap mt-1",
+                                Number.isFinite(ex.delta)
+                                  ? ex.delta >= 0 ? "text-success" : "text-destructive"
+                                  : "text-muted-foreground"
+                              )}>
+                                {Number.isFinite(ex.delta)
+                                  ? `${ex.delta >= 0 ? "+" : ""}${formatNumber(ex.delta)} ${unitLabel}`
+                                  : ""}
+                              </div>
+                            </div>
+                          </button>
+
+                          {/* Expanded chart (inside programme container) */}
+                          {isOpen && (
+                            <div className="rounded-lg border border-border bg-background/40 p-3">
+                              {!ex.points || ex.points.length < 2 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  Not enough data points in this range.
+                                </p>
+                              ) : (
+                                <>
+                                  <div className="text-sm font-semibold mb-2">
+                                    {ex.name} — {metricLabel}
+                                  </div>
+
+                                  <div className="text-foreground">
+                                    <BarChart
+                                      points={ex.points}
+                                      unitLabel={unitLabel}
+                                      allowNegative={true}
+                                    />
+                                  </div>
+
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <div className="rounded-lg border border-border bg-card p-3">
+                                      <div className="text-xs text-muted-foreground">First</div>
+                                      <div className="text-lg font-semibold">
+                                        {formatNumber(ex.first)} {unitLabel}
+                                      </div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-card p-3">
+                                      <div className="text-xs text-muted-foreground">Latest</div>
+                                      <div className="text-lg font-semibold">
+                                        {formatNumber(ex.latest)} {unitLabel}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
-
-                        <div className="text-muted-foreground">
-                          <Sparkline points={ex.points} />
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Big drill-down chart */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <h3 className="font-semibold">Exercise details</h3>
-            <p className="text-sm text-muted-foreground">
-              {selected?.exerciseName ? (
-                <>
-                  <span className="font-medium text-foreground">{selected.exerciseName}</span>{" "}
-                  • Programme {selected.programmeType}
-                </>
-              ) : (
-                "Select an exercise above to see the full chart."
-              )}
-            </p>
-          </div>
-          {selected?.exerciseName && (
-            <Badge className="bg-primary/15 text-primary border border-primary/30">
-              {metricLabel}
-            </Badge>
-          )}
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-
-        {!selected?.exerciseName ? (
-          <p className="text-sm text-muted-foreground">Nothing selected yet.</p>
-        ) : selectedPoints.length < 2 ? (
-          <p className="text-sm text-muted-foreground">
-            Not enough data points for this exercise in the selected range.
-          </p>
-        ) : (
-          <>
-            <div className="text-foreground">
-              <BigLineChart points={selectedPoints} />
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-lg border border-border bg-background/40 p-3">
-                <div className="text-xs text-muted-foreground">First</div>
-                <div className="text-lg font-semibold">
-                  {formatNumber(selectedFirst)} {unitLabel}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-background/40 p-3">
-                <div className="text-xs text-muted-foreground">Latest</div>
-                <div className="text-lg font-semibold">
-                  {formatNumber(selectedLatest)} {unitLabel}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </div>
     </div>
   );
