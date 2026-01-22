@@ -39,6 +39,62 @@ import {
 
 // ✅ App version display (CRA/CRACO supports importing package.json)
 import pkg from "../../package.json";
+import React from "react";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { useSettings } from "../contexts/SettingsContext";
+
+export default function SettingsPage() {
+  const {
+    weightUnit,
+    toggleWeightUnit,
+    colorMode,
+    setColorMode,
+    colorTheme,
+    setColorTheme,
+    progressMetric,
+    setProgressMetric,
+  } = useSettings();
+
+  return (
+    <div className="p-4 space-y-4">
+      <h1 className="text-xl font-semibold">Settings</h1>
+
+      {/* Progress metric */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-semibold">Progress metric</div>
+            <div className="text-sm text-muted-foreground">
+              Choose what Progress charts display.
+            </div>
+          </div>
+          <Badge className="bg-primary/15 text-primary border border-primary/30">
+            {progressMetric === "e1rm" ? "E1RM" : "Max"}
+          </Badge>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={progressMetric === "max" ? "default" : "secondary"}
+            onClick={() => setProgressMetric("max")}
+          >
+            Max weight
+          </Button>
+          <Button
+            variant={progressMetric === "e1rm" ? "default" : "secondary"}
+            onClick={() => setProgressMetric("e1rm")}
+          >
+            E1RM (estimated 1RM)
+          </Button>
+        </div>
+      </div>
+
+      {/* Keep your existing sections below (units, theme, etc.) */}
+      {/* ... */}
+    </div>
+  );
+}
 
 const numberOrFallback = (value, fallback) => {
   const n = Number(value);
