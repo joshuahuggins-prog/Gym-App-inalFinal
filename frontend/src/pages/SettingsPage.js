@@ -16,6 +16,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
+import { Badge } from "../components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
@@ -39,70 +41,23 @@ import {
 
 // ✅ App version display (CRA/CRACO supports importing package.json)
 import pkg from "../../package.json";
-import React from "react";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import { useSettings } from "../contexts/SettingsContext";
-
-export default function SettingsPage() {
-  const {
-    weightUnit,
-    toggleWeightUnit,
-    colorMode,
-    setColorMode,
-    colorTheme,
-    setColorTheme,
-    progressMetric,
-    setProgressMetric,
-  } = useSettings();
-
-  return (
-    <div className="p-4 space-y-4">
-      <h1 className="text-xl font-semibold">Settings</h1>
-
-      {/* Progress metric */}
-      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-semibold">Progress metric</div>
-            <div className="text-sm text-muted-foreground">
-              Choose what Progress charts display.
-            </div>
-          </div>
-          <Badge className="bg-primary/15 text-primary border border-primary/30">
-            {progressMetric === "e1rm" ? "E1RM" : "Max"}
-          </Badge>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={progressMetric === "max" ? "default" : "secondary"}
-            onClick={() => setProgressMetric("max")}
-          >
-            Max weight
-          </Button>
-          <Button
-            variant={progressMetric === "e1rm" ? "default" : "secondary"}
-            onClick={() => setProgressMetric("e1rm")}
-          >
-            E1RM (estimated 1RM)
-          </Button>
-        </div>
-      </div>
-
-      {/* Keep your existing sections below (units, theme, etc.) */}
-      {/* ... */}
-    </div>
-  );
-}
 
 const numberOrFallback = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
 
-const SettingsPage = () => {
-  const { weightUnit, toggleWeightUnit, colorMode, colorTheme, setColorMode, setColorTheme } = useSettings();
+export default function SettingsPage() {
+  const {
+    weightUnit,
+    toggleWeightUnit,
+    colorMode,
+    colorTheme,
+    setColorMode,
+    setColorTheme,
+    progressMetric,
+    setProgressMetric,
+  } = useSettings();
 
   const [progressionSettings, setProgressionSettings] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
@@ -174,11 +129,48 @@ const SettingsPage = () => {
           <h1 className="text-xl font-bold">Settings</h1>
         </div>
 
-        {/* ✅ Version */}
         <div className="text-xs text-muted-foreground">
           Version {pkg?.version || "unknown"}
         </div>
       </div>
+
+      {/* ===== Progress metric ===== */}
+      <section className="space-y-2">
+        <h2 className="font-semibold flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" />
+          Progress metric
+        </h2>
+
+        <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="font-medium">Chart display</div>
+              <div className="text-xs text-muted-foreground">
+                Choose what Progress charts show.
+              </div>
+            </div>
+
+            <Badge className="bg-primary/15 text-primary border border-primary/30">
+              {progressMetric === "e1rm" ? "E1RM" : "Max"}
+            </Badge>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={progressMetric === "max" ? "default" : "secondary"}
+              onClick={() => setProgressMetric("max")}
+            >
+              Max weight
+            </Button>
+            <Button
+              variant={progressMetric === "e1rm" ? "default" : "secondary"}
+              onClick={() => setProgressMetric("e1rm")}
+            >
+              E1RM (estimated 1RM)
+            </Button>
+          </div>
+        </div>
+      </section>
 
       {/* ===== Units ===== */}
       <section className="space-y-2">
@@ -191,7 +183,6 @@ const SettingsPage = () => {
         </Button>
       </section>
 
-      
       {/* ===== Appearance ===== */}
       <section className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
@@ -203,7 +194,11 @@ const SettingsPage = () => {
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                {colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                {colorMode === "dark" ? (
+                  <Moon className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
                 <div className="font-medium">Dark mode</div>
               </div>
               <div className="text-xs text-muted-foreground">
@@ -237,7 +232,8 @@ const SettingsPage = () => {
           </div>
         </div>
       </section>
-{/* ===== Progression Settings ===== */}
+
+      {/* ===== Progression Settings ===== */}
       <section className="space-y-3">
         <h2 className="font-semibold flex items-center gap-2">
           <Save className="h-4 w-4" />
@@ -310,8 +306,8 @@ const SettingsPage = () => {
         </div>
 
         <p className="text-sm opacity-80">
-          Rebuilds local app data after an update by backing up, resetting storage,
-          then restoring your backup. Use only if something looks stuck.
+          Rebuilds local app data after an update by backing up, resetting storage, then restoring
+          your backup. Use only if something looks stuck.
         </p>
 
         <Button variant="destructive" onClick={handleForceUpdate}>
@@ -320,6 +316,4 @@ const SettingsPage = () => {
       </section>
     </div>
   );
-};
-
-export default SettingsPage;
+}
