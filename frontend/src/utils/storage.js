@@ -116,6 +116,39 @@ export const clearWorkoutDraft = () => {
   }
 };
 
+// Convenience: some parts of the app want to know if the saved draft belongs to "today".
+// Supported draft shapes:
+// - { startedAt: number | string }
+// - { date: "YYYY-MM-DD" }
+export const isWorkoutDraftForToday = () => {
+  const draft = getWorkoutDraft();
+  if (!draft) return false;
+
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const today = new Date();
+  const todayYMD = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(
+    today.getDate()
+  )}`;
+
+  // If stored as YYYY-MM-DD
+  if (typeof draft.date === "string" && draft.date.length >= 10) {
+    return draft.date.slice(0, 10) === todayYMD;
+  }
+
+  // If stored as timestamp / ISO
+  const startedAt = draft.startedAt;
+  if (!startedAt) return false;
+
+  const d = new Date(startedAt);
+  if (Number.isNaN(d.getTime())) return false;
+
+  return (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  );
+};
+
 // =====================
 // Init + migration
 // =====================
