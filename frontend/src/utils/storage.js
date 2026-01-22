@@ -106,6 +106,9 @@ export const setWorkoutDraft = (draft) => {
   return setStorageData(STORAGE_KEYS.WORKOUT_DRAFT, draft);
 };
 
+// Backwards-compatible alias used by older code
+export const saveWorkoutDraft = (draft) => setWorkoutDraft(draft);
+
 export const clearWorkoutDraft = () => {
   try {
     localStorage.removeItem(STORAGE_KEYS.WORKOUT_DRAFT);
