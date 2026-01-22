@@ -75,7 +75,7 @@ function LineChart({
   allowNegative = true,
 }) {
   // SVG line chart with axes + dotted grid (supports negative)
-  const w = 860;
+  const w = 1000; // virtual width for layout math
   const h = height;
   const padL = 54;
   const padR = 16;
@@ -131,8 +131,12 @@ function LineChart({
     .join(" ");
 
   return (
-    <div className="w-full overflow-x-auto">
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block">
+    <div className="w-full overflow-hidden">
+      <svg
+       viewBox={`0 0 ${w} ${h}`}
+       className="block w-full h-auto"
+       preserveAspectRatio="xMidYMid meet"
+       >
         {/* horizontal dotted grid + y labels */}
         {grid.map((i) => {
           const t = i / gridLines;
