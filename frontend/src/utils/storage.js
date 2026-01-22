@@ -21,14 +21,38 @@ export const STORAGE_KEYS = {
   PROGRESSION_SETTINGS: "gym_progression_settings",
   WORKOUT_PATTERN: "gym_workout_pattern",
   WORKOUT_PATTERN_INDEX: "gym_workout_pattern_index",
+
+  // Draft workout (unsaved)
   WORKOUT_DRAFT: "gym_workout_draft",
 };
 
 // =====================
 // Helpers
 // =====================
+export const advanceWorkoutPatternIndex = () => {
+  const usable = getUsableProgrammes();
+  const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
+  const pattern = parseWorkoutPattern(getWorkoutPattern());
+
+  const safePattern =
+    pattern.length > 0 ? pattern : Array.from(usableTypes).sort();
+
+  const filtered = safePattern.filter((t) => usableTypes.has(t));
+  const finalPattern =
+    filtered.length > 0 ? filtered : Array.from(usableTypes).sort();
+
+  const len = finalPattern.length > 0 ? finalPattern.length : 1;
+  const current = getWorkoutPatternIndex();
+  const next = (Number(current) || 0) + 1;
+
+  const wrapped = ((next % len) + len) % len;
+  setWorkoutPatternIndex(wrapped);
+
+  return wrapped;
+};
 
 const normalizeId = (s) => (s || "").toString().trim();
+
 const toLegacyKey = (s) =>
   (s || "")
     .toString()
@@ -42,6 +66,16 @@ const toKeyIdOrName = (idOrName) => {
   if (!raw) return "";
   if (raw.includes("_") && !raw.includes(" ")) return raw.toLowerCase();
   return toLegacyKey(raw);
+};
+
+const toISODateOnly = (d) => {
+  try {
+    const dt = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(dt.getTime())) return "";
+    return dt.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
 };
 
 // Legacy / archived exercises we never want to lose
@@ -92,64 +126,6 @@ export const setStorageData = (key, value) => {
     console.error(`Failed to write ${key}`, e);
     return false;
   }
-};
-// =====================
-// Workout Draft (unsaved session state)
-// =====================
-// Used to preserve in-progress workout data across refresh / accidental close.
-// Stored as a single object; callers can choose structure (e.g., { programmeId, startedAt, exercises: [...] }).
-export const getWorkoutDraft = () => {
-  return getStorageData(STORAGE_KEYS.WORKOUT_DRAFT);
-};
-
-export const setWorkoutDraft = (draft) => {
-  return setStorageData(STORAGE_KEYS.WORKOUT_DRAFT, draft);
-};
-
-// Backwards-compatible alias used by older code
-export const saveWorkoutDraft = (draft) => setWorkoutDraft(draft);
-
-export const clearWorkoutDraft = () => {
-  try {
-    localStorage.removeItem(STORAGE_KEYS.WORKOUT_DRAFT);
-    return true;
-  } catch (e) {
-    console.error("Failed to clear workout draft", e);
-    return false;
-  }
-};
-
-// Convenience: some parts of the app want to know if the saved draft belongs to "today".
-// Supported draft shapes:
-// - { startedAt: number | string }
-// - { date: "YYYY-MM-DD" }
-export const isWorkoutDraftForToday = () => {
-  const draft = getWorkoutDraft();
-  if (!draft) return false;
-
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const today = new Date();
-  const todayYMD = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(
-    today.getDate()
-  )}`;
-
-  // If stored as YYYY-MM-DD
-  if (typeof draft.date === "string" && draft.date.length >= 10) {
-    return draft.date.slice(0, 10) === todayYMD;
-  }
-
-  // If stored as timestamp / ISO
-  const startedAt = draft.startedAt;
-  if (!startedAt) return false;
-
-  const d = new Date(startedAt);
-  if (Number.isNaN(d.getTime())) return false;
-
-  return (
-    d.getFullYear() === today.getFullYear() &&
-    d.getMonth() === today.getMonth() &&
-    d.getDate() === today.getDate()
-  );
 };
 
 // =====================
@@ -209,7 +185,7 @@ export const getUsableProgrammes = () => {
   );
 };
 
-// Decide next workout type from pattern + usable programmes
+// Decide next workout type from pattern + usable programmes (ADVANCES index)
 export const getNextWorkoutTypeFromPattern = () => {
   const usable = getUsableProgrammes();
   if (usable.length === 0) return null;
@@ -231,9 +207,7 @@ export const getNextWorkoutTypeFromPattern = () => {
   return nextType;
 };
 
-
-// Same as getNextWorkoutTypeFromPattern, but does NOT advance the pattern index.
-// Useful for showing/choosing the next workout without committing the rotation.
+// Peek next workout type from pattern + usable programmes (DOES NOT advance index)
 export const peekNextWorkoutTypeFromPattern = () => {
   const usable = getUsableProgrammes();
   if (usable.length === 0) return null;
@@ -283,32 +257,102 @@ export const deleteWorkout = (id) => {
 };
 
 // =====================
-// Settings
+// Workout Draft (unsaved)
 // =====================
+export const getWorkoutDraft = () => {
+  return getStorageData(STORAGE_KEYS.WORKOUT_DRAFT);
+};
+
+export const setWorkoutDraft = (draft) => {
+  // store lightweight metadata for "today" checks if caller didn't include it
+  const enriched =
+    draft && typeof draft === "object"
+      ? {
+          ...draft,
+          startedAt: draft.startedAt || new Date().toISOString(),
+          date: draft.date || toISODateOnly(new Date()),
+        }
+      : draft;
+
+  return setStorageData(STORAGE_KEYS.WORKOUT_DRAFT, enriched);
+};
+
+// Backwards compatible alias some files may import
+export const saveWorkoutDraft = (draft) => setWorkoutDraft(draft);
+
+export const clearWorkoutDraft = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.WORKOUT_DRAFT);
+    return true;
+  } catch (e) {
+    console.error("Failed to clear workout draft", e);
+    return false;
+  }
+};
+
+export const isWorkoutDraftForToday = () => {
+  const draft = getWorkoutDraft();
+  if (!draft || typeof draft !== "object") return false;
+
+  const today = toISODateOnly(new Date());
+
+  // Prefer explicit date field (YYYY-MM-DD)
+  if (draft.date) return String(draft.date).slice(0, 10) === today;
+
+  // Fall back to startedAt timestamp/ISO
+  if (draft.startedAt) return toISODateOnly(draft.startedAt) === today;
+
+  return false;
+};
+
+// =====================
+// Settings (NEW theme model + backwards compatible)
+// =====================
+const DEFAULT_SETTINGS = {
+  weightUnit: "kg",
+  colorMode: "dark", // "light" | "dark"
+  colorTheme: "blue", // "blue" | "yellow" | "green" | "red"
+};
+
 export const getSettings = () => {
-  const defaults = {
-    weightUnit: "kg",
-    colorMode: "dark", // "light" | "dark"
-    colorTheme: "blue", // "blue" | "yellow" | "green" | "red"
-  };
-
   const stored = getStorageData(STORAGE_KEYS.SETTINGS);
-  if (!stored) return defaults;
 
-  // Backwards compatible: older versions used "theme" to mean dark mode
-  const legacyColorMode =
-    stored.theme === "light" || stored.theme === "dark" ? stored.theme : undefined;
+  // No settings stored yet
+  if (!stored || typeof stored !== "object") {
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  // Backwards compat: old { theme: "dark" | "light" }
+  const legacyTheme = stored.theme;
+  const colorMode =
+    stored.colorMode ||
+    (legacyTheme === "light" || legacyTheme === "dark"
+      ? legacyTheme
+      : DEFAULT_SETTINGS.colorMode);
+
+  const colorTheme =
+    stored.colorTheme ||
+    stored.themeColor || // just in case older experiments existed
+    DEFAULT_SETTINGS.colorTheme;
 
   return {
-    ...defaults,
+    ...DEFAULT_SETTINGS,
     ...stored,
-    ...(legacyColorMode ? { colorMode: legacyColorMode } : {}),
+    colorMode,
+    colorTheme,
   };
 };
 
 export const updateSettings = (updates) => {
   const settings = getSettings();
-  return setStorageData(STORAGE_KEYS.SETTINGS, { ...settings, ...updates });
+  const merged = { ...settings, ...updates };
+
+  // Keep legacy 'theme' in sync (optional but helps older code paths)
+  if (merged.colorMode && (merged.colorMode === "light" || merged.colorMode === "dark")) {
+    merged.theme = merged.colorMode;
+  }
+
+  return setStorageData(STORAGE_KEYS.SETTINGS, merged);
 };
 
 // =====================
@@ -368,6 +412,8 @@ export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
 
   const w = Number(weight);
   const r = Number(reps);
+
+  // Keep original rule: only positive weights and reps count
   if (!Number.isFinite(w) || w <= 0) return false;
   if (!Number.isFinite(r) || r <= 0) return false;
 
@@ -432,6 +478,7 @@ export const getProgrammes = () => {
   const programmes = getStorageData(STORAGE_KEYS.PROGRAMMES);
   if (Array.isArray(programmes) && programmes.length > 0) return programmes;
 
+  // keep your original dynamic require (works in CRA/CRACO builds)
   const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
   const defaults = [WORKOUT_A, WORKOUT_B];
   setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
@@ -484,9 +531,9 @@ function rebuildExerciseCatalogue(programmes, existingExercises) {
     byId.set(id, { ...prev, ...ex, id });
   };
 
-getDefaultExercisesFromWorkoutData().forEach(add);
-LEGACY_EXERCISES.forEach(add);
-(existingExercises || []).forEach(add);
+  getDefaultExercisesFromWorkoutData().forEach(add);
+  LEGACY_EXERCISES.forEach(add);
+  (existingExercises || []).forEach(add);
 
   // Recompute assignedTo from programmes
   const assignedMap = new Map();
@@ -536,7 +583,7 @@ export const saveExercise = (exercise) => {
     exercises.push({ ...exercise, id });
   }
 
-// ✅ Coerce numeric fields (prevents "" / strings breaking saves)
+  // ✅ Coerce numeric fields (prevents "" / strings breaking saves)
   const setsNum = Number(exercise.sets);
   exercise.sets = Number.isFinite(setsNum) && setsNum > 0 ? setsNum : 3;
 
@@ -552,7 +599,7 @@ export const saveExercise = (exercise) => {
 
   // ✅ Update the exercise inside programmes too
   syncExerciseFieldsIntoProgrammes(exercise);
-  
+
   // --- 2) IMPORTANT: sync programmes based on exercise.assignedTo
   // Programmes are the source of truth for assignments.
   const assignedTo = Array.isArray(exercise.assignedTo) ? exercise.assignedTo : [];
@@ -583,7 +630,9 @@ function syncExerciseAssignmentsToProgrammes(exercise) {
   const id = normalizeId(exercise.id);
   if (!id) return;
 
-  const wantTypes = new Set((exercise.assignedTo || []).map((t) => String(t).toUpperCase()));
+  const wantTypes = new Set(
+    (exercise.assignedTo || []).map((t) => String(t).toUpperCase())
+  );
 
   const updated = programmes.map((p) => {
     const type = String(p.type).toUpperCase();
