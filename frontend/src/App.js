@@ -12,8 +12,7 @@ import {
 
 import HomePage from "./pages/HomePage";
 import HistoryPage from "./pages/HistoryPage";
-import StatsPage from "./pages/StatsPage";
-import ProgressPage from "./pages/ProgressPage"; // ✅ ADD THIS
+import ProgressPage from "./pages/ProgressPage";
 import ProgrammesPage from "./pages/ProgrammesPage";
 import ExercisesPage from "./pages/ExercisesPage";
 import SettingsPage from "./pages/SettingsPage";
