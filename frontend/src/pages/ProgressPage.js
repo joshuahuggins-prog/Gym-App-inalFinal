@@ -67,14 +67,14 @@ const compressByDayMax = (pts) => {
     .sort((a, b) => a.x - b.x);
 };
 
-function BarChart({
+function LineChart({
   points = [],
   unitLabel = "kg",
-  height = 220,
+  height = 240,
   maxXTicks = 6,
   allowNegative = true,
 }) {
-  // SVG bar chart with axes + dotted grid
+  // SVG line chart with axes + dotted grid (supports negative)
   const w = 860;
   const h = height;
   const padL = 54;
@@ -86,17 +86,15 @@ function BarChart({
   const minData = ys.length ? Math.min(...ys) : 0;
   const maxData = ys.length ? Math.max(...ys) : 1;
 
-  // Make room around values + allow negative
+  // include 0 for context + allow negative
   let minY = allowNegative ? Math.min(minData, 0) : Math.max(minData, 0);
   let maxY = Math.max(maxData, 0);
 
   if (minY === maxY) {
-    // avoid flatline
     minY -= 1;
     maxY += 1;
   }
 
-  // little padding
   const range = maxY - minY;
   minY -= range * 0.08;
   maxY += range * 0.08;
@@ -109,31 +107,32 @@ function BarChart({
     return padT + (1 - t) * plotH;
   };
 
+  const xToPx = (i) => {
+    if (points.length <= 1) return padL + plotW / 2;
+    return padL + (i * plotW) / (points.length - 1);
+  };
+
   const zeroY = yToPx(0);
 
-  const n = points.length;
-  const gap = n > 0 ? Math.max(6, Math.min(14, plotW / (n * 2))) : 8;
-  const barW = n > 0 ? Math.max(6, (plotW - gap * (n - 1)) / n) : 10;
-
-  // grid lines
+  // dotted horizontal grid
   const gridLines = 4;
   const grid = Array.from({ length: gridLines + 1 }, (_, i) => i);
 
   // x labels
+  const n = points.length;
   const every = Math.max(1, Math.floor(n / maxXTicks));
+
+  const pathD = points
+    .map((p, i) => {
+      const x = xToPx(i);
+      const y = yToPx(p.y);
+      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+    })
+    .join(" ");
 
   return (
     <div className="w-full overflow-x-auto">
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block">
-        {/* background plot area */}
-        <rect
-          x={padL}
-          y={padT}
-          width={plotW}
-          height={plotH}
-          fill="transparent"
-        />
-
         {/* horizontal dotted grid + y labels */}
         {grid.map((i) => {
           const t = i / gridLines;
@@ -183,7 +182,7 @@ function BarChart({
           opacity="0.18"
         />
 
-        {/* zero line (if visible) */}
+        {/* zero line */}
         {zeroY >= padT && zeroY <= h - padB && (
           <line
             x1={padL}
@@ -208,36 +207,35 @@ function BarChart({
           {unitLabel}
         </text>
 
-        {/* bars */}
+        {/* line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          opacity="0.95"
+        />
+
+        {/* points */}
         {points.map((p, i) => {
-          const x = padL + i * (barW + gap);
+          const x = xToPx(i);
           const y = yToPx(p.y);
-          const y0 = zeroY;
-
-          const top = Math.min(y, y0);
-          const bottom = Math.max(y, y0);
-          const bh = Math.max(2, bottom - top);
-
           return (
-            <g key={i}>
-              <rect
-                x={x}
-                y={top}
-                width={barW}
-                height={bh}
-                rx="4"
-                fill="currentColor"
-                opacity="0.9"
-              />
-            </g>
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r="4"
+              fill="currentColor"
+              opacity="0.95"
+            />
           );
         })}
 
         {/* x labels */}
         {points.map((p, i) => {
           if (i % every !== 0 && i !== points.length - 1) return null;
-          const x = padL + i * (barW + gap) + barW / 2;
-
+          const x = xToPx(i);
           return (
             <text
               key={`x-${i}`}
@@ -256,6 +254,7 @@ function BarChart({
     </div>
   );
 }
+
 
 export default function ProgressPage() {
   const settings = getSettings();
