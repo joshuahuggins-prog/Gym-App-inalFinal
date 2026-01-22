@@ -25,6 +25,11 @@ export const SettingsProvider = ({ children }) => {
     const newUnit = settings.weightUnit === 'lbs' ? 'kg' : 'lbs';
     updateSetting('weightUnit', newUnit);
   };
+  
+const setProgressMetric = (metric) => {
+  if (metric !== "max" && metric !== "e1rm") return;
+  updateSetting("progressMetric", metric);
+};
 
   const convertWeight = (weight, fromUnit, toUnit) => {
     if (fromUnit === toUnit) return weight;
@@ -49,6 +54,9 @@ export const SettingsProvider = ({ children }) => {
       value={{
         settings,
         updateSetting,
+        
+        progressMetric: settings.progressMetric || "max",
+        setProgressMetric,
 
         // units
         toggleWeightUnit,
