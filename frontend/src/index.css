@@ -137,10 +137,22 @@
     --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.20);
   }
 
+  /* ✅ FIXED: YELLOW (Dark mode) - enforce readable foreground tokens */
   .dark[data-theme="yellow"] {
     --background: 45 30% 8%;
+    --foreground: 210 40% 98%;
+
     --card: 45 22% 12%;
+    --card-foreground: 210 40% 98%;
+
     --popover: 45 22% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --secondary: 45 14% 18%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 45 14% 18%;
+    --muted-foreground: 215 20% 72%;
 
     --primary: 45 93% 58%;
     --primary-glow: 45 93% 70%;
@@ -152,6 +164,8 @@
     --gold: 45 93% 58%;
     --gold-foreground: 45 30% 8%;
 
+    --border: 45 14% 20%;
+    --input: 45 14% 20%;
     --ring: 45 93% 58%;
   }
 
@@ -172,10 +186,22 @@
     --ring: 142 76% 34%;
   }
 
+  /* ✅ FIXED: GREEN (Dark mode) - enforce readable foreground tokens */
   .dark[data-theme="green"] {
     --background: 142 25% 8%;
+    --foreground: 210 40% 98%;
+
     --card: 142 20% 12%;
+    --card-foreground: 210 40% 98%;
+
     --popover: 142 20% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --secondary: 142 12% 18%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 142 12% 18%;
+    --muted-foreground: 215 20% 72%;
 
     --primary: 142 76% 45%;
     --primary-glow: 142 76% 58%;
@@ -185,6 +211,9 @@
     --accent-foreground: 142 25% 8%;
 
     --success: 142 76% 45%;
+
+    --border: 142 12% 20%;
+    --input: 142 12% 20%;
     --ring: 142 76% 45%;
   }
 
@@ -221,7 +250,6 @@
     --ring: 0 84% 60%;
   }
 }
-
 
 @layer base {
   * {
