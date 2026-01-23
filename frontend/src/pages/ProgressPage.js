@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -57,53 +57,43 @@ const normKey = (nameOrId) =>
     .replace(/\s+/g, "_");
 
 /**
- * One point per date (YYYY-MM-DD), keep max for that day.
- * Guarded so it never throws if dates are bad.
+ * One point per date (YYYY-MM-DD), keep MAX for that day.
+ * Points: [{ x: Date, y: number }]
  */
 const compressByDayMax = (pts) => {
   const m = new Map(); // yyyy-mm-dd -> max
-  (pts || []).forEach((p) => {
-    const dx = p?.x instanceof Date ? p.x : null;
-    if (!dx) return;
-    const k = dx.toISOString().slice(0, 10);
-    const y = Number(p?.y);
-    if (!Number.isFinite(y)) return;
-
+  pts.forEach((p) => {
+    const k = p.x.toISOString().slice(0, 10);
     const prev = m.get(k);
-    if (prev == null || y > prev) m.set(k, y);
+    if (prev == null || p.y > prev) m.set(k, p.y);
   });
-
   return Array.from(m.entries())
     .map(([k, y]) => ({ x: new Date(k), y }))
-    .filter((p) => p.x instanceof Date && !Number.isNaN(p.x.getTime()))
     .sort((a, b) => a.x - b.x);
 };
 
-// Mobile friendly line chart (responsive, big dots, tooltip)
-function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobile }) {
+// ---- Mobile-friendly responsive line chart (bigger dots + tooltip) ----
+function LineChart({
+  points = [],
+  unitLabel = "kg",
+  allowNegative = true,
+  isMobile = false,
+}) {
   const [activeIndex, setActiveIndex] = useState(null);
 
-  // Virtual canvas
+  // virtual canvas
   const w = 1000;
   const h = isMobile ? 320 : 240;
 
-  const padL = isMobile ? 64 : 54;
+  const padL = isMobile ? 62 : 54;
   const padR = 18;
   const padT = 18;
-  const padB = isMobile ? 58 : 44;
+  const padB = isMobile ? 56 : 44;
 
   const plotW = w - padL - padR;
   const plotH = h - padT - padB;
 
-  // Defensive: ensure points are valid
-  const safePoints = useMemo(() => {
-    return (points || [])
-      .filter((p) => p?.x instanceof Date && !Number.isNaN(p.x.getTime()))
-      .filter((p) => Number.isFinite(Number(p.y)))
-      .map((p) => ({ x: p.x, y: Number(p.y) }));
-  }, [points]);
-
-  const ys = safePoints.map((p) => p.y);
+  const ys = points.map((p) => p.y).filter((v) => Number.isFinite(v));
   const minData = ys.length ? Math.min(...ys) : 0;
   const maxData = ys.length ? Math.max(...ys) : 1;
 
@@ -115,6 +105,7 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
     maxY += 1;
   }
 
+  // padding
   const range = maxY - minY;
   minY -= range * 0.1;
   maxY += range * 0.1;
@@ -125,20 +116,23 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
   };
 
   const xToPx = (i) => {
-    if (safePoints.length <= 1) return padL + plotW / 2;
-    return padL + (i * plotW) / (safePoints.length - 1);
+    if (points.length <= 1) return padL + plotW / 2;
+    return padL + (i * plotW) / (points.length - 1);
   };
 
   const zeroY = yToPx(0);
 
+  // fewer labels on mobile
+  const maxXTicks = isMobile ? 3 : 6;
+  const n = points.length;
+  const every = Math.max(1, Math.floor(n / maxXTicks));
+
+  // grid lines (more on desktop, fewer on mobile)
   const gridLines = isMobile ? 3 : 4;
   const grid = Array.from({ length: gridLines + 1 }, (_, i) => i);
 
-  const maxXTicks = isMobile ? 3 : 6;
-  const n = safePoints.length;
-  const every = Math.max(1, Math.floor(n / maxXTicks));
-
-  const pathD = safePoints
+  // line path
+  const pathD = points
     .map((p, i) => {
       const x = xToPx(i);
       const y = yToPx(p.y);
@@ -146,15 +140,10 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
     })
     .join(" ");
 
+  // dot sizing (bigger on mobile)
   const dotR = isMobile ? 6 : 5;
-  const ringR = isMobile ? 10 : 8;
+  const dotRingR = isMobile ? 10 : 8;
   const hitR = isMobile ? 22 : 16;
-
-  // if tooltip index goes out of bounds after rerender, reset it
-  useEffect(() => {
-    if (activeIndex == null) return;
-    if (activeIndex < 0 || activeIndex >= safePoints.length) setActiveIndex(null);
-  }, [activeIndex, safePoints.length]);
 
   return (
     <div className="w-full overflow-hidden">
@@ -164,7 +153,7 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
         preserveAspectRatio="xMidYMid meet"
         onClick={() => setActiveIndex(null)}
       >
-        {/* grid + y labels */}
+        {/* horizontal dotted grid + y labels */}
         {grid.map((i) => {
           const t = i / gridLines;
           const yVal = minY + (1 - t) * (maxY - minY);
@@ -196,8 +185,22 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
         })}
 
         {/* axes */}
-        <line x1={padL} y1={padT} x2={padL} y2={h - padB} stroke="currentColor" opacity="0.18" />
-        <line x1={padL} y1={h - padB} x2={w - padR} y2={h - padB} stroke="currentColor" opacity="0.18" />
+        <line
+          x1={padL}
+          y1={padT}
+          x2={padL}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+        <line
+          x1={padL}
+          y1={h - padB}
+          x2={w - padR}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
 
         {/* zero line */}
         {zeroY >= padT && zeroY <= h - padB && (
@@ -212,7 +215,7 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
           />
         )}
 
-        {/* unit */}
+        {/* y-axis unit label */}
         <text
           x={padL}
           y={14}
@@ -225,20 +228,18 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
         </text>
 
         {/* line */}
-        {safePoints.length >= 2 && (
-          <path
-            d={pathD}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={isMobile ? "4" : "3"}
-            opacity="0.95"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={isMobile ? "4" : "3"}
+          opacity="0.95"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
 
-        {/* dots */}
-        {safePoints.map((p, i) => {
+        {/* dots + touch targets */}
+        {points.map((p, i) => {
           const x = xToPx(i);
           const y = yToPx(p.y);
           const isActive = activeIndex === i;
@@ -251,6 +252,12 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
                 cy={y}
                 r={hitR}
                 fill="transparent"
+                onMouseEnter={() => setActiveIndex(i)}
+                onMouseLeave={() => {
+                  // On mobile we don't want hover to clear; but hover doesn't exist anyway.
+                  // On desktop this keeps it tidy.
+                  if (!isMobile) setActiveIndex(null);
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveIndex((prev) => (prev === i ? null : i));
@@ -262,37 +269,44 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
                 style={{ cursor: "pointer" }}
               />
 
-              {/* visible ring */}
+              {/* outer ring (helps you SEE the dots) */}
               <circle
                 cx={x}
                 cy={y}
-                r={ringR}
+                r={dotRingR}
                 fill="transparent"
                 stroke="currentColor"
-                opacity={isActive ? "0.38" : "0.22"}
+                opacity={isActive ? "0.35" : "0.2"}
                 strokeWidth={isActive ? "3" : "2"}
               />
 
-              {/* visible dot */}
-              <circle cx={x} cy={y} r={dotR} fill="currentColor" opacity="0.95" />
+              {/* actual dot */}
+              <circle
+                cx={x}
+                cy={y}
+                r={dotR}
+                fill="currentColor"
+                opacity="0.95"
+              />
             </g>
           );
         })}
 
         {/* tooltip */}
-        {activeIndex != null && safePoints[activeIndex] && (() => {
-          const p = safePoints[activeIndex];
+        {activeIndex != null && points[activeIndex] && (() => {
+          const p = points[activeIndex];
           const x = xToPx(activeIndex);
           const y = yToPx(p.y);
 
           const valueText = `${formatNumber(p.y)} ${unitLabel}`;
           const dateText = formatTooltipDate(p.x);
 
-          const boxW = isMobile ? 230 : 190;
-          const boxH = isMobile ? 66 : 52;
+          const boxW = isMobile ? 220 : 190;
+          const boxH = isMobile ? 64 : 52;
 
           let tx = x + 14;
           let ty = y - boxH - 14;
+
           if (tx + boxW > w - padR) tx = x - boxW - 14;
           if (ty < padT) ty = y + 14;
 
@@ -320,7 +334,7 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
 
               <text
                 x={tx + 14}
-                y={ty + (isMobile ? 28 : 20)}
+                y={ty + (isMobile ? 26 : 20)}
                 fontSize={isMobile ? "14" : "12"}
                 fill="hsl(var(--foreground))"
                 opacity="0.96"
@@ -330,7 +344,7 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
 
               <text
                 x={tx + 14}
-                y={ty + (isMobile ? 50 : 38)}
+                y={ty + (isMobile ? 48 : 38)}
                 fontSize={isMobile ? "12" : "11"}
                 fill="hsl(var(--muted-foreground))"
                 opacity="0.96"
@@ -342,8 +356,8 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
         })()}
 
         {/* x labels */}
-        {safePoints.map((p, i) => {
-          if (i % every !== 0 && i !== safePoints.length - 1) return null;
+        {points.map((p, i) => {
+          if (i % every !== 0 && i !== points.length - 1) return null;
           const x = xToPx(i);
           return (
             <text
@@ -361,11 +375,9 @@ function LineChart({ points = [], unitLabel = "kg", allowNegative = true, isMobi
         })}
       </svg>
 
-      {safePoints.length >= 2 && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          Tip: tap a dot to see the date + {unitLabel}.
-        </div>
-      )}
+      <div className="mt-2 text-xs text-muted-foreground">
+        Tip: tap a dot to see the date + {unitLabel}.
+      </div>
     </div>
   );
 }
@@ -377,23 +389,15 @@ export default function ProgressPage() {
   const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
 
   const [range, setRange] = useState("all");
-  const [expanded, setExpanded] = useState(null);
+  const [expanded, setExpanded] = useState(null); // { programmeKey, exerciseKey }
 
-  // Mobile detection that updates on resize (prevents stale layouts)
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 640;
-  });
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 640);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+  // simple mobile detection (safe for CRA)
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   const computed = useMemo(() => {
     const programmes = getProgrammes() || [];
     const workoutsRaw = getWorkouts() || [];
+
     const start = startOfRange(range);
 
     const workouts = workoutsRaw
@@ -405,7 +409,7 @@ export default function ProgressPage() {
     const seriesByKey = new Map();
 
     const addPoint = (key, x, y) => {
-      if (!key || !(x instanceof Date) || !Number.isFinite(y)) return;
+      if (!key || !x || !Number.isFinite(y)) return;
       if (!seriesByKey.has(key)) seriesByKey.set(key, []);
       seriesByKey.get(key).push({ x, y });
     };
@@ -427,20 +431,23 @@ export default function ProgressPage() {
           if (Number.isFinite(v) && v > best) best = v;
         });
 
+        // allow negative too (assisted)
         if (best !== -Infinity) addPoint(key, x, best);
       });
     });
 
     const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) => {
-      compressedByKey.set(key, compressByDayMax(pts));
-    });
+    seriesByKey.forEach((pts, key) => compressedByDayMax(pts) && compressedByKey.set(key, compressByDayMax(pts)));
 
     const programmeCards = programmes.map((p) => {
       const type = String(p?.type || "").toUpperCase();
       const programmeKey = normKey(type || p?.name || p?.title || `programme_${Math.random()}`);
 
-      const displayName = p?.name || p?.title || p?.label || (type ? `Workout ${type}` : "Workout");
+      const displayName =
+        p?.name ||
+        p?.title ||
+        p?.label ||
+        (type ? `Workout ${type}` : "Workout");
 
       const exercises = (p?.exercises || []).map((ex) => {
         const name = ex?.name || ex?.id || "";
@@ -463,14 +470,20 @@ export default function ProgressPage() {
         };
       });
 
-      return { programmeKey, displayName, exercises };
+      return { programmeKey, type, displayName, exercises };
     });
 
     const flat = programmeCards.flatMap((pc) =>
-      pc.exercises.map((e) => ({ programme: pc.displayName, programmeKey: pc.programmeKey, ...e }))
+      pc.exercises.map((e) => ({
+        programme: pc.displayName,
+        programmeKey: pc.programmeKey,
+        ...e,
+      }))
     );
 
-    const withDelta = flat.filter((e) => Number.isFinite(e.delta)).sort((a, b) => b.delta - a.delta);
+    const withDelta = flat
+      .filter((e) => Number.isFinite(e.delta))
+      .sort((a, b) => b.delta - a.delta);
 
     return {
       programmeCards,
@@ -489,7 +502,9 @@ export default function ProgressPage() {
   ];
 
   const onToggleExercise = (programmeKey, exerciseKey) => {
-    const same = expanded?.programmeKey === programmeKey && expanded?.exerciseKey === exerciseKey;
+    const same =
+      expanded?.programmeKey === programmeKey &&
+      expanded?.exerciseKey === exerciseKey;
     setExpanded(same ? null : { programmeKey, exerciseKey });
   };
 
@@ -501,9 +516,11 @@ export default function ProgressPage() {
           <div>
             <h1 className="text-xl font-semibold text-primary">Progress</h1>
             <div className="mt-1 text-sm text-muted-foreground">
-              Metric: <span className="font-medium text-foreground">{metricLabel}</span>
+              Metric:{" "}
+              <span className="font-medium text-foreground">{metricLabel}</span>
               <span className="mx-2 opacity-50">•</span>
-              Unit: <span className="font-medium text-foreground">{unitLabel}</span>
+              Unit:{" "}
+              <span className="font-medium text-foreground">{unitLabel}</span>
             </div>
 
             <div className="mt-2">
@@ -543,7 +560,9 @@ export default function ProgressPage() {
           </div>
 
           {computed.mostProgress.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
+            <p className="text-sm text-muted-foreground">
+              Not enough data in this range yet.
+            </p>
           ) : (
             <div className="space-y-2">
               {computed.mostProgress.map((e) => (
@@ -553,7 +572,9 @@ export default function ProgressPage() {
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {e.programme}
+                    </div>
                   </div>
                   <div className="text-sm font-semibold text-success whitespace-nowrap">
                     +{formatNumber(e.delta)} {unitLabel}
@@ -575,7 +596,9 @@ export default function ProgressPage() {
           </div>
 
           {computed.needsAttention.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
+            <p className="text-sm text-muted-foreground">
+              Not enough data in this range yet.
+            </p>
           ) : (
             <div className="space-y-2">
               {computed.needsAttention.map((e) => (
@@ -585,7 +608,9 @@ export default function ProgressPage() {
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {e.programme}
+                    </div>
                   </div>
                   <div
                     className={cx(
@@ -604,11 +629,16 @@ export default function ProgressPage() {
         {/* Programme containers */}
         <div className="space-y-3">
           {computed.programmeCards.map((pc) => (
-            <div key={pc.programmeKey} className="rounded-xl border border-border bg-card">
+            <div
+              key={pc.programmeKey}
+              className="rounded-xl border border-border bg-card"
+            >
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold">{pc.displayName}</h3>
-                <span className="ml-auto text-xs text-muted-foreground">Tap an exercise to expand</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Tap an exercise to expand
+                </span>
               </div>
 
               <div className="p-3 space-y-2">
@@ -635,11 +665,15 @@ export default function ProgressPage() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <div className="text-sm font-semibold truncate">{ex.name}</div>
+                              <div className="text-sm font-semibold truncate">
+                                {ex.name}
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 {metricLabel} in range:{" "}
                                 <span className="font-medium text-foreground">
-                                  {ex.maxVal == null ? "-" : `${formatNumber(ex.maxVal)} ${unitLabel}`}
+                                  {ex.maxVal == null
+                                    ? "-"
+                                    : `${formatNumber(ex.maxVal)} ${unitLabel}`}
                                 </span>
                               </div>
                             </div>
@@ -655,7 +689,9 @@ export default function ProgressPage() {
                               )}
                             >
                               {Number.isFinite(ex.delta)
-                                ? `${ex.delta >= 0 ? "+" : ""}${formatNumber(ex.delta)} ${unitLabel}`
+                                ? `${ex.delta >= 0 ? "+" : ""}${formatNumber(
+                                    ex.delta
+                                  )} ${unitLabel}`
                                 : ""}
                             </div>
                           </div>
@@ -664,7 +700,9 @@ export default function ProgressPage() {
                         {isOpen && (
                           <div className="rounded-lg border border-border bg-background/40 p-3">
                             {!ex.points || ex.points.length < 2 ? (
-                              <p className="text-sm text-muted-foreground">Not enough data points in this range.</p>
+                              <p className="text-sm text-muted-foreground">
+                                Not enough data points in this range.
+                              </p>
                             ) : (
                               <>
                                 <div className="text-sm font-semibold mb-2">
@@ -682,13 +720,17 @@ export default function ProgressPage() {
 
                                 <div className="mt-3 grid grid-cols-2 gap-2">
                                   <div className="rounded-lg border border-border bg-card p-3">
-                                    <div className="text-xs text-muted-foreground">First</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      First
+                                    </div>
                                     <div className="text-lg font-semibold">
                                       {formatNumber(ex.first)} {unitLabel}
                                     </div>
                                   </div>
                                   <div className="rounded-lg border border-border bg-card p-3">
-                                    <div className="text-xs text-muted-foreground">Latest</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Latest
+                                    </div>
                                     <div className="text-lg font-semibold">
                                       {formatNumber(ex.latest)} {unitLabel}
                                     </div>
