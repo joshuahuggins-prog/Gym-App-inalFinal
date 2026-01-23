@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+
 import VideoModal from "../components/VideoModal";
 import ExerciseCard from "../components/ExerciseCard";
 import RestTimer from "../components/RestTimer";
@@ -39,11 +40,6 @@ import { toast } from "sonner";
 // ---------------------------
 // Helpers
 // ---------------------------
-const [videoModal, setVideoModal] = useState({
-  open: false,
-  title: "",
-  url: "",
-});
 const norm = (s) => String(s || "").trim().toLowerCase();
 const upper = (s) => String(s || "").trim().toUpperCase();
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
@@ -99,6 +95,13 @@ const HomePage = () => {
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
 
+  // ✅ Video modal state MUST be inside component
+  const [videoModal, setVideoModal] = useState({
+    open: false,
+    title: "",
+    url: "",
+  });
+
   const draftSaveTimerRef = useRef(null);
 
   // used to force weekly streak recompute after save
@@ -108,14 +111,21 @@ const HomePage = () => {
 
   const [manualWorkoutType, setManualWorkoutType] = useState("");
 
+  const handleOpenVideo = (exercise, url) => {
+    if (!url) {
+      toast.message("No video saved", {
+        description: "Add a YouTube link for this exercise in your library.",
+      });
+      return;
+    }
 
-const handleOpenVideo = (exercise, url) => {
-  setVideoModal({
-    open: true,
-    title: exercise?.name,
-    url,
-  });
-};
+    setVideoModal({
+      open: true,
+      title: exercise?.name || "Exercise Video",
+      url,
+    });
+  };
+
   // Add exercise UI
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState("");
@@ -303,11 +313,13 @@ const handleOpenVideo = (exercise, url) => {
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+      prev.map((ex) =>
+        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
+      )
     );
   };
 
-  // ✅ NEW: Add an extra set "for today" to a specific exercise
+  // ✅ Add set for today
   const handleAddSetToExercise = (exercise) => {
     if (!exercise?.id) return;
 
@@ -326,7 +338,6 @@ const handleOpenVideo = (exercise, url) => {
             ? currentSetsData
             : buildExerciseDefaultSetsData(baseCount);
 
-        // safety cap so it can't grow forever by mistake
         if (base.length >= 20) {
           toast.message("Max sets reached", {
             description: "You can add up to 20 sets per exercise for today.",
@@ -337,7 +348,7 @@ const handleOpenVideo = (exercise, url) => {
         const nextSetsData = [...base, makeEmptySet()];
         return {
           ...ex,
-          sets: nextSetsData.length, // keep the displayed "sets" count in sync
+          sets: nextSetsData.length,
           setsData: nextSetsData,
         };
       })
@@ -591,7 +602,9 @@ const handleOpenVideo = (exercise, url) => {
             <div className="bg-muted/50 rounded-lg p-4 border border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Calendar className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Last Trained</span>
+                <span className="text-xs text-muted-foreground">
+                  Last Trained
+                </span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 {daysSince === null
@@ -685,7 +698,8 @@ const handleOpenVideo = (exercise, url) => {
             onWeightChange={handleWeightChange}
             onNotesChange={handleNotesChange}
             onRestTimer={(duration) => setRestTimer(duration)}
-            onAddSet={handleAddSetToExercise}   // ✅ NEW
+            onAddSet={handleAddSetToExercise}
+            onOpenVideo={handleOpenVideo} // ✅ NEW: open modal instead of new tab
             isFirst={index === 0}
           />
         ))}
@@ -759,14 +773,13 @@ const handleOpenVideo = (exercise, url) => {
         />
       )}
 
-<VideoModal
-  open={videoModal.open}
-  onOpenChange={(open) =>
-    setVideoModal((v) => ({ ...v, open }))
-  }
-  title={videoModal.title}
-  videoUrl={videoModal.url}
-/>
+      {/* ✅ Video Modal */}
+      <VideoModal
+        open={videoModal.open}
+        onOpenChange={(open) => setVideoModal((v) => ({ ...v, open }))}
+        title={videoModal.title}
+        videoUrl={videoModal.url}
+      />
 
       {/* PR Celebration */}
       {prCelebration && (
