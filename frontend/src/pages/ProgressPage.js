@@ -37,6 +37,15 @@ const formatNumber = (n) => {
   return (Math.round(x * 10) / 10).toString();
 };
 
+const formatTooltipDate = (d) =>
+  d
+    ? d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "";
+
 const monthYearShort = (d) =>
   d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
 
@@ -63,22 +72,26 @@ const compressByDayMax = (pts) => {
     .sort((a, b) => a.x - b.x);
 };
 
+// ---- Mobile-friendly responsive line chart (bigger dots + tooltip) ----
 function LineChart({
   points = [],
   unitLabel = "kg",
-  height = 240,
-  maxXTicks = 6,
   allowNegative = true,
+  isMobile = false,
 }) {
-  // Responsive SVG line chart + axes + dotted grid + tooltip (supports negative)
   const [activeIndex, setActiveIndex] = useState(null);
 
-  const w = 1000; // virtual width for layout math
-  const h = height;
-  const padL = 54;
-  const padR = 16;
-  const padT = 16;
-  const padB = 44;
+  // virtual canvas
+  const w = 1000;
+  const h = isMobile ? 320 : 240;
+
+  const padL = isMobile ? 62 : 54;
+  const padR = 18;
+  const padT = 18;
+  const padB = isMobile ? 56 : 44;
+
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
 
   const ys = points.map((p) => p.y).filter((v) => Number.isFinite(v));
   const minData = ys.length ? Math.min(...ys) : 0;
@@ -92,12 +105,10 @@ function LineChart({
     maxY += 1;
   }
 
+  // padding
   const range = maxY - minY;
-  minY -= range * 0.08;
-  maxY += range * 0.08;
-
-  const plotW = w - padL - padR;
-  const plotH = h - padT - padB;
+  minY -= range * 0.1;
+  maxY += range * 0.1;
 
   const yToPx = (y) => {
     const t = (y - minY) / (maxY - minY);
@@ -111,12 +122,16 @@ function LineChart({
 
   const zeroY = yToPx(0);
 
-  const gridLines = 4;
-  const grid = Array.from({ length: gridLines + 1 }, (_, i) => i);
-
+  // fewer labels on mobile
+  const maxXTicks = isMobile ? 3 : 6;
   const n = points.length;
   const every = Math.max(1, Math.floor(n / maxXTicks));
 
+  // grid lines (more on desktop, fewer on mobile)
+  const gridLines = isMobile ? 3 : 4;
+  const grid = Array.from({ length: gridLines + 1 }, (_, i) => i);
+
+  // line path
   const pathD = points
     .map((p, i) => {
       const x = xToPx(i);
@@ -125,14 +140,10 @@ function LineChart({
     })
     .join(" ");
 
-  const formatTooltipDate = (d) =>
-    d
-      ? d.toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        })
-      : "";
+  // dot sizing (bigger on mobile)
+  const dotR = isMobile ? 6 : 5;
+  const dotRingR = isMobile ? 10 : 8;
+  const hitR = isMobile ? 22 : 16;
 
   return (
     <div className="w-full overflow-hidden">
@@ -161,11 +172,11 @@ function LineChart({
               />
               <text
                 x={padL - 10}
-                y={y + 4}
+                y={y + 5}
                 textAnchor="end"
-                fontSize="11"
+                fontSize={isMobile ? "12" : "11"}
                 fill="currentColor"
-                opacity="0.65"
+                opacity="0.7"
               >
                 {formatNumber(yVal)}
               </text>
@@ -207,9 +218,9 @@ function LineChart({
         {/* y-axis unit label */}
         <text
           x={padL}
-          y={12}
+          y={14}
           textAnchor="start"
-          fontSize="12"
+          fontSize={isMobile ? "13" : "12"}
           fill="currentColor"
           opacity="0.75"
         >
@@ -221,11 +232,13 @@ function LineChart({
           d={pathD}
           fill="none"
           stroke="currentColor"
-          strokeWidth="3"
+          strokeWidth={isMobile ? "4" : "3"}
           opacity="0.95"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
 
-        {/* points (click/tap targets + visible dots) */}
+        {/* dots + touch targets */}
         {points.map((p, i) => {
           const x = xToPx(i);
           const y = yToPx(p.y);
@@ -233,14 +246,18 @@ function LineChart({
 
           return (
             <g key={i}>
-              {/* big invisible hit area */}
+              {/* hit area */}
               <circle
                 cx={x}
                 cy={y}
-                r="14"
+                r={hitR}
                 fill="transparent"
                 onMouseEnter={() => setActiveIndex(i)}
-                onMouseLeave={() => setActiveIndex(null)}
+                onMouseLeave={() => {
+                  // On mobile we don't want hover to clear; but hover doesn't exist anyway.
+                  // On desktop this keeps it tidy.
+                  if (!isMobile) setActiveIndex(null);
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveIndex((prev) => (prev === i ? null : i));
@@ -252,13 +269,24 @@ function LineChart({
                 style={{ cursor: "pointer" }}
               />
 
-              {/* visible dot */}
+              {/* outer ring (helps you SEE the dots) */}
               <circle
                 cx={x}
                 cy={y}
-                r={isActive ? "6" : "4"}
+                r={dotRingR}
+                fill="transparent"
+                stroke="currentColor"
+                opacity={isActive ? "0.35" : "0.2"}
+                strokeWidth={isActive ? "3" : "2"}
+              />
+
+              {/* actual dot */}
+              <circle
+                cx={x}
+                cy={y}
+                r={dotR}
                 fill="currentColor"
-                opacity={isActive ? "1" : "0.95"}
+                opacity="0.95"
               />
             </g>
           );
@@ -273,22 +301,22 @@ function LineChart({
           const valueText = `${formatNumber(p.y)} ${unitLabel}`;
           const dateText = formatTooltipDate(p.x);
 
-          const boxW = 178;
-          const boxH = 52;
+          const boxW = isMobile ? 220 : 190;
+          const boxH = isMobile ? 64 : 52;
 
-          let tx = x + 12;
-          let ty = y - boxH - 12;
+          let tx = x + 14;
+          let ty = y - boxH - 14;
 
-          if (tx + boxW > w - padR) tx = x - boxW - 12;
-          if (ty < padT) ty = y + 12;
+          if (tx + boxW > w - padR) tx = x - boxW - 14;
+          if (ty < padT) ty = y + 14;
 
           return (
             <g>
               <line
                 x1={x}
                 y1={y}
-                x2={Math.max(padL, Math.min(w - padR, tx + 10))}
-                y2={Math.max(padT, Math.min(h - padB, ty + boxH - 10))}
+                x2={Math.max(padL, Math.min(w - padR, tx + 12))}
+                y2={Math.max(padT, Math.min(h - padB, ty + boxH - 12))}
                 stroke="currentColor"
                 opacity="0.25"
                 strokeDasharray="2 4"
@@ -299,27 +327,27 @@ function LineChart({
                 y={ty}
                 width={boxW}
                 height={boxH}
-                rx="10"
+                rx="12"
                 fill="hsl(var(--card))"
                 stroke="hsl(var(--border))"
               />
 
               <text
-                x={tx + 12}
-                y={ty + 20}
-                fontSize="12"
+                x={tx + 14}
+                y={ty + (isMobile ? 26 : 20)}
+                fontSize={isMobile ? "14" : "12"}
                 fill="hsl(var(--foreground))"
-                opacity="0.95"
+                opacity="0.96"
               >
                 {valueText}
               </text>
 
               <text
-                x={tx + 12}
-                y={ty + 38}
-                fontSize="11"
+                x={tx + 14}
+                y={ty + (isMobile ? 48 : 38)}
+                fontSize={isMobile ? "12" : "11"}
                 fill="hsl(var(--muted-foreground))"
-                opacity="0.95"
+                opacity="0.96"
               >
                 {dateText}
               </text>
@@ -335,9 +363,9 @@ function LineChart({
             <text
               key={`x-${i}`}
               x={x}
-              y={h - 16}
+              y={h - 18}
               textAnchor="middle"
-              fontSize="11"
+              fontSize={isMobile ? "12" : "11"}
               fill="currentColor"
               opacity="0.65"
             >
@@ -346,6 +374,10 @@ function LineChart({
           );
         })}
       </svg>
+
+      <div className="mt-2 text-xs text-muted-foreground">
+        Tip: tap a dot to see the date + {unitLabel}.
+      </div>
     </div>
   );
 }
@@ -358,6 +390,9 @@ export default function ProgressPage() {
 
   const [range, setRange] = useState("all");
   const [expanded, setExpanded] = useState(null); // { programmeKey, exerciseKey }
+
+  // simple mobile detection (safe for CRA)
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
   const computed = useMemo(() => {
     const programmes = getProgrammes() || [];
@@ -390,22 +425,19 @@ export default function ProgressPage() {
         (ex.sets || []).forEach((s) => {
           const ww = Number(s?.weight);
           const rr = Number(s?.reps);
-
           if (!Number.isFinite(ww)) return;
 
-          let v;
-          if (progressMetric === "e1rm") v = e1rm(ww, rr);
-          else v = ww;
-
+          const v = progressMetric === "e1rm" ? e1rm(ww, rr) : ww;
           if (Number.isFinite(v) && v > best) best = v;
         });
 
+        // allow negative too (assisted)
         if (best !== -Infinity) addPoint(key, x, best);
       });
     });
 
     const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compressByDayMax(pts)));
+    seriesByKey.forEach((pts, key) => compressedByDayMax(pts) && compressedByKey.set(key, compressByDayMax(pts)));
 
     const programmeCards = programmes.map((p) => {
       const type = String(p?.type || "").toUpperCase();
@@ -453,10 +485,11 @@ export default function ProgressPage() {
       .filter((e) => Number.isFinite(e.delta))
       .sort((a, b) => b.delta - a.delta);
 
-    const mostProgress = withDelta.slice(0, 2);
-    const needsAttention = [...withDelta].reverse().slice(0, 2);
-
-    return { programmeCards, mostProgress, needsAttention };
+    return {
+      programmeCards,
+      mostProgress: withDelta.slice(0, 2),
+      needsAttention: [...withDelta].reverse().slice(0, 2),
+    };
   }, [range, progressMetric]);
 
   const unitLabel = weightUnit;
@@ -472,7 +505,6 @@ export default function ProgressPage() {
     const same =
       expanded?.programmeKey === programmeKey &&
       expanded?.exerciseKey === exerciseKey;
-
     setExpanded(same ? null : { programmeKey, exerciseKey });
   };
 
@@ -682,6 +714,7 @@ export default function ProgressPage() {
                                     points={ex.points}
                                     unitLabel={unitLabel}
                                     allowNegative={true}
+                                    isMobile={isMobile}
                                   />
                                 </div>
 
