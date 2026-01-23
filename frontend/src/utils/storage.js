@@ -27,43 +27,8 @@ export const STORAGE_KEYS = {
 };
 
 // =====================
-// Helpers
+// Helpers (string/id/date)
 // =====================
-// Set / change the draft workout type without overwriting the rest of the draft
-export const setDraftWorkoutType = (type) => {
-  const t = (type || "").toString().trim().toUpperCase();
-  const draft = getWorkoutDraft();
-
-  const nextDraft =
-    draft && typeof draft === "object"
-      ? { ...draft, type: t }
-      : { type: t, startedAt: new Date().toISOString(), date: new Date().toISOString().slice(0, 10) };
-
-  return setWorkoutDraft(nextDraft);
-};
-
-export const advanceWorkoutPatternIndex = () => {
-  const usable = getUsableProgrammes();
-  const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
-  const pattern = parseWorkoutPattern(getWorkoutPattern());
-
-  const safePattern =
-    pattern.length > 0 ? pattern : Array.from(usableTypes).sort();
-
-  const filtered = safePattern.filter((t) => usableTypes.has(t));
-  const finalPattern =
-    filtered.length > 0 ? filtered : Array.from(usableTypes).sort();
-
-  const len = finalPattern.length > 0 ? finalPattern.length : 1;
-  const current = getWorkoutPatternIndex();
-  const next = (Number(current) || 0) + 1;
-
-  const wrapped = ((next % len) + len) % len;
-  setWorkoutPatternIndex(wrapped);
-
-  return wrapped;
-};
-
 const normalizeId = (s) => (s || "").toString().trim();
 
 const toLegacyKey = (s) =>
@@ -239,6 +204,28 @@ export const peekNextWorkoutTypeFromPattern = () => {
   return finalPattern[i];
 };
 
+// Explicit helper some files import
+export const advanceWorkoutPatternIndex = () => {
+  const usable = getUsableProgrammes();
+  const usableTypes = new Set(usable.map((p) => String(p.type).toUpperCase()));
+  const pattern = parseWorkoutPattern(getWorkoutPattern());
+
+  const safePattern =
+    pattern.length > 0 ? pattern : Array.from(usableTypes).sort();
+
+  const filtered = safePattern.filter((t) => usableTypes.has(t));
+  const finalPattern =
+    filtered.length > 0 ? filtered : Array.from(usableTypes).sort();
+
+  const len = finalPattern.length > 0 ? finalPattern.length : 1;
+  const current = getWorkoutPatternIndex();
+  const next = (Number(current) || 0) + 1;
+
+  const wrapped = ((next % len) + len) % len;
+  setWorkoutPatternIndex(wrapped);
+  return wrapped;
+};
+
 // =====================
 // Workouts
 // =====================
@@ -277,7 +264,6 @@ export const getWorkoutDraft = () => {
 };
 
 export const setWorkoutDraft = (draft) => {
-  // store lightweight metadata for "today" checks if caller didn't include it
   const enriched =
     draft && typeof draft === "object"
       ? {
@@ -290,7 +276,7 @@ export const setWorkoutDraft = (draft) => {
   return setStorageData(STORAGE_KEYS.WORKOUT_DRAFT, enriched);
 };
 
-// Backwards compatible alias some files may import
+// Alias some older imports may use
 export const saveWorkoutDraft = (draft) => setWorkoutDraft(draft);
 
 export const clearWorkoutDraft = () => {
@@ -309,55 +295,31 @@ export const isWorkoutDraftForToday = () => {
 
   const today = toISODateOnly(new Date());
 
-  // Prefer explicit date field (YYYY-MM-DD)
   if (draft.date) return String(draft.date).slice(0, 10) === today;
-
-  // Fall back to startedAt timestamp/ISO
   if (draft.startedAt) return toISODateOnly(draft.startedAt) === today;
 
   return false;
 };
 
-// =====================
-// Settings (NEW theme model + backwards compatible)
-// =====================
-const DEFAULT_SETTINGS = {
-  weightUnit: "kg",
-  colorMode: "dark", // "light" | "dark"
-  colorTheme: "blue", // "blue" | "yellow" | "green" | "red"
+// Set / change the draft workout type without overwriting the rest of the draft
+export const setDraftWorkoutType = (type) => {
+  const t = (type || "").toString().trim().toUpperCase();
+  const draft = getWorkoutDraft();
+
+  const nextDraft =
+    draft && typeof draft === "object"
+      ? { ...draft, type: t }
+      : {
+          type: t,
+          startedAt: new Date().toISOString(),
+          date: new Date().toISOString().slice(0, 10),
+        };
+
+  return setWorkoutDraft(nextDraft);
 };
 
-export const getSettings = () => {
-  const s = getStorageData(STORAGE_KEYS.SETTINGS) || {};
-
-  // Backwards compat: older builds used `theme: "dark"|"light"`
-  const legacyMode =
-    typeof s.theme === "string" && (s.theme === "dark" || s.theme === "light")
-      ? s.theme
-      : null;
-
-  return {
-    weightUnit: s.weightUnit || "kg",
-
-    // NEW
-    colorMode: s.colorMode || legacyMode || "light",
-    colorTheme: s.colorTheme || "blue",
-    progressMetric: s.progressMetric || "max",
-  };
-};
-
-export const updateSettings = (updates) => {
-  const current = getSettings();
-  const next = { ...current, ...updates };
-
-  // keep legacy key in sync (optional but helps older code)
-  if (updates?.colorMode) next.theme = updates.colorMode;
-
-  return setStorageData(STORAGE_KEYS.SETTINGS, next);
-};
-const getSettings = () => {
 // =====================
-// Settings
+// Settings (theme + metric, backwards compatible)
 // =====================
 export const getSettings = () => {
   const s = getStorageData(STORAGE_KEYS.SETTINGS) || {};
@@ -371,11 +333,11 @@ export const getSettings = () => {
   return {
     weightUnit: s.weightUnit || "kg",
 
-    // NEW theme system
+    // Theme system
     colorMode: s.colorMode || legacyMode || "light",
     colorTheme: s.colorTheme || "blue",
 
-    // progress page metric
+    // Progress page metric
     progressMetric: s.progressMetric || "max",
   };
 };
@@ -389,6 +351,7 @@ export const updateSettings = (updates) => {
 
   return setStorageData(STORAGE_KEYS.SETTINGS, next);
 };
+
 // =====================
 // Body Weight Tracking
 // =====================
@@ -437,7 +400,9 @@ export const getPersonalRecords = () => {
  * - accepts exerciseId OR exerciseName
  * - stores under underscore key
  * - keeps exerciseName for display
- * - only overwrites if weight increases (your original rule)
+ * - only overwrites if weight increases (original rule)
+ *
+ * NOTE: this keeps your legacy behaviour (no 0/negative PRs).
  */
 export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
   const prs = getPersonalRecords();
@@ -447,7 +412,6 @@ export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
   const w = Number(weight);
   const r = Number(reps);
 
-  // Keep original rule: only positive weights and reps count
   if (!Number.isFinite(w) || w <= 0) return false;
   if (!Number.isFinite(r) || r <= 0) return false;
 
@@ -512,7 +476,6 @@ export const getProgrammes = () => {
   const programmes = getStorageData(STORAGE_KEYS.PROGRAMMES);
   if (Array.isArray(programmes) && programmes.length > 0) return programmes;
 
-  // keep your original dynamic require (works in CRA/CRACO builds)
   const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
   const defaults = [WORKOUT_A, WORKOUT_B];
   setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
@@ -601,7 +564,6 @@ export const saveExercise = (exercise) => {
   const id = normalizeId(exercise?.id);
   if (!id) return false;
 
-  // --- 1) Save exercise into catalogue (but don't trust assignedTo as source of truth)
   const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
   const idx = exercises.findIndex((e) => normalizeId(e.id) === id);
 
@@ -611,38 +573,39 @@ export const saveExercise = (exercise) => {
       ...prev,
       ...exercise,
       id,
-      hidden: typeof exercise.hidden === "boolean" ? exercise.hidden : prev.hidden,
+      hidden:
+        typeof exercise.hidden === "boolean" ? exercise.hidden : prev.hidden,
     };
   } else {
     exercises.push({ ...exercise, id });
   }
 
-  // ✅ Coerce numeric fields (prevents "" / strings breaking saves)
+  // Coerce numeric fields
   const setsNum = Number(exercise.sets);
   exercise.sets = Number.isFinite(setsNum) && setsNum > 0 ? setsNum : 3;
 
   const restNum = Number(exercise.restTime);
   exercise.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
-  // ✅ Ensure goalReps is a clean number array
+  // Ensure goalReps is a clean number array
   const rawGoalReps = Array.isArray(exercise.goalReps) ? exercise.goalReps : [];
   const cleanedGoalReps = rawGoalReps
     .map((x) => (x === "" || x == null ? null : Number(x)))
     .filter((n) => Number.isFinite(n) && n > 0);
   exercise.goalReps = cleanedGoalReps.length ? cleanedGoalReps : [8, 10, 12];
 
-  // ✅ Update the exercise inside programmes too
+  // Update core fields inside programmes too
   syncExerciseFieldsIntoProgrammes(exercise);
 
-  // --- 2) IMPORTANT: sync programmes based on exercise.assignedTo
-  // Programmes are the source of truth for assignments.
-  const assignedTo = Array.isArray(exercise.assignedTo) ? exercise.assignedTo : [];
+  // Sync assignments based on exercise.assignedTo
+  const assignedTo = Array.isArray(exercise.assignedTo)
+    ? exercise.assignedTo
+    : [];
   syncExerciseAssignmentsToProgrammes({ ...exercise, id, assignedTo });
 
-  // --- 3) Persist exercises and rebuild catalogue (so assignedTo is re-derived cleanly)
+  // Persist exercises and rebuild catalogue (so assignedTo is re-derived cleanly)
   setStorageData(STORAGE_KEYS.EXERCISES, exercises);
 
-  // Rebuild catalogue so assignments are consistent everywhere
   const programmes = getProgrammes();
   const merged = rebuildExerciseCatalogue(programmes, exercises);
   setStorageData(STORAGE_KEYS.EXERCISES, merged);
@@ -675,20 +638,20 @@ function syncExerciseAssignmentsToProgrammes(exercise) {
     const has = list.some((ex) => normalizeId(ex?.id) === id);
     const shouldHave = wantTypes.has(type);
 
-    // If programme should contain exercise, add it (with sensible fields)
     if (shouldHave && !has) {
       list.push({
         id,
         name: exercise.name,
         sets: exercise.sets ?? 3,
         repScheme: exercise.repScheme ?? "RPT",
-        goalReps: Array.isArray(exercise.goalReps) ? exercise.goalReps : [8, 10, 12],
+        goalReps: Array.isArray(exercise.goalReps)
+          ? exercise.goalReps
+          : [8, 10, 12],
         restTime: exercise.restTime ?? 120,
         notes: exercise.notes ?? "",
       });
     }
 
-    // If programme should NOT contain exercise, remove it
     if (!shouldHave && has) {
       const filtered = list.filter((ex) => normalizeId(ex?.id) !== id);
       return { ...p, exercises: filtered };
@@ -710,7 +673,6 @@ function syncExerciseFieldsIntoProgrammes(exercise) {
     const changed = list.map((ex) => {
       if (normalizeId(ex?.id) !== id) return ex;
 
-      // Update core fields used on Home/Programme screens
       return {
         ...ex,
         name: exercise.name,
@@ -754,7 +716,15 @@ export const exportToCSV = () => {
   const workouts = getWorkouts();
   if (!Array.isArray(workouts) || workouts.length === 0) return null;
 
-  const headers = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps", "Notes"];
+  const headers = [
+    "Date",
+    "Workout",
+    "Exercise",
+    "Set",
+    "Weight",
+    "Reps",
+    "Notes",
+  ];
   const rows = [];
 
   workouts.forEach((workout) => {
@@ -784,13 +754,22 @@ export const importFromCSV = (csvText) => {
     }
 
     const headers = lines[0].split(",").map((h) => h.trim());
-    const requiredHeaders = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps"];
+    const requiredHeaders = [
+      "Date",
+      "Workout",
+      "Exercise",
+      "Set",
+      "Weight",
+      "Reps",
+    ];
 
     const hasAllHeaders = requiredHeaders.every((h) => headers.includes(h));
     if (!hasAllHeaders) {
       return {
         success: false,
-        error: `Missing required headers. Expected: ${requiredHeaders.join(", ")}`,
+        error: `Missing required headers. Expected: ${requiredHeaders.join(
+          ", "
+        )}`,
       };
     }
 
@@ -930,7 +909,8 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
     if (data.personalRecords)
       setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
-    if (data.videoLinks) setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
+    if (data.videoLinks)
+      setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
     if (Array.isArray(data.programmes))
       setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
     if (Array.isArray(data.exercises))
@@ -942,7 +922,10 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern);
     }
     if (data.workoutPatternIndex != null) {
-      setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, data.workoutPatternIndex);
+      setStorageData(
+        STORAGE_KEYS.WORKOUT_PATTERN_INDEX,
+        data.workoutPatternIndex
+      );
     }
 
     return { success: true };
@@ -974,19 +957,15 @@ export const resetAllLocalData = async () => {
 
 export const resetWithBackup = async (options = { merge: false }) => {
   try {
-    // 1) Backup
     const backupJson = exportAllDataToJSON();
     if (!backupJson) return { success: false, error: "Backup failed." };
 
-    // 2) Reset
     const resetOk = await resetAllLocalData();
     if (!resetOk) return { success: false, error: "Reset failed." };
 
-    // 3) Restore
     const result = importAllDataFromJSON(backupJson, options);
     if (!result?.success) return result;
 
-    // 4) Reload (so UI refreshes from storage)
     window.location.reload();
     return { success: true };
   } catch (e) {
