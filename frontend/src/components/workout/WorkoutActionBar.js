@@ -5,18 +5,15 @@ import { Button } from "../ui/button";
 
 const cx = (...classes) => classes.filter(Boolean).join(" ");
 
-export default function WorkoutActionBar({
-  onSaveFinish,
-  disableFinish = false,
-}) {
+export default function WorkoutActionBar({ onSaveFinish, disableFinish = false }) {
   const [collapsed, setCollapsed] = useState(false);
 
+  // Collapse after user scrolls down a bit — works for window + nested scroll containers
   useEffect(() => {
     let raf = 0;
 
     const getAnyScrollTop = (evtTarget) => {
-      if (evtTarget && typeof evtTarget.scrollTop === "number")
-        return evtTarget.scrollTop;
+      if (evtTarget && typeof evtTarget.scrollTop === "number") return evtTarget.scrollTop;
 
       const se = document.scrollingElement;
       return (
@@ -36,13 +33,11 @@ export default function WorkoutActionBar({
       });
     };
 
+    // initialise based on current scroll
     handler({ target: document.scrollingElement });
 
     window.addEventListener("scroll", handler, { passive: true });
-    document.addEventListener("scroll", handler, {
-      passive: true,
-      capture: true,
-    });
+    document.addEventListener("scroll", handler, { passive: true, capture: true });
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
@@ -51,6 +46,7 @@ export default function WorkoutActionBar({
     };
   }, []);
 
+  // Bottom-right, stacked. Adjust 92px if your bottom nav differs.
   const basePos =
     "fixed right-4 z-50 flex flex-col gap-4 " +
     "bottom-[calc(env(safe-area-inset-bottom)+92px)]";
@@ -58,6 +54,7 @@ export default function WorkoutActionBar({
   const transition =
     "transition-all duration-300 ease-out will-change-transform will-change-width will-change-border-radius";
 
+  // More padding so border isn’t tight to text
   const sizeClass = collapsed
     ? "h-16 w-16 rounded-full px-0"
     : "h-16 w-[240px] rounded-3xl px-8";
@@ -75,17 +72,19 @@ export default function WorkoutActionBar({
         onClick={onSaveFinish}
         disabled={disableFinish}
         className={cx(
+          "border-2",
           baseBtn,
           sizeClass,
 
-          // ✅ FORCE solid background + no opacity (overrides any Button defaults)
-          "!bg-primary/100 hover:!bg-primary/100 !text-white !opacity-100",
+          // ✅ Follow theme (red/green/etc) + SOLID
+          "bg-primary text-primary-foreground border-primary",
+          "hover:bg-primary",
 
-          // ✅ Solid border
-          "border-2 !border-primary",
+          // ✅ Kill the default disabled opacity so it never looks transparent
+          "disabled:opacity-100",
 
-          // ✅ Disabled: still solid-looking (avoid opacity tricks)
-          disableFinish && "!bg-muted !border-border !text-muted-foreground"
+          // ✅ Disabled still looks disabled, but stays solid + themed
+          "disabled:brightness-90 disabled:saturate-75 disabled:cursor-not-allowed"
         )}
         title="Save & finish"
         aria-label="Save & finish"
