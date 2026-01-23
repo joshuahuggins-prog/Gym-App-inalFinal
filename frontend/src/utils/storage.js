@@ -355,47 +355,40 @@ export const updateSettings = (updates) => {
 
   return setStorageData(STORAGE_KEYS.SETTINGS, next);
 };
-}; const getSettings = () => {
-  const stored = getStorageData(STORAGE_KEYS.SETTINGS);
+const getSettings = () => {
+// =====================
+// Settings
+// =====================
+export const getSettings = () => {
+  const s = getStorageData(STORAGE_KEYS.SETTINGS) || {};
 
-  // No settings stored yet
-  if (!stored || typeof stored !== "object") {
-    return { ...DEFAULT_SETTINGS };
-  }
-
-  // Backwards compat: old { theme: "dark" | "light" }
-  const legacyTheme = stored.theme;
-  const colorMode =
-    stored.colorMode ||
-    (legacyTheme === "light" || legacyTheme === "dark"
-      ? legacyTheme
-      : DEFAULT_SETTINGS.colorMode);
-
-  const colorTheme =
-    stored.colorTheme ||
-    stored.themeColor || // just in case older experiments existed
-    DEFAULT_SETTINGS.colorTheme;
+  // Backwards compat: older builds used `theme: "dark"|"light"`
+  const legacyMode =
+    typeof s.theme === "string" && (s.theme === "dark" || s.theme === "light")
+      ? s.theme
+      : null;
 
   return {
-    ...DEFAULT_SETTINGS,
-    ...stored,
-    colorMode,
-    colorTheme,
+    weightUnit: s.weightUnit || "kg",
+
+    // NEW theme system
+    colorMode: s.colorMode || legacyMode || "light",
+    colorTheme: s.colorTheme || "blue",
+
+    // progress page metric
+    progressMetric: s.progressMetric || "max",
   };
 };
 
 export const updateSettings = (updates) => {
-  const settings = getSettings();
-  const merged = { ...settings, ...updates };
+  const current = getSettings();
+  const next = { ...current, ...(updates || {}) };
 
-  // Keep legacy 'theme' in sync (optional but helps older code paths)
-  if (merged.colorMode && (merged.colorMode === "light" || merged.colorMode === "dark")) {
-    merged.theme = merged.colorMode;
-  }
+  // keep legacy key in sync (optional)
+  if (updates?.colorMode) next.theme = updates.colorMode;
 
-  return setStorageData(STORAGE_KEYS.SETTINGS, merged);
+  return setStorageData(STORAGE_KEYS.SETTINGS, next);
 };
-
 // =====================
 // Body Weight Tracking
 // =====================
