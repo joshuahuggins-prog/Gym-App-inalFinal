@@ -71,9 +71,9 @@ const buildExerciseDefaultSetsData = (setsCount) =>
     completed: false,
   }));
 
+const makeEmptySet = () => ({ weight: "", reps: "", completed: false });
+
 // ✅ Next workout type based on most recent saved workout (simple A/B flip).
-// If you change your pattern later (e.g. A,B,A,C) you can use the pattern functions,
-// but for now this fixes “wrong compared to my last workout”.
 const getNextWorkoutTypeFromHistoryAB = () => {
   const workouts = getWorkouts();
   const lastType = workouts?.[0]?.type ? upper(workouts[0].type) : null;
@@ -292,6 +292,48 @@ const HomePage = () => {
     setWorkoutData((prev) =>
       prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
     );
+  };
+
+  // ✅ NEW: Add an extra set "for today" to a specific exercise
+  const handleAddSetToExercise = (exercise) => {
+    if (!exercise?.id) return;
+
+    setWorkoutData((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exercise.id) return ex;
+
+        const currentSetsData = Array.isArray(ex.setsData) ? ex.setsData : [];
+        const baseCount =
+          currentSetsData.length > 0
+            ? currentSetsData.length
+            : clampInt(Number(ex.sets ?? 3), 1, 12);
+
+        const base =
+          currentSetsData.length > 0
+            ? currentSetsData
+            : buildExerciseDefaultSetsData(baseCount);
+
+        // safety cap so it can't grow forever by mistake
+        if (base.length >= 20) {
+          toast.message("Max sets reached", {
+            description: "You can add up to 20 sets per exercise for today.",
+          });
+          return ex;
+        }
+
+        const nextSetsData = [...base, makeEmptySet()];
+        return {
+          ...ex,
+          sets: nextSetsData.length, // keep the displayed "sets" count in sync
+          setsData: nextSetsData,
+        };
+      })
+    );
+
+    toast.success("Set added", {
+      description: `Added an extra set to ${exercise.name || exercise.id}`,
+      duration: 1800,
+    });
   };
 
   const buildWorkoutPayload = () => ({
@@ -630,6 +672,7 @@ const HomePage = () => {
             onWeightChange={handleWeightChange}
             onNotesChange={handleNotesChange}
             onRestTimer={(duration) => setRestTimer(duration)}
+            onAddSet={handleAddSetToExercise}   // ✅ NEW
             isFirst={index === 0}
           />
         ))}
