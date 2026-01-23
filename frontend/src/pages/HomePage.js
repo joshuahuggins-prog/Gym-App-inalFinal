@@ -108,6 +108,14 @@ const HomePage = () => {
 
   const [manualWorkoutType, setManualWorkoutType] = useState("");
 
+
+const handleOpenVideo = (exercise, url) => {
+  setVideoModal({
+    open: true,
+    title: exercise?.name,
+    url,
+  });
+};
   // Add exercise UI
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState("");
@@ -750,6 +758,15 @@ const HomePage = () => {
           onClose={() => setRestTimer(null)}
         />
       )}
+
+<VideoModal
+  open={videoModal.open}
+  onOpenChange={(open) =>
+    setVideoModal((v) => ({ ...v, open }))
+  }
+  title={videoModal.title}
+  videoUrl={videoModal.url}
+/>
 
       {/* PR Celebration */}
       {prCelebration && (
