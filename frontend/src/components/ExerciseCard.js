@@ -1,6 +1,6 @@
 // src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Timer, Video, Shuffle } from "lucide-react";
+import { ChevronDown, ChevronUp, Timer, Video, Shuffle, Plus } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -39,6 +39,7 @@ const ExerciseCard = ({
   onWeightChange,
   onNotesChange,
   onRestTimer,
+  onAddSet, // ✅ NEW
 }) => {
   const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 12);
 
@@ -412,18 +413,41 @@ const ExerciseCard = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onRestTimer?.(exercise?.restTime ?? 120)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestTimer?.(exercise?.restTime ?? 120);
+                }}
+                data-no-toggle
               >
                 <Timer className="w-4 h-4 mr-1" />
                 Rest
               </Button>
             ) : null}
 
+            {/* ✅ NEW: Add Set */}
             <Button
               variant="outline"
               size="sm"
-              onClick={showAlternativesToast}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddSet?.(exercise);
+              }}
+              title="Add an extra set for today"
+              data-no-toggle
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              + Set
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                showAlternativesToast();
+              }}
               title="Show alternatives"
+              data-no-toggle
             >
               <Shuffle className="w-4 h-4 mr-1" />
               Alternatives
