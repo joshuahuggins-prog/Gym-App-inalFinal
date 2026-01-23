@@ -328,6 +328,34 @@ const DEFAULT_SETTINGS = {
 };
 
 export const getSettings = () => {
+  const s = getStorageData(STORAGE_KEYS.SETTINGS) || {};
+
+  // Backwards compat: older builds used `theme: "dark"|"light"`
+  const legacyMode =
+    typeof s.theme === "string" && (s.theme === "dark" || s.theme === "light")
+      ? s.theme
+      : null;
+
+  return {
+    weightUnit: s.weightUnit || "kg",
+
+    // NEW
+    colorMode: s.colorMode || legacyMode || "light",
+    colorTheme: s.colorTheme || "blue",
+    progressMetric: s.progressMetric || "max",
+  };
+};
+
+export const updateSettings = (updates) => {
+  const current = getSettings();
+  const next = { ...current, ...updates };
+
+  // keep legacy key in sync (optional but helps older code)
+  if (updates?.colorMode) next.theme = updates.colorMode;
+
+  return setStorageData(STORAGE_KEYS.SETTINGS, next);
+};
+}; const getSettings = () => {
   const stored = getStorageData(STORAGE_KEYS.SETTINGS);
 
   // No settings stored yet
