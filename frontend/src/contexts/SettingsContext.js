@@ -1,74 +1,60 @@
-import React, { useState } from 'react';
-import { getSettings, updateSettings } from '../utils/storage';
+import React, { useEffect, useState } from "react";
+import { getSettings, updateSettings } from "../utils/storage";
 
 const SettingsContext = React.createContext();
 
 export const useSettings = () => {
-  const context = React.useContext(SettingsContext);
-  if (!context) {
-    throw new Error('useSettings must be used within SettingsProvider');
-  }
-  return context;
+  const ctx = React.useContext(SettingsContext);
+  if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
+  return ctx;
 };
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(getSettings());
 
-  const updateSetting = (key, value) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    updateSettings(newSettings);
+  // Apply theme to DOM whenever these values change
+  useEffect(() => {
+    const root = document.documentElement;
+
+    // Tailwind dark mode class
+    if (settings.colorMode === "dark") root.classList.add("dark");
+    else root.classList.remove("dark");
+
+    // Theme attribute for your CSS tokens
+    root.setAttribute("data-theme", settings.colorTheme || "blue");
+  }, [settings.colorMode, settings.colorTheme]);
+
+  const patch = (updates) => {
+    const next = { ...settings, ...updates };
+    setSettings(next);
+    updateSettings(updates); // storage merges safely via storage.js
   };
 
-  // ---- Units ----
   const toggleWeightUnit = () => {
-    const newUnit = settings.weightUnit === 'lbs' ? 'kg' : 'lbs';
-    updateSetting('weightUnit', newUnit);
-  };
-  
-const setProgressMetric = (metric) => {
-  if (metric !== "max" && metric !== "e1rm") return;
-  updateSetting("progressMetric", metric);
-};
-
-  const convertWeight = (weight, fromUnit, toUnit) => {
-    if (fromUnit === toUnit) return weight;
-    if (fromUnit === 'lbs' && toUnit === 'kg') {
-      return Math.round((weight / 2.20462) * 10) / 10;
-    }
-    if (fromUnit === 'kg' && toUnit === 'lbs') {
-      return Math.round((weight * 2.20462) * 10) / 10;
-    }
-    return weight;
+    patch({ weightUnit: settings.weightUnit === "lbs" ? "kg" : "lbs" });
   };
 
-  // ---- Theme (mode + colour) ----
-  const setColorMode = (mode) => updateSetting('colorMode', mode);
-  const toggleColorMode = () =>
-    updateSetting('colorMode', settings.colorMode === 'dark' ? 'light' : 'dark');
-
-  const setColorTheme = (theme) => updateSetting('colorTheme', theme);
+  const setColorMode = (mode) => patch({ colorMode: mode });
+  const setColorTheme = (theme) => patch({ colorTheme: theme });
+  const setProgressMetric = (metric) => patch({ progressMetric: metric });
 
   return (
     <SettingsContext.Provider
       value={{
-        settings,
-        updateSetting,
-        
-        progressMetric: settings.progressMetric || "max",
-        setProgressMetric,
+        // raw
+        ...settings,
 
-        // units
-        toggleWeightUnit,
-        convertWeight,
+        // existing API
         weightUnit: settings.weightUnit,
+        toggleWeightUnit,
 
-        // theme
+        // NEW API your pages are using
         colorMode: settings.colorMode,
-        colorTheme: settings.colorTheme,
         setColorMode,
-        toggleColorMode,
+        colorTheme: settings.colorTheme,
         setColorTheme,
+        progressMetric: settings.progressMetric,
+        setProgressMetric,
       }}
     >
       {children}
