@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-
+import VideoModal from "../components/VideoModal";
 import ExerciseCard from "../components/ExerciseCard";
 import RestTimer from "../components/RestTimer";
 import PRCelebration from "../components/PRCelebration";
