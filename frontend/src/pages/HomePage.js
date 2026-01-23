@@ -39,6 +39,11 @@ import { toast } from "sonner";
 // ---------------------------
 // Helpers
 // ---------------------------
+const [videoModal, setVideoModal] = useState({
+  open: false,
+  title: "",
+  url: "",
+});
 const norm = (s) => String(s || "").trim().toLowerCase();
 const upper = (s) => String(s || "").trim().toUpperCase();
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
