@@ -1,6 +1,13 @@
 // src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Timer, Video, Shuffle, Plus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Timer,
+  Video,
+  Shuffle,
+  Plus,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -39,7 +46,8 @@ const ExerciseCard = ({
   onWeightChange,
   onNotesChange,
   onRestTimer,
-  onAddSet, // ✅ NEW
+  onAddSet,
+  onOpenVideo, // ✅ NEW
 }) => {
   const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 12);
 
@@ -84,7 +92,6 @@ const ExerciseCard = ({
   }, [sets]);
 
   // ✅ Hydrate sets/notes/video when parent updates the exercise data
-  // BUT do not keep forcing mode on every edit.
   useEffect(() => {
     setSets(normalizeSets(exercise?.setsData, setsCount));
     setNotes(exercise?.userNotes || "");
@@ -280,9 +287,10 @@ const ExerciseCard = ({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.open(videoLink, "_blank", "noopener,noreferrer");
+                  onOpenVideo?.(exercise, videoLink); // ✅ open modal
                 }}
-                title="Open form video"
+                title="Watch exercise video"
+                data-no-toggle
               >
                 <Video className="w-4 h-4" />
               </Button>
@@ -424,7 +432,7 @@ const ExerciseCard = ({
               </Button>
             ) : null}
 
-            {/* ✅ NEW: Add Set */}
+            {/* Add Set */}
             <Button
               variant="outline"
               size="sm"
@@ -457,9 +465,7 @@ const ExerciseCard = ({
           {/* Last workout */}
           {lastWorkoutData ? (
             <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-              <div className="font-semibold text-foreground mb-1">
-                Last time
-              </div>
+              <div className="font-semibold text-foreground mb-1">Last time</div>
               {(lastWorkoutData.sets || []).map((s2, idx) => (
                 <div key={idx}>
                   Set {idx + 1}: {s2.weight} × {s2.reps}
