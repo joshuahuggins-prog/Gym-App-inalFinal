@@ -11,7 +11,6 @@ export default function WorkoutActionBar({
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
-  // Collapse after user scrolls down a bit
   useEffect(() => {
     let raf = 0;
 
@@ -52,7 +51,6 @@ export default function WorkoutActionBar({
     };
   }, []);
 
-  // Positioning
   const basePos =
     "fixed right-4 z-50 flex flex-col gap-4 " +
     "bottom-[calc(env(safe-area-inset-bottom)+92px)]";
@@ -60,7 +58,6 @@ export default function WorkoutActionBar({
   const transition =
     "transition-all duration-300 ease-out will-change-transform will-change-width will-change-border-radius";
 
-  // Extra horizontal padding so border doesn’t hug the text
   const sizeClass = collapsed
     ? "h-16 w-16 rounded-full px-0"
     : "h-16 w-[240px] rounded-3xl px-8";
@@ -81,20 +78,19 @@ export default function WorkoutActionBar({
           baseBtn,
           sizeClass,
 
-          // ✅ SOLID colours (no alpha)
-          "bg-primary text-white hover:bg-primary",
+          // ✅ FORCE solid background + no opacity (overrides any Button defaults)
+          "!bg-primary/100 hover:!bg-primary/100 !text-white !opacity-100",
 
-          // ✅ Solid border + more breathing room
-          "border-2 border-primary",
+          // ✅ Solid border
+          "border-2 !border-primary",
 
-          // Disabled styling (still solid, just muted)
-          disableFinish && "cursor-not-allowed bg-primary/40 border-primary/40"
+          // ✅ Disabled: still solid-looking (avoid opacity tricks)
+          disableFinish && "!bg-muted !border-border !text-muted-foreground"
         )}
         title="Save & finish"
         aria-label="Save & finish"
       >
         <ThumbsUp className={cx(iconClass, collapsed ? "" : "mr-3")} />
-
         {!collapsed && (
           <span className="text-base font-semibold whitespace-nowrap">
             Save &amp; Finish Workout
