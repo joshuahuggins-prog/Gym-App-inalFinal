@@ -1,845 +1,417 @@
-// src/pages/ProgressPage.js
-import React, { useEffect, useMemo, useState } from "react";
-import { TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { getProgrammes, getWorkouts, getSettings } from "../utils/storage";
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, Calendar, TrendingDown, Award } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Badge } from '../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { getWorkouts, getExercises } from '../utils/storage';
+import { useSettings } from '../contexts/SettingsContext';
 
-const cx = (...c) => c.filter(Boolean).join(" ");
-
-const e1rm = (w, r) => {
-  const ww = Number(w);
-  const rr = Number(r);
-  if (!Number.isFinite(ww) || !Number.isFinite(rr) || rr <= 0) return 0;
-  return ww * (1 + rr / 30);
-};
-
-const toDate = (iso) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-
-const startOfRange = (rangeKey) => {
-  const now = new Date();
-  if (rangeKey === "all") return null;
-
-  const d = new Date(now);
-  if (rangeKey === "3m") d.setMonth(d.getMonth() - 3);
-  if (rangeKey === "6m") d.setMonth(d.getMonth() - 6);
-  if (rangeKey === "1y") d.setFullYear(d.getFullYear() - 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const formatNumber = (n) => {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "-";
-  if (Math.abs(x) >= 100) return Math.round(x).toString();
-  return (Math.round(x * 10) / 10).toString();
-};
-
-const monthYearShort = (d) =>
-  d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
-
-const normKey = (nameOrId) =>
-  (nameOrId || "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_");
-
-/**
- * One point per date (YYYY-MM-DD), keep MAX for that day.
- * SAFE: never throws if p.x is missing/invalid
- */
-const compressByDayMax = (pts) => {
-  const m = new Map(); // yyyy-mm-dd -> max
-
-  (pts || []).forEach((p) => {
-    const dx = p?.x instanceof Date ? p.x : null;
-    if (!dx || Number.isNaN(dx.getTime())) return;
-
-    const y = Number(p?.y);
-    if (!Number.isFinite(y)) return;
-
-    const k = dx.toISOString().slice(0, 10);
-    const prev = m.get(k);
-    if (prev == null || y > prev) m.set(k, y);
-  });
-
-  return Array.from(m.entries())
-    .map(([k, y]) => ({ x: new Date(k), y }))
-    .filter((p) => p.x instanceof Date && !Number.isNaN(p.x.getTime()))
-    .sort((a, b) => a.x - b.x);
-};
-
-//*******Chart Start*******
-
- function LineChart({
-  points = [],
-  unitLabel = "kg",
-  height = 260,
-  maxXTicks = 6,
-  allowNegative = true,
-}) {
-  const [activeIndex, setActiveIndex] = useState(null);
-
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 640;
-  });
+const ProgressPage = () => {
+  const { weightUnit } = useSettings();
+  const [selectedExercise1, setSelectedExercise1] = useState('weighted_dips');
+  const [selectedExercise2, setSelectedExercise2] = useState('weighted_chinups');
+  const [exerciseData, setExerciseData] = useState({});
+  const [exercises, setExercises] = useState([]);
+  const [timeRange, setTimeRange] = useState('all');
+  const [progressionStats, setProgressionStats] = useState({ most: null, least: null });
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 640);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    loadData();
   }, []);
 
-  const w = 1000;
+  const loadData = () => {
+    const workouts = getWorkouts();
+    const availableExercises = getExercises();
+    setExercises(availableExercises);
+    
+    // Extract data for all exercises
+    const dataMap = {};
+    
+    workouts.reverse().forEach(workout => {
+      const date = new Date(workout.date).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
 
-  // ✅ Bigger on mobile
-  const h = isMobile ? 520 : height;
-
-  // ✅ More room for labels on mobile
-  const padL = isMobile ? 78 : 56;
-  const padR = 18;
-  const padT = 18;
-  const padB = isMobile ? 86 : 50;
-
-  const safePoints = useMemo(() => {
-    return (points || [])
-      .filter((p) => p?.x instanceof Date && !Number.isNaN(p.x.getTime()))
-      .map((p) => ({ x: p.x, y: Number(p.y), meta: p.meta || null }))
-      .filter((p) => Number.isFinite(p.y))
-      .sort((a, b) => a.x - b.x);
-  }, [points]);
-
-  useEffect(() => {
-    if (activeIndex == null) return;
-    if (activeIndex < 0 || activeIndex >= safePoints.length) {
-      setActiveIndex(null);
-    }
-  }, [activeIndex, safePoints.length]);
-
-  const plotW = w - padL - padR;
-  const plotH = h - padT - padB;
-
-  const xToPx = (i) => {
-    if (safePoints.length <= 1) return padL + plotW / 2;
-    return padL + (i * plotW) / (safePoints.length - 1);
+      workout.exercises.forEach(exercise => {
+        const exerciseKey = exercise.id || exercise.name.toLowerCase().replace(/\s+/g, '_');
+        
+        if (!dataMap[exerciseKey]) {
+          dataMap[exerciseKey] = [];
+        }
+        
+        if (exercise.sets && exercise.sets.length > 0) {
+          const maxWeight = Math.max(...exercise.sets.map(s => s.weight || 0));
+          if (maxWeight > 0) {
+            dataMap[exerciseKey].push({
+              date,
+              weight: maxWeight,
+              fullDate: workout.date
+            });
+          }
+        }
+      });
+    });
+    
+    setExerciseData(dataMap);
+    calculateProgressionStats(dataMap);
   };
 
-  // ✅ Y blocks of 10, min→max based on data
-  const ys = safePoints.map((p) => p.y);
-  const minData = ys.length ? Math.min(...ys) : 0;
-  const maxData = ys.length ? Math.max(...ys) : 0;
-
-  const rawMin = allowNegative ? minData : Math.max(0, minData);
-  const rawMax = allowNegative ? maxData : Math.max(0, maxData);
-
-  const STEP = 10;
-
-  let minTick = Math.floor(rawMin / STEP) * STEP;
-  let maxTick = Math.ceil(rawMax / STEP) * STEP;
-
-  if (!Number.isFinite(minTick)) minTick = 0;
-  if (!Number.isFinite(maxTick)) maxTick = STEP;
-
-  if (minTick === maxTick) maxTick = minTick + STEP;
-
-  const yToPx = (y) => {
-    const t = (y - minTick) / (maxTick - minTick);
-    return padT + (1 - t) * plotH;
+  const calculateProgressionStats = (dataMap) => {
+    const progressions = [];
+    
+    Object.keys(dataMap).forEach(exerciseKey => {
+      const data = dataMap[exerciseKey];
+      if (data.length >= 2) {
+        const first = data[0].weight;
+        const last = data[data.length - 1].weight;
+        const change = last - first;
+        const percentChange = ((change / first) * 100);
+        
+        const exercise = exercises.find(ex => ex.id === exerciseKey) || 
+                        { name: exerciseKey.replace(/_/g, ' ') };
+        
+        progressions.push({
+          exerciseKey,
+          name: exercise.name || exerciseKey,
+          change,
+          percentChange,
+          dataPoints: data.length
+        });
+      }
+    });
+    
+    progressions.sort((a, b) => b.percentChange - a.percentChange);
+    
+    setProgressionStats({
+      most: progressions[0] || null,
+      least: progressions[progressions.length - 1] || null
+    });
   };
 
-  const tickCount = Math.round((maxTick - minTick) / STEP) + 1;
-  const ticksY = Array.from({ length: tickCount }, (_, i) => minTick + i * STEP);
+  const filterDataByTimeRange = (data) => {
+    if (timeRange === 'all') return data;
 
-  // Don’t label too many Y ticks on mobile
-  const maxLabels = isMobile ? 8 : 10;
-  const labelEvery = tickCount > maxLabels ? Math.ceil(tickCount / maxLabels) : 1;
+    const now = new Date();
+    const monthsMap = { '3m': 3, '6m': 6, '1y': 12 };
+    const months = monthsMap[timeRange];
+    const cutoffDate = new Date(now.setMonth(now.getMonth() - months));
 
-  // ✅ Fewer x labels on mobile
-  const ticksX = isMobile ? 3 : maxXTicks;
-  const n = safePoints.length;
-  const everyX = Math.max(1, Math.floor(n / ticksX));
+    return data.filter(item => new Date(item.fullDate) >= cutoffDate);
+  };
 
-  const pathD =
-    safePoints.length >= 2
-      ? safePoints
-          .map((p, i) => {
-            const x = xToPx(i);
-            const y = yToPx(p.y);
-            return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-          })
-          .join(" ")
-      : "";
+  const getExerciseData = (exerciseKey) => {
+    return exerciseData[exerciseKey] || [];
+  };
 
-  const monthYearShort = (d) =>
-    d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+  const filteredData1 = filterDataByTimeRange(getExerciseData(selectedExercise1));
+  const filteredData2 = filterDataByTimeRange(getExerciseData(selectedExercise2));
 
-  const formatTooltipDate = (d) =>
-    d
-      ? d.toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        })
-      : "";
+  const calculateProgress = (data) => {
+    if (data.length < 2) return null;
+    const first = data[0].weight;
+    const last = data[data.length - 1].weight;
+    const change = last - first;
+    const percentChange = ((change / first) * 100).toFixed(1);
+    return { change, percentChange };
+  };
 
-  // ✅ MUCH bigger tap target
-  const hitR = isMobile ? 34 : 18;
-  const dotR = isMobile ? 7 : 4;
-  const ringR = isMobile ? 13 : 8;
+  const progress1 = calculateProgress(filteredData1);
+  const progress2 = calculateProgress(filteredData2);
 
-  // (Optional) If you don’t already have formatNumber in file, keep this:
-  const formatNumberLocal = (val) => {
-    const x = Number(val);
-    if (!Number.isFinite(x)) return "-";
-    if (Math.abs(x) >= 100) return Math.round(x).toString();
-    return (Math.round(x * 10) / 10).toString();
+  const getExerciseName = (exerciseKey) => {
+    const exercise = exercises.find(ex => ex.id === exerciseKey);
+    return exercise?.name || exerciseKey.replace(/_/g, ' ');
   };
 
   return (
-    <div className="w-full overflow-hidden">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        className="block w-full"
-        preserveAspectRatio="xMidYMid meet"
-        // ✅ Force a real height so it doesn’t get “shrunk”
-        style={{ height: `${h}px`, touchAction: "manipulation" }}
-        // ✅ Only clear when tapping empty space (NOT dots)
-        onPointerDown={(e) => {
-          if (e.target === e.currentTarget) setActiveIndex(null);
-        }}
-      >
-        {/* grid + y labels */}
-        {ticksY.map((yVal, i) => {
-          const y = yToPx(yVal);
-          const shouldLabel =
-            i % labelEvery === 0 || i === ticksY.length - 1 || i === 0;
+    <div className="min-h-screen bg-background pb-20">
+      {/* Header */}
+      <div className="bg-gradient-to-b from-card to-background border-b border-border">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <h1 className="text-3xl font-bold text-gradient-primary mb-2">
+            Progress Tracking
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Track your strength gains over time
+          </p>
+        </div>
+      </div>
 
-          return (
-            <g key={yVal}>
-              <line
-                x1={padL}
-                y1={y}
-                x2={w - padR}
-                y2={y}
-                stroke="currentColor"
-                opacity="0.12"
-                strokeDasharray="3 6"
-              />
-              {shouldLabel && (
-                <text
-                  x={padL - 10}
-                  y={y + 4}
-                  textAnchor="end"
-                  fontSize={isMobile ? "12" : "11"}
-                  fill="currentColor"
-                  opacity="0.65"
-                >
-                  {yVal}
-                </text>
-              )}
-            </g>
-          );
-        })}
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+        {/* Time Range Filter */}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {[
+            { value: 'all', label: 'All Time' },
+            { value: '3m', label: '3 Months' },
+            { value: '6m', label: '6 Months' },
+            { value: '1y', label: '1 Year' }
+          ].map(range => (
+            <button
+              key={range.value}
+              onClick={() => setTimeRange(range.value)}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
+                timeRange === range.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {range.label}
+            </button>
+          ))}
+        </div>
 
-        {/* axes */}
-        <line
-          x1={padL}
-          y1={padT}
-          x2={padL}
-          y2={h - padB}
-          stroke="currentColor"
-          opacity="0.18"
-        />
-        <line
-          x1={padL}
-          y1={h - padB}
-          x2={w - padR}
-          y2={h - padB}
-          stroke="currentColor"
-          opacity="0.18"
-        />
-
-        {/* unit label */}
-        <text
-          x={padL}
-          y={14}
-          textAnchor="start"
-          fontSize={isMobile ? "13" : "12"}
-          fill="currentColor"
-          opacity="0.75"
-        >
-          {unitLabel}
-        </text>
-
-        {/* line */}
-        {safePoints.length >= 2 && (
-          <path
-            d={pathD}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={isMobile ? "4" : "3"}
-            opacity="0.95"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+        {/* Progression Stats Summary */}
+        {(progressionStats.most || progressionStats.least) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {progressionStats.most && (
+              <div className="bg-success/10 border border-success/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="w-5 h-5 text-success" />
+                  <h3 className="font-bold text-foreground">Most Progress</h3>
+                </div>
+                <div className="text-lg font-bold text-success">{progressionStats.most.name}</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  +{progressionStats.most.change.toFixed(1)} {weightUnit} ({progressionStats.most.percentChange >= 0 ? '+' : ''}{progressionStats.most.percentChange.toFixed(1)}%)
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {progressionStats.most.dataPoints} recorded workouts
+                </div>
+              </div>
+            )}
+            
+            {progressionStats.least && progressionStats.least.percentChange < 0 && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingDown className="w-5 h-5 text-destructive" />
+                  <h3 className="font-bold text-foreground">Needs Attention</h3>
+                </div>
+                <div className="text-lg font-bold text-destructive">{progressionStats.least.name}</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  {progressionStats.least.change.toFixed(1)} {weightUnit} ({progressionStats.least.percentChange.toFixed(1)}%)
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {progressionStats.least.dataPoints} recorded workouts
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* points */}
-        {safePoints.map((p, i) => {
-          const x = xToPx(i);
-          const y = yToPx(p.y);
-          const isActive = activeIndex === i;
-
-          return (
-            <g key={i}>
-              {/* big invisible hit area */}
-              <circle
-                cx={x}
-                cy={y}
-                r={hitR}
-                fill="transparent"
-                style={{ cursor: "pointer" }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  setActiveIndex((prev) => (prev === i ? null : i));
-                }}
-              />
-
-              {/* ring */}
-              <circle
-                cx={x}
-                cy={y}
-                r={ringR}
-                fill="transparent"
-                stroke="currentColor"
-                opacity={isActive ? "0.35" : "0.18"}
-                strokeWidth={isActive ? "3" : "2"}
-                pointerEvents="none"
-              />
-
-              {/* dot */}
-              <circle
-                cx={x}
-                cy={y}
-                r={isActive ? dotR + 1 : dotR}
-                fill="currentColor"
-                opacity="0.95"
-                pointerEvents="none"
-              />
-            </g>
-          );
-        })}
-
-        {/* tooltip */}
-        {activeIndex != null &&
-          safePoints[activeIndex] &&
-          (() => {
-            const p = safePoints[activeIndex];
-            const x = xToPx(activeIndex);
-            const y = yToPx(p.y);
-
-            const meta = p.meta || {};
-            const dateText = formatTooltipDate(p.x);
-            const valueText = `${formatNumberLocal(p.y)} ${unitLabel}`;
-
-            const extraLines = [];
-            if (meta.workoutType) extraLines.push(`Workout: ${meta.workoutType}`);
-            if (Number.isFinite(Number(meta.reps)))
-              extraLines.push(`Reps: ${Number(meta.reps)}`);
-            if (meta.notes) extraLines.push(`Notes: ${String(meta.notes)}`);
-
-            const boxW = isMobile ? 320 : 240;
-            const lineH = isMobile ? 18 : 16;
-            const baseH = isMobile ? 56 : 46;
-            const boxH = baseH + extraLines.length * lineH;
-
-            let tx = x + 12;
-            let ty = y - boxH - 12;
-
-            if (tx + boxW > w - padR) tx = x - boxW - 12;
-            if (ty < padT) ty = y + 12;
-
-            return (
-              <g>
-                <rect
-                  x={tx}
-                  y={ty}
-                  width={boxW}
-                  height={boxH}
-                  rx="12"
-                  fill="hsl(var(--card))"
-                  stroke="hsl(var(--border))"
-                />
-                <text
-                  x={tx + 12}
-                  y={ty + 22}
-                  fontSize={isMobile ? "14" : "12"}
-                  fill="hsl(var(--foreground))"
-                  opacity="0.95"
-                >
-                  {valueText}
-                </text>
-                <text
-                  x={tx + 12}
-                  y={ty + 40}
-                  fontSize={isMobile ? "12" : "11"}
-                  fill="hsl(var(--muted-foreground))"
-                  opacity="0.95"
-                >
-                  {dateText}
-                </text>
-
-                {extraLines.map((t, idx) => (
-                  <text
-                    key={idx}
-                    x={tx + 12}
-                    y={ty + (isMobile ? 60 : 56) + idx * lineH}
-                    fontSize={isMobile ? "12" : "11"}
-                    fill="hsl(var(--muted-foreground))"
-                    opacity="0.95"
-                  >
-                    {t}
-                  </text>
-                ))}
-              </g>
-            );
-          })()}
-
-        {/* x labels */}
-        {safePoints.map((p, i) => {
-          if (i % everyX !== 0 && i !== safePoints.length - 1) return null;
-          const x = xToPx(i);
-          return (
-            <text
-              key={`x-${i}`}
-              x={x}
-              y={h - 18}
-              textAnchor="middle"
-              fontSize={isMobile ? "12" : "11"}
-              fill="currentColor"
-              opacity="0.65"
-            >
-              {monthYearShort(p.x)}
-            </text>
-          );
-        })}
-      </svg>
-
-      {safePoints.length >= 2 && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          Tip: tap a dot to see date + details
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-//*******Chart End*********
-
-export default function ProgressPage() {
-  const settings = getSettings();
-  const weightUnit = settings?.weightUnit || "kg";
-  const progressMetric = settings?.progressMetric === "e1rm" ? "e1rm" : "max";
-  const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
-
-  const [range, setRange] = useState("all");
-  const [expanded, setExpanded] = useState(null); // { programmeKey, exerciseKey }
-
-  const computed = useMemo(() => {
-    const programmes = getProgrammes() || [];
-    const workoutsRaw = getWorkouts() || [];
-
-    const start = startOfRange(range);
-
-    const workouts = workoutsRaw
-      .map((w) => ({ ...w, _dateObj: toDate(w.date) }))
-      .filter((w) => w._dateObj)
-      .filter((w) => (start ? w._dateObj >= start : true))
-      .sort((a, b) => a._dateObj - b._dateObj);
-
-    const seriesByKey = new Map();
-
-    const addPoint = (key, x, y, meta) => {
-      if (!key || !(x instanceof Date) || Number.isNaN(x.getTime())) return;
-      const yy = Number(y);
-      if (!Number.isFinite(yy)) return;
-
-      if (!seriesByKey.has(key)) seriesByKey.set(key, []);
-      seriesByKey.get(key).push({ x, y: yy, meta: meta || null });
-    };
-
-    workouts.forEach((w) => {
-      const x = w._dateObj;
-      (w.exercises || []).forEach((ex) => {
-        const exName = ex?.name || ex?.id || "";
-        const key = normKey(exName);
-
-        let best = -Infinity;
-        let bestMeta = null;
-
-        (ex.sets || []).forEach((s) => {
-          const ww = Number(s?.weight);
-          const rr = Number(s?.reps);
-
-          if (!Number.isFinite(ww)) return;
-
-          let v;
-          if (progressMetric === "e1rm") v = e1rm(ww, rr);
-          else v = ww;
-
-          if (Number.isFinite(v) && v > best) {
-            best = v;
-            bestMeta = {
-              workoutType: w?.type || "",
-              reps: Number.isFinite(rr) ? rr : null,
-              notes: ex?.notes || "", // note: this is the saved exercise notes from history
-            };
-          }
-        });
-
-        if (best !== -Infinity) addPoint(key, x, best, bestMeta);
-      });
-    });
-
-    // compress by day max (note: meta kept from the max point)
-    const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) => {
-      const bestByDay = new Map(); // day -> {x,y,meta}
-      (pts || []).forEach((p) => {
-        const dx = p?.x instanceof Date ? p.x : null;
-        if (!dx || Number.isNaN(dx.getTime())) return;
-        const yy = Number(p?.y);
-        if (!Number.isFinite(yy)) return;
-
-        const day = dx.toISOString().slice(0, 10);
-        const prev = bestByDay.get(day);
-        if (!prev || yy > prev.y) bestByDay.set(day, { x: new Date(day), y: yy, meta: p.meta || null });
-      });
-
-      const out = Array.from(bestByDay.values())
-        .filter((p) => p.x instanceof Date && !Number.isNaN(p.x.getTime()))
-        .sort((a, b) => a.x - b.x);
-
-      compressedByKey.set(key, out);
-    });
-
-    const programmeCards = programmes.map((p) => {
-      const type = String(p?.type || "").toUpperCase();
-      const programmeKey = normKey(type || p?.name || p?.title || "programme");
-
-      const displayName =
-        p?.name ||
-        p?.title ||
-        p?.label ||
-        (type ? `Workout ${type}` : "Workout");
-
-      const exercises = (p?.exercises || []).map((ex) => {
-        const name = ex?.name || ex?.id || "";
-        const key = normKey(name);
-        const pts = compressedByKey.get(key) || [];
-
-        const maxVal = pts.reduce((m, v) => (v.y > m ? v.y : m), -Infinity);
-        const first = pts.length ? pts[0].y : null;
-        const latest = pts.length ? pts[pts.length - 1].y : null;
-        const delta = first != null && latest != null ? latest - first : null;
-
-        return {
-          key,
-          name,
-          points: pts,
-          maxVal: maxVal === -Infinity ? null : maxVal,
-          first,
-          latest,
-          delta,
-        };
-      });
-
-      return { programmeKey, type, displayName, exercises };
-    });
-
-    const flat = programmeCards.flatMap((pc) =>
-      pc.exercises.map((e) => ({
-        programme: pc.displayName,
-        programmeKey: pc.programmeKey,
-        ...e,
-      }))
-    );
-
-    const withDelta = flat
-      .filter((e) => Number.isFinite(e.delta))
-      .sort((a, b) => b.delta - a.delta);
-
-    const mostProgress = withDelta.slice(0, 2);
-    const needsAttention = [...withDelta].reverse().slice(0, 2);
-
-    return { programmeCards, mostProgress, needsAttention };
-  }, [range, progressMetric]);
-
-  const unitLabel = weightUnit;
-
-  const rangeButtons = [
-    { k: "all", label: "All time" },
-    { k: "3m", label: "3 months" },
-    { k: "6m", label: "6 months" },
-    { k: "1y", label: "1 year" },
-  ];
-
-  const onToggleExercise = (programmeKey, exerciseKey) => {
-    const same =
-      expanded?.programmeKey === programmeKey &&
-      expanded?.exerciseKey === exerciseKey;
-
-    setExpanded(same ? null : { programmeKey, exerciseKey });
-  };
-
-  return (
-    <div className="p-0">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 bg-card">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-primary">Progress</h1>
-            <div className="mt-1 text-sm text-muted-foreground">
-              Metric:{" "}
-              <span className="font-medium text-foreground">{metricLabel}</span>
-              <span className="mx-2 opacity-50">•</span>
-              Unit:{" "}
-              <span className="font-medium text-foreground">{unitLabel}</span>
+        {/* Exercise 1 Chart */}
+        <div className="bg-card border border-border rounded-xl p-6">
+          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm font-medium text-muted-foreground block mb-2">
+                Select Exercise
+              </label>
+              <Select value={selectedExercise1} onValueChange={setSelectedExercise1}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {exercises.map(ex => (
+                    <SelectItem key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-
-            <div className="mt-2">
-              <Badge className="bg-primary/15 text-primary border border-primary/30">
-                {metricLabel}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Range buttons */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {rangeButtons.map((r) => (
-            <Button
-              key={r.k}
-              size="sm"
-              variant={range === r.k ? "default" : "secondary"}
-              onClick={() => setRange(r.k)}
-            >
-              {r.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <div className="border-b border-border" />
-
-      <div className="p-4 space-y-3">
-        {/* Most progress */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-5 h-5 text-success" />
-            <h2 className="font-semibold">Most progress</h2>
-            <Badge className="ml-auto bg-success/15 text-success border border-success/30">
-              Top
-            </Badge>
-          </div>
-
-          {computed.mostProgress.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Not enough data in this range yet.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {computed.mostProgress.map((e) => (
-                <div
-                  key={`${e.programmeKey}-${e.key}`}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {e.programme}
-                    </div>
-                  </div>
-                  <div className="text-sm font-semibold text-success whitespace-nowrap">
-                    +{formatNumber(e.delta)} {unitLabel}
-                  </div>
+            {progress1 && (
+              <div className="text-right">
+                <div className={`text-2xl font-bold ${
+                  progress1.change >= 0 ? 'text-success' : 'text-destructive'
+                }`}>
+                  {progress1.change >= 0 ? '+' : ''}{progress1.change} {weightUnit}
                 </div>
-              ))}
+                <div className="text-sm text-muted-foreground">
+                  {progress1.percentChange >= 0 ? '+' : ''}{progress1.percentChange}%
+                </div>
+              </div>
+            )}
+          </div>
+
+          {filteredData1.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <div className="text-4xl mb-2">📊</div>
+              <p>No data yet. Complete workouts to see your progress!</p>
+            </div>
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={filteredData1}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    style={{ fontSize: '12px' }}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))"
+                    style={{ fontSize: '12px' }}
+                    label={{ 
+                      value: `Weight (${weightUnit})`, 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      style: { fill: 'hsl(var(--muted-foreground))' }
+                    }}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      color: 'hsl(var(--foreground))'
+                    }}
+                    formatter={(value) => [`${value} ${weightUnit}`, 'Weight']}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="weight" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={3}
+                    dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                    activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {filteredData1.length > 0 && (
+            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+              <span>First: {filteredData1[0].weight} {weightUnit}</span>
+              <span>Latest: {filteredData1[filteredData1.length - 1].weight} {weightUnit}</span>
             </div>
           )}
         </div>
 
-        {/* Needs attention */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
-            <h2 className="font-semibold">Needs attention</h2>
-            <Badge className="ml-auto bg-destructive/15 text-destructive border border-destructive/30">
-              Focus
-            </Badge>
+        {/* Exercise 2 Chart */}
+        <div className="bg-card border border-border rounded-xl p-6">
+          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-sm font-medium text-muted-foreground block mb-2">
+                Select Exercise
+              </label>
+              <Select value={selectedExercise2} onValueChange={setSelectedExercise2}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {exercises.map(ex => (
+                    <SelectItem key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {progress2 && (
+              <div className="text-right">
+                <div className={`text-2xl font-bold ${
+                  progress2.change >= 0 ? 'text-success' : 'text-destructive'
+                }`}>
+                  {progress2.change >= 0 ? '+' : ''}{progress2.change} {weightUnit}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {progress2.percentChange >= 0 ? '+' : ''}{progress2.percentChange}%
+                </div>
+              </div>
+            )}
           </div>
 
-          {computed.needsAttention.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Not enough data in this range yet.
-            </p>
+          {filteredData2.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <div className="text-4xl mb-2">📊</div>
+              <p>No data yet. Complete workouts to see your progress!</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {computed.needsAttention.map((e) => (
-                <div
-                  key={`${e.programmeKey}-${e.key}`}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {e.programme}
-                    </div>
-                  </div>
-                  <div
-                    className={cx(
-                      "text-sm font-semibold whitespace-nowrap",
-                      e.delta < 0 ? "text-destructive" : "text-muted-foreground"
-                    )}
-                  >
-                    {formatNumber(e.delta)} {unitLabel}
-                  </div>
-                </div>
-              ))}
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={filteredData2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    style={{ fontSize: '12px' }}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))"
+                    style={{ fontSize: '12px' }}
+                    label={{ 
+                      value: `Weight (${weightUnit})`, 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      style: { fill: 'hsl(var(--muted-foreground))' }
+                    }}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      color: 'hsl(var(--foreground))'
+                    }}
+                    formatter={(value) => [`${value} ${weightUnit}`, 'Weight']}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="weight" 
+                    stroke="hsl(var(--chart-2))" 
+                    strokeWidth={3}
+                    dot={{ fill: 'hsl(var(--chart-2))', r: 4 }}
+                    activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {filteredData2.length > 0 && (
+            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+              <span>First: {filteredData2[0].weight} {weightUnit}</span>
+              <span>Latest: {filteredData2[filteredData2.length - 1].weight} {weightUnit}</span>
             </div>
           )}
         </div>
 
-        {/* Programme containers */}
-        <div className="space-y-3">
-          {computed.programmeCards.map((pc) => (
-            <div
-              key={pc.programmeKey}
-              className="rounded-xl border border-border bg-card"
-            >
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold">{pc.displayName}</h3>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  Tap an exercise to expand
-                </span>
-              </div>
-
-              <div className="p-3 space-y-2">
-                {pc.exercises.length === 0 ? (
-                  <p className="text-sm text-muted-foreground px-2 py-2">
-                    No exercises assigned to this programme.
-                  </p>
-                ) : (
-                  pc.exercises.map((ex) => {
-                    const isOpen =
-                      expanded?.programmeKey === pc.programmeKey &&
-                      expanded?.exerciseKey === ex.key;
-
-                    return (
-                      <div key={ex.key} className="space-y-2">
-                        <button
-                          onClick={() =>
-                            onToggleExercise(pc.programmeKey, ex.key)
-                          }
-                          className={cx(
-                            "w-full rounded-lg border px-3 py-3 text-left transition",
-                            isOpen
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-background/40 hover:bg-muted/30"
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold truncate">
-                                {ex.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {metricLabel} in range:{" "}
-                                <span className="font-medium text-foreground">
-                                  {ex.maxVal == null
-                                    ? "-"
-                                    : `${formatNumber(ex.maxVal)} ${unitLabel}`}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div
-                              className={cx(
-                                "text-xs font-semibold whitespace-nowrap mt-1",
-                                Number.isFinite(ex.delta)
-                                  ? ex.delta >= 0
-                                    ? "text-success"
-                                    : "text-destructive"
-                                  : "text-muted-foreground"
-                              )}
-                            >
-                              {Number.isFinite(ex.delta)
-                                ? `${ex.delta >= 0 ? "+" : ""}${formatNumber(
-                                    ex.delta
-                                  )} ${unitLabel}`
-                                : ""}
-                            </div>
-                          </div>
-                        </button>
-
-                        {isOpen && (
-                          <div className="rounded-lg border border-border bg-background/40 p-3">
-                            {!ex.points || ex.points.length < 2 ? (
-                              <p className="text-sm text-muted-foreground">
-                                Not enough data points in this range.
-                              </p>
-                            ) : (
-                              <>
-                                <div className="text-sm font-semibold mb-2">
-                                  {ex.name} — {metricLabel}
-                                </div>
-
-                                <div className="text-foreground">
-                                  <LineChart
-                                    points={ex.points}
-                                    unitLabel={unitLabel}
-                                    allowNegative={true}
-                                  />
-                                </div>
-
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  <div className="rounded-lg border border-border bg-card p-3">
-                                    <div className="text-xs text-muted-foreground">
-                                      First
-                                    </div>
-                                    <div className="text-lg font-semibold">
-                                      {formatNumber(ex.first)} {unitLabel}
-                                    </div>
-                                  </div>
-                                  <div className="rounded-lg border border-border bg-card p-3">
-                                    <div className="text-xs text-muted-foreground">
-                                      Latest
-                                    </div>
-                                    <div className="text-lg font-semibold">
-                                      {formatNumber(ex.latest)} {unitLabel}
-                                    </div>
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+        {/* Progress Summary */}
+        {(filteredData1.length > 0 || filteredData2.length > 0) && (
+          <div className="bg-primary/10 border border-primary/30 rounded-xl p-6">
+            <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Progress Summary
+            </h3>
+            <div className="space-y-3">
+              {filteredData1.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground">{getExerciseName(selectedExercise1)} Sessions:</span>
+                  <Badge variant="outline" className="text-primary border-primary/50">
+                    {filteredData1.length} workouts
+                  </Badge>
+                </div>
+              )}
+              {filteredData2.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground">{getExerciseName(selectedExercise2)} Sessions:</span>
+                  <Badge variant="outline" className="text-primary border-primary/50">
+                    {filteredData2.length} workouts
+                  </Badge>
+                </div>
+              )}
+              <div className="pt-3 border-t border-border">
+                <p className="text-xs text-muted-foreground">
+                  💡 <span className="font-semibold">Tip:</span> Consistent progressive overload is the key to gains. 
+                  Aim to add weight or reps each week while maintaining proper form.
+                </p>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
-}
+};
+
+export default ProgressPage;
