@@ -7,6 +7,8 @@ import {
   Video,
   Shuffle,
   Plus,
+  Minus,
+  Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -47,9 +49,9 @@ const ExerciseCard = ({
   onNotesChange,
   onRestTimer,
   onAddSet,
-  onOpenVideo, // ✅ NEW
+  onOpenVideo,
 }) => {
-  const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 12);
+  const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 40);
 
   const goalReps = useMemo(
     () => normalizeGoalReps(exercise?.goalReps, setsCount),
@@ -63,26 +65,20 @@ const ExerciseCard = ({
     normalizeSets(exercise?.setsData, setsCount)
   );
 
-  // ✅ mode is user-controlled; only auto-derived when exercise changes
   const [mode, setMode] = useState(() =>
     (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
       ? "assisted"
       : "weighted"
   );
 
-  // When user taps toggle, lock mode so hydration doesn't override it.
   const userChoseModeRef = useRef(false);
-
-  // track last exercise id to know when we're switching exercises
   const lastExerciseIdRef = useRef(exercise?.id || "");
 
-  // PR (display only)
   const pr = useMemo(() => {
     const prs = getPersonalRecords?.() || {};
     return prs[exercise?.id] || null;
   }, [exercise?.id]);
 
-  // best from this workout’s sets (for label line)
   const bestFromWorkout = useMemo(() => {
     const nums = (sets || [])
       .map((s) => (s.weight === "" ? null : Number(s.weight)))
@@ -91,7 +87,6 @@ const ExerciseCard = ({
     return Math.max(...nums.map((n) => Math.abs(n)));
   }, [sets]);
 
-  // ✅ Hydrate sets/notes/video when parent updates the exercise data
   useEffect(() => {
     setSets(normalizeSets(exercise?.setsData, setsCount));
     setNotes(exercise?.userNotes || "");
@@ -100,7 +95,6 @@ const ExerciseCard = ({
     setVideoLink(links?.[exercise?.id] || "");
   }, [exercise?.setsData, exercise?.userNotes, exercise?.id, setsCount]);
 
-  // ✅ Only auto-derive mode when exercise id changes (new card / different exercise)
   useEffect(() => {
     const currentId = exercise?.id || "";
     if (currentId !== lastExerciseIdRef.current) {
@@ -128,7 +122,6 @@ const ExerciseCard = ({
     );
   };
 
-  // ✅ Header must ignore clicks on interactive elements
   const handleHeaderToggle = (e) => {
     const interactive = e.target.closest(
       "button, a, input, textarea, select, [data-no-toggle]"
@@ -156,6 +149,11 @@ const ExerciseCard = ({
     () => sets.filter((s) => s.completed).length,
     [sets]
   );
+
+  const isExerciseComplete = useMemo(() => {
+    if (!sets.length) return false;
+    return sets.every((s) => !!s.completed);
+  }, [sets]);
 
   const maxLabel = useMemo(() => {
     const best =
@@ -198,8 +196,40 @@ const ExerciseCard = ({
     });
   };
 
+  const handleRemoveSet = () => {
+    // minimum 1 set so the UI never collapses weirdly
+    if (sets.length <= 1) {
+      toast.message("Can't remove", {
+        description: "You need at least 1 set.",
+      });
+      return;
+    }
+
+    const next = sets.slice(0, -1);
+    pushUp(next);
+
+    toast.success("Set removed", {
+      description: `Removed the last set from ${exercise?.name || "exercise"}`,
+      duration: 1400,
+    });
+  };
+
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div
+      className={[
+        "relative overflow-hidden rounded-xl border",
+        isExerciseComplete
+          ? "bg-primary/10 border-primary/40"
+          : "bg-card border-border",
+      ].join(" ")}
+    >
+      {/* ✅ Big completed mark */}
+      {isExerciseComplete && (
+        <div className="pointer-events-none absolute right-4 top-4 opacity-20">
+          <Check className="w-16 h-16" />
+        </div>
+      )}
+
       {/* Header */}
       <div
         role="button"
@@ -222,7 +252,7 @@ const ExerciseCard = ({
             {/* Row 2 */}
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
-                {completedCount}/{setsCount} sets
+                {completedCount}/{sets.length} sets
               </span>
 
               {exercise?.repScheme ? (
@@ -236,6 +266,12 @@ const ExerciseCard = ({
                   PR: {pr.weight} × {pr.reps}
                 </span>
               )}
+
+              {isExerciseComplete ? (
+                <Badge className="bg-primary/20 text-primary border-primary/40">
+                  Completed
+                </Badge>
+              ) : null}
             </div>
 
             {/* Row 3 toggle */}
@@ -283,11 +319,12 @@ const ExerciseCard = ({
           <div className="flex items-center gap-1 shrink-0">
             {videoLink ? (
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenVideo?.(exercise, videoLink); // ✅ open modal
+                  onOpenVideo?.(exercise, videoLink);
                 }}
                 title="Watch exercise video"
                 data-no-toggle
@@ -326,8 +363,8 @@ const ExerciseCard = ({
           <div className="space-y-2">
             {sets.map((s, i) => (
               <div
-                key={i}
-                className="grid grid-cols-[60px_1fr_1fr_40px] gap-2 items-center"
+                key={`${i}-${s.completed ? "c" : "n"}`} // ✅ forces clean render on toggle
+                className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
               >
                 <span className="text-xs text-muted-foreground">
                   Set {i + 1}
@@ -377,16 +414,26 @@ const ExerciseCard = ({
                   }}
                 />
 
+                {/* ✅ Fix: untick returns to outline properly */}
                 <Button
+                  type="button"
+                  data-no-toggle
                   size="sm"
                   variant={s.completed ? "default" : "outline"}
-                  onClick={() => {
+                  className={
+                    s.completed
+                      ? "shadow-sm"
+                      : "bg-background hover:bg-muted/40"
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
                     const next = [...sets];
                     next[i] = { ...s, completed: !s.completed };
                     pushUp(next);
                     onSetComplete?.(exercise, next[i], false);
                   }}
                   title={s.completed ? "Completed" : "Mark completed"}
+                  aria-pressed={s.completed}
                 >
                   ✓
                 </Button>
@@ -419,6 +466,7 @@ const ExerciseCard = ({
           <div className="flex flex-wrap gap-2">
             {onRestTimer ? (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={(e) => {
@@ -432,22 +480,40 @@ const ExerciseCard = ({
               </Button>
             ) : null}
 
-            {/* Add Set */}
+            {/* ✅ Add Set */}
             <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddSet?.(exercise);
               }}
-              title="Add an extra set for today"
+              title="Add an extra set"
               data-no-toggle
             >
               <Plus className="w-4 h-4 mr-1" />
               + Set
             </Button>
 
+            {/* ✅ Remove Set */}
             <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemoveSet();
+              }}
+              title="Remove the last set"
+              data-no-toggle
+              disabled={sets.length <= 1}
+            >
+              <Minus className="w-4 h-4 mr-1" />- Set
+            </Button>
+
+            <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={(e) => {
