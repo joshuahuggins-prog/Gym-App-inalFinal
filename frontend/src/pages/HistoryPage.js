@@ -1,13 +1,6 @@
 // src/pages/HistoryPage.js
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Trash2,
-  Calendar,
-  Pencil,
-  Plus,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Calendar, Pencil, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
@@ -33,6 +26,19 @@ const buildExerciseDefaultSetsData = (setsCount) =>
     completed: false,
   }));
 
+const fmtWorkoutLabel = (w) => {
+  const name = w?.name || "Workout";
+  const date = w?.date
+    ? new Date(w.date).toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      })
+    : "—";
+  const focus = w?.focus || w?.type || "";
+  return `${name} • ${date}${focus ? ` • ${focus}` : ""}`;
+};
+
 const HistoryPage = ({ onEditWorkout }) => {
   const { weightUnit } = useSettings();
 
@@ -40,12 +46,12 @@ const HistoryPage = ({ onEditWorkout }) => {
   const [workouts, setWorkouts] = useState(() => ensureArray(getWorkouts()));
   const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
 
-  // ✅ Add Exercise dialog state (per-workout)
+  // ✅ Add Exercise (global header button) state
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [targetWorkoutId, setTargetWorkoutId] = useState("");
   const [addSearch, setAddSearch] = useState("");
-  const [addToWorkoutId, setAddToWorkoutId] = useState(null);
 
-  // Keep in sync on mount (covers edge cases if storage changes between renders)
+  // Keep in sync on mount
   useEffect(() => {
     setWorkouts(ensureArray(getWorkouts()));
   }, []);
@@ -106,37 +112,18 @@ const HistoryPage = ({ onEditWorkout }) => {
       .slice(0, 50);
   }, [allLibraryExercises, addSearch, showAddDialog]);
 
-  const openAddExerciseForWorkout = (workoutId) => {
-    setAddToWorkoutId(workoutId);
-    setAddSearch("");
-    setShowAddDialog(true);
-  };
-
-  const addDialogTitle = useMemo(() => {
-    if (!addToWorkoutId) return "Add Exercise";
-    const w = ensureArray(workouts).find((x) => x?.id === addToWorkoutId);
-
-    const name = w?.name || "Workout";
-    const date = w?.date
-      ? new Date(w.date).toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        })
-      : "";
-
-    return `Add Exercise → ${name}${date ? ` (${date})` : ""}`;
-  }, [addToWorkoutId, workouts]);
-
   const handleAddExerciseToWorkout = (libEx) => {
-    if (!addToWorkoutId) return;
+    if (!targetWorkoutId) {
+      toast.message("Pick a workout first", {
+        description: "Choose which workout you want to add this exercise to.",
+      });
+      return;
+    }
     if (!libEx?.id) return;
 
-    const workout = ensureArray(workouts).find((w) => w?.id === addToWorkoutId);
+    const workout = ensureArray(workouts).find((w) => w?.id === targetWorkoutId);
     if (!workout) {
       toast.error("Workout not found");
-      setShowAddDialog(false);
-      setAddToWorkoutId(null);
       return;
     }
 
@@ -161,7 +148,7 @@ const HistoryPage = ({ onEditWorkout }) => {
       notes: "",
     };
 
-    const ok = updateWorkout(addToWorkoutId, {
+    const ok = updateWorkout(targetWorkoutId, {
       exercises: [...existingExercises, newExercise],
     });
 
@@ -177,23 +164,42 @@ const HistoryPage = ({ onEditWorkout }) => {
     });
 
     setShowAddDialog(false);
+    setTargetWorkoutId("");
     setAddSearch("");
-    setAddToWorkoutId(null);
     reload();
   };
 
-  // ---------------------------
-  // Render
-  // ---------------------------
+  const selectedWorkout = useMemo(
+    () => ensureArray(workouts).find((w) => w?.id === targetWorkoutId) || null,
+    [workouts, targetWorkoutId]
+  );
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-gradient-to-b from-card to-background border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-primary">Workout History</h1>
-          <p className="text-sm text-muted-foreground">
-            {totalCount} total workouts logged
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-bold text-primary">Workout History</h1>
+              <p className="text-sm text-muted-foreground">
+                {totalCount} total workouts logged
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddDialog(true)}
+                disabled={totalCount === 0}
+                title={totalCount === 0 ? "Add a workout first" : "Add exercise to a workout"}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -266,19 +272,6 @@ const HistoryPage = ({ onEditWorkout }) => {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {/* ➕ Add exercise into this saved workout */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openAddExerciseForWorkout(workout.id);
-                              }}
-                              title="Add exercise"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </Button>
-
                             {/* ✏️ Edit */}
                             <Button
                               variant="ghost"
@@ -366,31 +359,71 @@ const HistoryPage = ({ onEditWorkout }) => {
         )}
       </div>
 
-      {/* ✅ Add Exercise Dialog */}
+      {/* ✅ Add Exercise Dialog (header button) */}
       <Dialog
         open={showAddDialog}
         onOpenChange={(open) => {
           setShowAddDialog(open);
           if (!open) {
+            setTargetWorkoutId("");
             setAddSearch("");
-            setAddToWorkoutId(null);
           }
         }}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{addDialogTitle}</DialogTitle>
+            <DialogTitle>Add Exercise to a Past Workout</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <Input
-              value={addSearch}
-              onChange={(e) => setAddSearch(e.target.value)}
-              placeholder="Search exercise library..."
-            />
+          <div className="space-y-4">
+            {/* Pick workout */}
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Choose workout</div>
 
-            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-              {addCandidates.length === 0 ? (
+              <div className="relative">
+                <select
+                  value={targetWorkoutId}
+                  onChange={(e) => setTargetWorkoutId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
+                >
+                  <option value="">Select a workout…</option>
+                  {ensureArray(workouts).map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {fmtWorkoutLabel(w)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {selectedWorkout ? (
+                <div className="text-xs text-muted-foreground">
+                  Adding into:{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedWorkout.name || "Workout"}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Search exercise */}
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Search exercise</div>
+              <Input
+                value={addSearch}
+                onChange={(e) => setAddSearch(e.target.value)}
+                placeholder="Search exercise library..."
+                disabled={!targetWorkoutId}
+              />
+            </div>
+
+            {/* Results */}
+            <div className="max-h-[45vh] overflow-y-auto space-y-2 pr-1">
+              {!targetWorkoutId ? (
+                <div className="text-sm text-muted-foreground py-6 text-center">
+                  Pick a workout first.
+                </div>
+              ) : addCandidates.length === 0 ? (
                 <div className="text-sm text-muted-foreground py-6 text-center">
                   No matches.
                 </div>
@@ -412,7 +445,7 @@ const HistoryPage = ({ onEditWorkout }) => {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              This adds an exercise into that saved workout in your history.
+              This adds the exercise into that saved workout in your history.
             </div>
           </div>
         </DialogContent>
