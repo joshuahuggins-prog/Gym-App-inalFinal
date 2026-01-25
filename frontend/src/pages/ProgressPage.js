@@ -1,10 +1,9 @@
 // src/pages/ProgressPage.js
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { getProgrammes, getWorkouts, getSettings } from "../utils/storage";
-import ProgressLineChart from "../components/charts/ProgressLineChart";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -39,6 +38,9 @@ const formatNumber = (n) => {
   return (Math.round(x * 10) / 10).toString();
 };
 
+const monthYearShort = (d) =>
+  d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+
 const normKey = (nameOrId) =>
   (nameOrId || "")
     .toString()
@@ -71,6 +73,355 @@ const compressByDayMax = (pts) => {
     .sort((a, b) => a.x - b.x);
 };
 
+function LineChart({
+  points = [],
+  unitLabel = "kg",
+  height = 240,
+  maxXTicks = 6,
+  allowNegative = true,
+}) {
+  const [activeIndex, setActiveIndex] = useState(null);
+
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 640;
+  });
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const w = 1000;
+  const h = isMobile ? 320 : height;
+
+  const padL = isMobile ? 68 : 56;
+  const padR = 16;
+  const padT = 16;
+  const padB = isMobile ? 64 : 48;
+
+  const safePoints = useMemo(() => {
+    return (points || [])
+      .filter((p) => p?.x instanceof Date && !Number.isNaN(p.x.getTime()))
+      .map((p) => ({
+        x: p.x,
+        y: Number(p.y),
+        meta: p.meta || null, // optional
+      }))
+      .filter((p) => Number.isFinite(p.y))
+      .sort((a, b) => a.x - b.x);
+  }, [points]);
+
+  useEffect(() => {
+    if (activeIndex == null) return;
+    if (activeIndex < 0 || activeIndex >= safePoints.length) setActiveIndex(null);
+  }, [activeIndex, safePoints.length]);
+
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  const xToPx = (i) => {
+    if (safePoints.length <= 1) return padL + plotW / 2;
+    return padL + (i * plotW) / (safePoints.length - 1);
+  };
+
+  // ✅ Y axis blocks of 10 based on timeframe min/max
+  const ys = safePoints.map((p) => p.y);
+  const minData = ys.length ? Math.min(...ys) : 0;
+  const maxData = ys.length ? Math.max(...ys) : 0;
+
+  const rawMin = allowNegative ? minData : Math.max(0, minData);
+  const rawMax = Math.max(allowNegative ? maxData : Math.max(0, maxData), 0);
+
+  const STEP = 10;
+  let minTick = Math.floor(rawMin / STEP) * STEP;
+  let maxTick = Math.ceil(rawMax / STEP) * STEP;
+
+  if (minTick === maxTick) maxTick = minTick + STEP;
+
+  const yToPx = (y) => {
+    const t = (y - minTick) / (maxTick - minTick);
+    return padT + (1 - t) * plotH;
+  };
+
+  const tickCount = Math.round((maxTick - minTick) / STEP) + 1;
+  const ticks = Array.from({ length: tickCount }, (_, i) => minTick + i * STEP);
+
+  const maxLabels = isMobile ? 7 : 9;
+  const labelEvery = tickCount > maxLabels ? Math.ceil(tickCount / maxLabels) : 1;
+
+  const ticksX = isMobile ? 3 : maxXTicks;
+  const n = safePoints.length;
+  const everyX = Math.max(1, Math.floor(n / ticksX));
+
+  const pathD =
+    safePoints.length >= 2
+      ? safePoints
+          .map((p, i) => {
+            const x = xToPx(i);
+            const y = yToPx(p.y);
+            return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+          })
+          .join(" ")
+      : "";
+
+  const formatTooltipDate = (d) =>
+    d
+      ? d.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "";
+
+  const hitR = isMobile ? 22 : 16;
+  const dotR = isMobile ? 6 : 4;
+  const ringR = isMobile ? 10 : 8;
+
+  return (
+    <div className="w-full overflow-hidden">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="block w-full h-auto"
+        preserveAspectRatio="xMidYMid meet"
+        onClick={() => setActiveIndex(null)}
+      >
+        {/* grid + y labels */}
+        {ticks.map((yVal, i) => {
+          const y = yToPx(yVal);
+          const shouldLabel =
+            i % labelEvery === 0 || i === ticks.length - 1 || i === 0;
+
+          return (
+            <g key={yVal}>
+              <line
+                x1={padL}
+                y1={y}
+                x2={w - padR}
+                y2={y}
+                stroke="currentColor"
+                opacity="0.12"
+                strokeDasharray="3 6"
+              />
+
+              {shouldLabel && (
+                <text
+                  x={padL - 10}
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize={isMobile ? "12" : "11"}
+                  fill="currentColor"
+                  opacity="0.65"
+                >
+                  {yVal}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* axes */}
+        <line
+          x1={padL}
+          y1={padT}
+          x2={padL}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+        <line
+          x1={padL}
+          y1={h - padB}
+          x2={w - padR}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+
+        {/* unit label */}
+        <text
+          x={padL}
+          y={12}
+          textAnchor="start"
+          fontSize={isMobile ? "13" : "12"}
+          fill="currentColor"
+          opacity="0.75"
+        >
+          {unitLabel}
+        </text>
+
+        {/* line */}
+        {safePoints.length >= 2 && (
+          <path
+            d={pathD}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={isMobile ? "4" : "3"}
+            opacity="0.95"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* points */}
+        {safePoints.map((p, i) => {
+          const x = xToPx(i);
+          const y = yToPx(p.y);
+          const isActive = activeIndex === i;
+
+          return (
+            <g key={i}>
+              <circle
+                cx={x}
+                cy={y}
+                r={hitR}
+                fill="transparent"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveIndex((prev) => (prev === i ? null : i));
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  setActiveIndex(i);
+                }}
+                style={{ cursor: "pointer" }}
+              />
+
+              <circle
+                cx={x}
+                cy={y}
+                r={ringR}
+                fill="transparent"
+                stroke="currentColor"
+                opacity={isActive ? "0.35" : "0.18"}
+                strokeWidth={isActive ? "3" : "2"}
+              />
+
+              <circle
+                cx={x}
+                cy={y}
+                r={isActive ? dotR + 1 : dotR}
+                fill="currentColor"
+                opacity="0.95"
+              />
+            </g>
+          );
+        })}
+
+        {/* ✅ Tooltip */}
+        {activeIndex != null && safePoints[activeIndex] && (() => {
+          const p = safePoints[activeIndex];
+          const x = xToPx(activeIndex);
+          const y = yToPx(p.y);
+
+          const meta = p.meta || {};
+          const dateText = formatTooltipDate(p.x);
+          const valueText = `${formatNumber(p.y)} ${unitLabel}`;
+
+          const extraLines = [];
+          if (meta.workoutType) extraLines.push(`Workout: ${meta.workoutType}`);
+          if (Number.isFinite(Number(meta.reps))) extraLines.push(`Reps: ${Number(meta.reps)}`);
+          if (meta.notes) extraLines.push(`Notes: ${String(meta.notes)}`);
+
+          const boxW = isMobile ? 280 : 220;
+          const lineH = isMobile ? 18 : 16;
+          const baseH = isMobile ? 54 : 46;
+          const boxH = baseH + extraLines.length * lineH;
+
+          let tx = x + 12;
+          let ty = y - boxH - 12;
+
+          if (tx + boxW > w - padR) tx = x - boxW - 12;
+          if (ty < padT) ty = y + 12;
+
+          return (
+            <g>
+              <line
+                x1={x}
+                y1={y}
+                x2={Math.max(padL, Math.min(w - padR, tx + 10))}
+                y2={Math.max(padT, Math.min(h - padB, ty + boxH - 10))}
+                stroke="currentColor"
+                opacity="0.25"
+                strokeDasharray="2 4"
+              />
+
+              <rect
+                x={tx}
+                y={ty}
+                width={boxW}
+                height={boxH}
+                rx="12"
+                fill="hsl(var(--card))"
+                stroke="hsl(var(--border))"
+              />
+
+              <text
+                x={tx + 12}
+                y={ty + (isMobile ? 22 : 20)}
+                fontSize={isMobile ? "14" : "12"}
+                fill="hsl(var(--foreground))"
+                opacity="0.95"
+              >
+                {valueText}
+              </text>
+
+              <text
+                x={tx + 12}
+                y={ty + (isMobile ? 42 : 38)}
+                fontSize={isMobile ? "12" : "11"}
+                fill="hsl(var(--muted-foreground))"
+                opacity="0.95"
+              >
+                {dateText}
+              </text>
+
+              {extraLines.map((t, idx) => (
+                <text
+                  key={idx}
+                  x={tx + 12}
+                  y={ty + (isMobile ? 62 : 56) + idx * lineH}
+                  fontSize={isMobile ? "12" : "11"}
+                  fill="hsl(var(--muted-foreground))"
+                  opacity="0.95"
+                >
+                  {t}
+                </text>
+              ))}
+            </g>
+          );
+        })()}
+
+        {/* x labels */}
+        {safePoints.map((p, i) => {
+          if (i % everyX !== 0 && i !== safePoints.length - 1) return null;
+          const x = xToPx(i);
+          return (
+            <text
+              key={`x-${i}`}
+              x={x}
+              y={h - 16}
+              textAnchor="middle"
+              fontSize={isMobile ? "12" : "11"}
+              fill="currentColor"
+              opacity="0.65"
+            >
+              {monthYearShort(p.x)}
+            </text>
+          );
+        })}
+      </svg>
+
+      {safePoints.length >= 2 && (
+        <div className="mt-2 text-xs text-muted-foreground">
+          Tip: tap a dot to see date + details
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProgressPage() {
   const settings = getSettings();
   const weightUnit = settings?.weightUnit || "kg";
@@ -83,32 +434,34 @@ export default function ProgressPage() {
   const computed = useMemo(() => {
     const programmes = getProgrammes() || [];
     const workoutsRaw = getWorkouts() || [];
+
     const start = startOfRange(range);
 
-    // Sort oldest -> newest (nivo time scale likes ordered data)
     const workouts = workoutsRaw
       .map((w) => ({ ...w, _dateObj: toDate(w.date) }))
       .filter((w) => w._dateObj)
       .filter((w) => (start ? w._dateObj >= start : true))
       .sort((a, b) => a._dateObj - b._dateObj);
 
-    // IMPORTANT: key by EXERCISE ID FIRST, then name fallback
-    const seriesByKey = new Map(); // key -> [{x:Date,y:number}]
-    const addPoint = (key, x, y) => {
+    const seriesByKey = new Map();
+
+    const addPoint = (key, x, y, meta) => {
       if (!key || !(x instanceof Date) || Number.isNaN(x.getTime())) return;
       const yy = Number(y);
       if (!Number.isFinite(yy)) return;
+
       if (!seriesByKey.has(key)) seriesByKey.set(key, []);
-      seriesByKey.get(key).push({ x, y: yy });
+      seriesByKey.get(key).push({ x, y: yy, meta: meta || null });
     };
 
     workouts.forEach((w) => {
       const x = w._dateObj;
       (w.exercises || []).forEach((ex) => {
-        const key = normKey(ex?.id || ex?.name || "");
-        if (!key) return;
+        const exName = ex?.name || ex?.id || "";
+        const key = normKey(exName);
 
         let best = -Infinity;
+        let bestMeta = null;
 
         (ex.sets || []).forEach((s) => {
           const ww = Number(s?.weight);
@@ -116,23 +469,46 @@ export default function ProgressPage() {
 
           if (!Number.isFinite(ww)) return;
 
-          let v = ww;
+          let v;
           if (progressMetric === "e1rm") v = e1rm(ww, rr);
+          else v = ww;
 
-          if (Number.isFinite(v) && v > best) best = v;
+          if (Number.isFinite(v) && v > best) {
+            best = v;
+            bestMeta = {
+              workoutType: w?.type || "",
+              reps: Number.isFinite(rr) ? rr : null,
+              notes: ex?.notes || "", // note: this is the saved exercise notes from history
+            };
+          }
         });
 
-        if (best !== -Infinity) addPoint(key, x, best);
+        if (best !== -Infinity) addPoint(key, x, best, bestMeta);
       });
     });
 
-    // compress to 1 point per day per exercise (max)
+    // compress by day max (note: meta kept from the max point)
     const compressedByKey = new Map();
     seriesByKey.forEach((pts, key) => {
-      compressedByKey.set(key, compressByDayMax(pts));
+      const bestByDay = new Map(); // day -> {x,y,meta}
+      (pts || []).forEach((p) => {
+        const dx = p?.x instanceof Date ? p.x : null;
+        if (!dx || Number.isNaN(dx.getTime())) return;
+        const yy = Number(p?.y);
+        if (!Number.isFinite(yy)) return;
+
+        const day = dx.toISOString().slice(0, 10);
+        const prev = bestByDay.get(day);
+        if (!prev || yy > prev.y) bestByDay.set(day, { x: new Date(day), y: yy, meta: p.meta || null });
+      });
+
+      const out = Array.from(bestByDay.values())
+        .filter((p) => p.x instanceof Date && !Number.isNaN(p.x.getTime()))
+        .sort((a, b) => a.x - b.x);
+
+      compressedByKey.set(key, out);
     });
 
-    // Programme cards
     const programmeCards = programmes.map((p) => {
       const type = String(p?.type || "").toUpperCase();
       const programmeKey = normKey(type || p?.name || p?.title || "programme");
@@ -145,7 +521,7 @@ export default function ProgressPage() {
 
       const exercises = (p?.exercises || []).map((ex) => {
         const name = ex?.name || ex?.id || "";
-        const key = normKey(ex?.id || ex?.name || ""); // IMPORTANT: id-first
+        const key = normKey(name);
         const pts = compressedByKey.get(key) || [];
 
         const maxVal = pts.reduce((m, v) => (v.y > m ? v.y : m), -Infinity);
@@ -167,7 +543,6 @@ export default function ProgressPage() {
       return { programmeKey, type, displayName, exercises };
     });
 
-    // Top 2 most progress / needs attention (across all programmes)
     const flat = programmeCards.flatMap((pc) =>
       pc.exercises.map((e) => ({
         programme: pc.displayName,
@@ -407,9 +782,10 @@ export default function ProgressPage() {
                                 </div>
 
                                 <div className="text-foreground">
-                                  <ProgressLineChart
+                                  <LineChart
                                     points={ex.points}
                                     unitLabel={unitLabel}
+                                    allowNegative={true}
                                   />
                                 </div>
 
