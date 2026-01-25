@@ -51,18 +51,25 @@ const ExerciseCard = ({
   onAddSet,
   onOpenVideo,
 }) => {
-  const setsCount = clampInt(Number(exercise?.sets ?? 3), 1, 40);
+  // ✅ IMPORTANT FIX:
+  // Always prefer setsData length (live), fall back to exercise.sets (programme default)
+  const desiredSetsCount = useMemo(() => {
+    const liveLen = Array.isArray(exercise?.setsData) ? exercise.setsData.length : 0;
+    const fallback = Number(exercise?.sets ?? 3);
+    const count = liveLen > 0 ? liveLen : fallback;
+    return clampInt(count, 1, 40);
+  }, [exercise?.setsData, exercise?.sets]);
 
   const goalReps = useMemo(
-    () => normalizeGoalReps(exercise?.goalReps, setsCount),
-    [exercise?.goalReps, setsCount]
+    () => normalizeGoalReps(exercise?.goalReps, desiredSetsCount),
+    [exercise?.goalReps, desiredSetsCount]
   );
 
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(exercise?.userNotes || "");
   const [videoLink, setVideoLink] = useState("");
   const [sets, setSets] = useState(() =>
-    normalizeSets(exercise?.setsData, setsCount)
+    normalizeSets(exercise?.setsData, desiredSetsCount)
   );
 
   const [mode, setMode] = useState(() =>
@@ -87,13 +94,14 @@ const ExerciseCard = ({
     return Math.max(...nums.map((n) => Math.abs(n)));
   }, [sets]);
 
+  // ✅ Hydrate using desiredSetsCount (not exercise.sets)
   useEffect(() => {
-    setSets(normalizeSets(exercise?.setsData, setsCount));
+    setSets(normalizeSets(exercise?.setsData, desiredSetsCount));
     setNotes(exercise?.userNotes || "");
 
     const links = getVideoLinks();
     setVideoLink(links?.[exercise?.id] || "");
-  }, [exercise?.setsData, exercise?.userNotes, exercise?.id, setsCount]);
+  }, [exercise?.setsData, exercise?.userNotes, exercise?.id, desiredSetsCount]);
 
   useEffect(() => {
     const currentId = exercise?.id || "";
@@ -197,21 +205,13 @@ const ExerciseCard = ({
   };
 
   const handleRemoveSet = () => {
-    // minimum 1 set so the UI never collapses weirdly
     if (sets.length <= 1) {
-      toast.message("Can't remove", {
-        description: "You need at least 1 set.",
-      });
+      toast.message("Can't remove", { description: "You need at least 1 set." });
       return;
     }
-
     const next = sets.slice(0, -1);
     pushUp(next);
-
-    toast.success("Set removed", {
-      description: `Removed the last set from ${exercise?.name || "exercise"}`,
-      duration: 1400,
-    });
+    toast.success("Set removed", { duration: 1200 });
   };
 
   return (
@@ -223,7 +223,6 @@ const ExerciseCard = ({
           : "bg-card border-border",
       ].join(" ")}
     >
-      {/* ✅ Big completed mark */}
       {isExerciseComplete && (
         <div className="pointer-events-none absolute right-4 top-4 opacity-20">
           <Check className="w-16 h-16" />
@@ -249,7 +248,6 @@ const ExerciseCard = ({
               {exercise?.name || "Exercise"}
             </h3>
 
-            {/* Row 2 */}
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
                 {completedCount}/{sets.length} sets
@@ -274,7 +272,6 @@ const ExerciseCard = ({
               ) : null}
             </div>
 
-            {/* Row 3 toggle */}
             <div
               className="mt-2 inline-flex border border-border rounded-md overflow-hidden"
               data-no-toggle
@@ -315,7 +312,6 @@ const ExerciseCard = ({
             </div>
           </div>
 
-          {/* Right-side icons */}
           <div className="flex items-center gap-1 shrink-0">
             {videoLink ? (
               <Button
@@ -359,11 +355,10 @@ const ExerciseCard = ({
             </div>
           )}
 
-          {/* Sets */}
           <div className="space-y-2">
             {sets.map((s, i) => (
               <div
-                key={`${i}-${s.completed ? "c" : "n"}`} // ✅ forces clean render on toggle
+                key={`${i}-${s.completed ? "c" : "n"}`}
                 className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
               >
                 <span className="text-xs text-muted-foreground">
@@ -414,16 +409,13 @@ const ExerciseCard = ({
                   }}
                 />
 
-                {/* ✅ Fix: untick returns to outline properly */}
                 <Button
                   type="button"
                   data-no-toggle
                   size="sm"
                   variant={s.completed ? "default" : "outline"}
                   className={
-                    s.completed
-                      ? "shadow-sm"
-                      : "bg-background hover:bg-muted/40"
+                    s.completed ? "shadow-sm" : "bg-background hover:bg-muted/40"
                   }
                   onClick={(e) => {
                     e.stopPropagation();
@@ -441,7 +433,6 @@ const ExerciseCard = ({
             ))}
           </div>
 
-          {/* Workout notes */}
           <Textarea
             value={notes}
             placeholder="Workout notes…"
@@ -450,7 +441,6 @@ const ExerciseCard = ({
             onBlur={() => onNotesChange?.(exercise, notes)}
           />
 
-          {/* Exercise info notes */}
           {showExerciseInfoNotes && (
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
               <div className="text-[11px] font-semibold text-foreground mb-1">
@@ -462,7 +452,6 @@ const ExerciseCard = ({
             </div>
           )}
 
-          {/* Actions */}
           <div className="flex flex-wrap gap-2">
             {onRestTimer ? (
               <Button
@@ -480,7 +469,7 @@ const ExerciseCard = ({
               </Button>
             ) : null}
 
-            {/* ✅ Add Set */}
+            {/* Add Set (text only "Set") */}
             <Button
               type="button"
               variant="outline"
@@ -489,14 +478,14 @@ const ExerciseCard = ({
                 e.stopPropagation();
                 onAddSet?.(exercise);
               }}
-              title="Add an extra set"
+              title="Add a set"
               data-no-toggle
             >
               <Plus className="w-4 h-4 mr-1" />
-              + Set
+              Set
             </Button>
 
-            {/* ✅ Remove Set */}
+            {/* Remove Set (text only "Set") */}
             <Button
               type="button"
               variant="outline"
@@ -509,7 +498,8 @@ const ExerciseCard = ({
               data-no-toggle
               disabled={sets.length <= 1}
             >
-              <Minus className="w-4 h-4 mr-1" />- Set
+              <Minus className="w-4 h-4 mr-1" />
+              Set
             </Button>
 
             <Button
@@ -528,7 +518,6 @@ const ExerciseCard = ({
             </Button>
           </div>
 
-          {/* Last workout */}
           {lastWorkoutData ? (
             <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
               <div className="font-semibold text-foreground mb-1">Last time</div>
