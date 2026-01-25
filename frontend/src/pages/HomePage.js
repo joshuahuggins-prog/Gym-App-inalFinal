@@ -95,7 +95,7 @@ const HomePage = () => {
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
 
-  // ✅ Video modal state MUST be inside component
+  // ✅ Video modal state
   const [videoModal, setVideoModal] = useState({
     open: false,
     title: "",
@@ -227,13 +227,17 @@ const HomePage = () => {
   useEffect(() => {
     if (!currentWorkout) return;
 
+    // ✅ FIX: ticks (completed) now count as meaningful data too
     const hasMeaningfulData = workoutData.some(
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
-          ex.setsData.some(
-            (set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
-          ))
+          ex.setsData.some((set) => {
+            const hasNumbers =
+              (set.weight ?? "") !== "" || (set.reps ?? "") !== "";
+            const hasTick = !!set.completed;
+            return hasNumbers || hasTick;
+          }))
     );
 
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
@@ -313,9 +317,7 @@ const HomePage = () => {
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      prev.map((ex) =>
-        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
-      )
+      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
     );
   };
 
@@ -699,7 +701,7 @@ const HomePage = () => {
             onNotesChange={handleNotesChange}
             onRestTimer={(duration) => setRestTimer(duration)}
             onAddSet={handleAddSetToExercise}
-            onOpenVideo={handleOpenVideo} // ✅ NEW: open modal instead of new tab
+            onOpenVideo={handleOpenVideo}
             isFirst={index === 0}
           />
         ))}
@@ -744,7 +746,9 @@ const HomePage = () => {
                     onClick={() => handleAddExerciseToToday(ex)}
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
-                    <div className="font-semibold text-foreground">{ex.name}</div>
+                    <div className="font-semibold text-foreground">
+                      {ex.name}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
                     </div>
