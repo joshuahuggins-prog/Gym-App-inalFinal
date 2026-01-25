@@ -75,7 +75,7 @@ const compressByDayMax = (pts) => {
 
 //*******Chart Start*******
 
-function LineChart({
+ function LineChart({
   points = [],
   unitLabel = "kg",
   height = 260,
@@ -142,8 +142,304 @@ function LineChart({
   let minTick = Math.floor(rawMin / STEP) * STEP;
   let maxTick = Math.ceil(rawMax / STEP) * STEP;
 
-  if (!Number.isFinite(minTick
- 
+  if (!Number.isFinite(minTick)) minTick = 0;
+  if (!Number.isFinite(maxTick)) maxTick = STEP;
+
+  if (minTick === maxTick) maxTick = minTick + STEP;
+
+  const yToPx = (y) => {
+    const t = (y - minTick) / (maxTick - minTick);
+    return padT + (1 - t) * plotH;
+  };
+
+  const tickCount = Math.round((maxTick - minTick) / STEP) + 1;
+  const ticksY = Array.from({ length: tickCount }, (_, i) => minTick + i * STEP);
+
+  // Don’t label too many Y ticks on mobile
+  const maxLabels = isMobile ? 8 : 10;
+  const labelEvery = tickCount > maxLabels ? Math.ceil(tickCount / maxLabels) : 1;
+
+  // ✅ Fewer x labels on mobile
+  const ticksX = isMobile ? 3 : maxXTicks;
+  const n = safePoints.length;
+  const everyX = Math.max(1, Math.floor(n / ticksX));
+
+  const pathD =
+    safePoints.length >= 2
+      ? safePoints
+          .map((p, i) => {
+            const x = xToPx(i);
+            const y = yToPx(p.y);
+            return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+          })
+          .join(" ")
+      : "";
+
+  const monthYearShort = (d) =>
+    d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+
+  const formatTooltipDate = (d) =>
+    d
+      ? d.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "";
+
+  // ✅ MUCH bigger tap target
+  const hitR = isMobile ? 34 : 18;
+  const dotR = isMobile ? 7 : 4;
+  const ringR = isMobile ? 13 : 8;
+
+  // (Optional) If you don’t already have formatNumber in file, keep this:
+  const formatNumberLocal = (val) => {
+    const x = Number(val);
+    if (!Number.isFinite(x)) return "-";
+    if (Math.abs(x) >= 100) return Math.round(x).toString();
+    return (Math.round(x * 10) / 10).toString();
+  };
+
+  return (
+    <div className="w-full overflow-hidden">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="block w-full"
+        preserveAspectRatio="xMidYMid meet"
+        // ✅ Force a real height so it doesn’t get “shrunk”
+        style={{ height: `${h}px`, touchAction: "manipulation" }}
+        // ✅ Only clear when tapping empty space (NOT dots)
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) setActiveIndex(null);
+        }}
+      >
+        {/* grid + y labels */}
+        {ticksY.map((yVal, i) => {
+          const y = yToPx(yVal);
+          const shouldLabel =
+            i % labelEvery === 0 || i === ticksY.length - 1 || i === 0;
+
+          return (
+            <g key={yVal}>
+              <line
+                x1={padL}
+                y1={y}
+                x2={w - padR}
+                y2={y}
+                stroke="currentColor"
+                opacity="0.12"
+                strokeDasharray="3 6"
+              />
+              {shouldLabel && (
+                <text
+                  x={padL - 10}
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize={isMobile ? "12" : "11"}
+                  fill="currentColor"
+                  opacity="0.65"
+                >
+                  {yVal}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* axes */}
+        <line
+          x1={padL}
+          y1={padT}
+          x2={padL}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+        <line
+          x1={padL}
+          y1={h - padB}
+          x2={w - padR}
+          y2={h - padB}
+          stroke="currentColor"
+          opacity="0.18"
+        />
+
+        {/* unit label */}
+        <text
+          x={padL}
+          y={14}
+          textAnchor="start"
+          fontSize={isMobile ? "13" : "12"}
+          fill="currentColor"
+          opacity="0.75"
+        >
+          {unitLabel}
+        </text>
+
+        {/* line */}
+        {safePoints.length >= 2 && (
+          <path
+            d={pathD}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={isMobile ? "4" : "3"}
+            opacity="0.95"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* points */}
+        {safePoints.map((p, i) => {
+          const x = xToPx(i);
+          const y = yToPx(p.y);
+          const isActive = activeIndex === i;
+
+          return (
+            <g key={i}>
+              {/* big invisible hit area */}
+              <circle
+                cx={x}
+                cy={y}
+                r={hitR}
+                fill="transparent"
+                style={{ cursor: "pointer" }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  setActiveIndex((prev) => (prev === i ? null : i));
+                }}
+              />
+
+              {/* ring */}
+              <circle
+                cx={x}
+                cy={y}
+                r={ringR}
+                fill="transparent"
+                stroke="currentColor"
+                opacity={isActive ? "0.35" : "0.18"}
+                strokeWidth={isActive ? "3" : "2"}
+                pointerEvents="none"
+              />
+
+              {/* dot */}
+              <circle
+                cx={x}
+                cy={y}
+                r={isActive ? dotR + 1 : dotR}
+                fill="currentColor"
+                opacity="0.95"
+                pointerEvents="none"
+              />
+            </g>
+          );
+        })}
+
+        {/* tooltip */}
+        {activeIndex != null &&
+          safePoints[activeIndex] &&
+          (() => {
+            const p = safePoints[activeIndex];
+            const x = xToPx(activeIndex);
+            const y = yToPx(p.y);
+
+            const meta = p.meta || {};
+            const dateText = formatTooltipDate(p.x);
+            const valueText = `${formatNumberLocal(p.y)} ${unitLabel}`;
+
+            const extraLines = [];
+            if (meta.workoutType) extraLines.push(`Workout: ${meta.workoutType}`);
+            if (Number.isFinite(Number(meta.reps)))
+              extraLines.push(`Reps: ${Number(meta.reps)}`);
+            if (meta.notes) extraLines.push(`Notes: ${String(meta.notes)}`);
+
+            const boxW = isMobile ? 320 : 240;
+            const lineH = isMobile ? 18 : 16;
+            const baseH = isMobile ? 56 : 46;
+            const boxH = baseH + extraLines.length * lineH;
+
+            let tx = x + 12;
+            let ty = y - boxH - 12;
+
+            if (tx + boxW > w - padR) tx = x - boxW - 12;
+            if (ty < padT) ty = y + 12;
+
+            return (
+              <g>
+                <rect
+                  x={tx}
+                  y={ty}
+                  width={boxW}
+                  height={boxH}
+                  rx="12"
+                  fill="hsl(var(--card))"
+                  stroke="hsl(var(--border))"
+                />
+                <text
+                  x={tx + 12}
+                  y={ty + 22}
+                  fontSize={isMobile ? "14" : "12"}
+                  fill="hsl(var(--foreground))"
+                  opacity="0.95"
+                >
+                  {valueText}
+                </text>
+                <text
+                  x={tx + 12}
+                  y={ty + 40}
+                  fontSize={isMobile ? "12" : "11"}
+                  fill="hsl(var(--muted-foreground))"
+                  opacity="0.95"
+                >
+                  {dateText}
+                </text>
+
+                {extraLines.map((t, idx) => (
+                  <text
+                    key={idx}
+                    x={tx + 12}
+                    y={ty + (isMobile ? 60 : 56) + idx * lineH}
+                    fontSize={isMobile ? "12" : "11"}
+                    fill="hsl(var(--muted-foreground))"
+                    opacity="0.95"
+                  >
+                    {t}
+                  </text>
+                ))}
+              </g>
+            );
+          })()}
+
+        {/* x labels */}
+        {safePoints.map((p, i) => {
+          if (i % everyX !== 0 && i !== safePoints.length - 1) return null;
+          const x = xToPx(i);
+          return (
+            <text
+              key={`x-${i}`}
+              x={x}
+              y={h - 18}
+              textAnchor="middle"
+              fontSize={isMobile ? "12" : "11"}
+              fill="currentColor"
+              opacity="0.65"
+            >
+              {monthYearShort(p.x)}
+            </text>
+          );
+        })}
+      </svg>
+
+      {safePoints.length >= 2 && (
+        <div className="mt-2 text-xs text-muted-foreground">
+          Tip: tap a dot to see date + details
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 //*******Chart End*********
 
 export default function ProgressPage() {
