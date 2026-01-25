@@ -1,13 +1,37 @@
 // src/pages/HistoryPage.js
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Trash2, Calendar, Pencil } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Calendar,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import { getWorkouts, deleteWorkout } from "../utils/storage";
+import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+
+import { getWorkouts, deleteWorkout, updateWorkout, getExercises } from "../utils/storage";
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
 const ensureArray = (v) => (Array.isArray(v) ? v : []);
+const norm = (s) => String(s || "").trim().toLowerCase();
+const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
+
+const buildExerciseDefaultSetsData = (setsCount) =>
+  Array.from({ length: setsCount }, () => ({
+    weight: "",
+    reps: "",
+    completed: false,
+  }));
 
 const HistoryPage = ({ onEditWorkout }) => {
   const { weightUnit } = useSettings();
@@ -15,6 +39,11 @@ const HistoryPage = ({ onEditWorkout }) => {
   // ✅ Read workouts synchronously on first render to avoid "No workouts yet" flicker
   const [workouts, setWorkouts] = useState(() => ensureArray(getWorkouts()));
   const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
+
+  // ✅ Add Exercise dialog state (per-workout)
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+  const [addToWorkoutId, setAddToWorkoutId] = useState(null);
 
   // Keep in sync on mount (covers edge cases if storage changes between renders)
   useEffect(() => {
@@ -54,13 +83,117 @@ const HistoryPage = ({ onEditWorkout }) => {
 
   const totalCount = ensureArray(workouts).length;
 
+  // ---------------------------
+  // Add exercise (library)
+  // ---------------------------
+  const allLibraryExercises = useMemo(() => {
+    const list = getExercises() || [];
+    return list
+      .slice()
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }, [showAddDialog]);
+
+  const addCandidates = useMemo(() => {
+    if (!showAddDialog) return [];
+    const q = norm(addSearch);
+
+    return allLibraryExercises
+      .filter((ex) => {
+        if (!ex?.id) return false;
+        if (!q) return true;
+        return norm(ex.name).includes(q) || norm(ex.id).includes(q);
+      })
+      .slice(0, 50);
+  }, [allLibraryExercises, addSearch, showAddDialog]);
+
+  const openAddExerciseForWorkout = (workoutId) => {
+    setAddToWorkoutId(workoutId);
+    setAddSearch("");
+    setShowAddDialog(true);
+  };
+
+  const addDialogTitle = useMemo(() => {
+    if (!addToWorkoutId) return "Add Exercise";
+    const w = ensureArray(workouts).find((x) => x?.id === addToWorkoutId);
+
+    const name = w?.name || "Workout";
+    const date = w?.date
+      ? new Date(w.date).toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })
+      : "";
+
+    return `Add Exercise → ${name}${date ? ` (${date})` : ""}`;
+  }, [addToWorkoutId, workouts]);
+
+  const handleAddExerciseToWorkout = (libEx) => {
+    if (!addToWorkoutId) return;
+    if (!libEx?.id) return;
+
+    const workout = ensureArray(workouts).find((w) => w?.id === addToWorkoutId);
+    if (!workout) {
+      toast.error("Workout not found");
+      setShowAddDialog(false);
+      setAddToWorkoutId(null);
+      return;
+    }
+
+    const existingExercises = ensureArray(workout.exercises);
+
+    // Prevent duplicate exercise id in the same saved workout
+    if (existingExercises.some((e) => String(e?.id) === String(libEx.id))) {
+      toast.message("Already added", {
+        description: "That exercise is already in this workout.",
+      });
+      return;
+    }
+
+    const setsCount = clampInt(Number(libEx.sets ?? 3), 1, 12);
+
+    // History workouts store sets as an array
+    const newExercise = {
+      id: libEx.id,
+      name: libEx.name || libEx.id,
+      repScheme: libEx.repScheme || "RPT",
+      sets: buildExerciseDefaultSetsData(setsCount),
+      notes: "",
+    };
+
+    const ok = updateWorkout(addToWorkoutId, {
+      exercises: [...existingExercises, newExercise],
+    });
+
+    if (!ok) {
+      toast.error("Couldn’t save update", {
+        description: "Storage update failed. Try again.",
+      });
+      return;
+    }
+
+    toast.success("Exercise added", {
+      description: `${newExercise.name} added to that workout`,
+    });
+
+    setShowAddDialog(false);
+    setAddSearch("");
+    setAddToWorkoutId(null);
+    reload();
+  };
+
+  // ---------------------------
+  // Render
+  // ---------------------------
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-gradient-to-b from-card to-background border-b border-border">
         <div className="max-w-2xl mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold text-primary">Workout History</h1>
-          <p className="text-sm text-muted-foreground">{totalCount} total workouts logged</p>
+          <p className="text-sm text-muted-foreground">
+            {totalCount} total workouts logged
+          </p>
         </div>
       </div>
 
@@ -88,7 +221,6 @@ const HistoryPage = ({ onEditWorkout }) => {
 
                 {ensureArray(monthWorkouts).map((workout) => {
                   const isExpanded = expandedWorkouts.has(workout?.id);
-
                   const exercises = ensureArray(workout?.exercises);
 
                   const completedSets = exercises.reduce((sum, ex) => {
@@ -134,6 +266,19 @@ const HistoryPage = ({ onEditWorkout }) => {
                           </div>
 
                           <div className="flex items-center gap-2">
+                            {/* ➕ Add exercise into this saved workout */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAddExerciseForWorkout(workout.id);
+                              }}
+                              title="Add exercise"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </Button>
+
                             {/* ✏️ Edit */}
                             <Button
                               variant="ghost"
@@ -220,6 +365,58 @@ const HistoryPage = ({ onEditWorkout }) => {
           })
         )}
       </div>
+
+      {/* ✅ Add Exercise Dialog */}
+      <Dialog
+        open={showAddDialog}
+        onOpenChange={(open) => {
+          setShowAddDialog(open);
+          if (!open) {
+            setAddSearch("");
+            setAddToWorkoutId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{addDialogTitle}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              value={addSearch}
+              onChange={(e) => setAddSearch(e.target.value)}
+              placeholder="Search exercise library..."
+            />
+
+            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+              {addCandidates.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-6 text-center">
+                  No matches.
+                </div>
+              ) : (
+                addCandidates.map((ex) => (
+                  <button
+                    key={ex.id}
+                    type="button"
+                    onClick={() => handleAddExerciseToWorkout(ex)}
+                    className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
+                  >
+                    <div className="font-semibold text-foreground">{ex.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              This adds an exercise into that saved workout in your history.
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
