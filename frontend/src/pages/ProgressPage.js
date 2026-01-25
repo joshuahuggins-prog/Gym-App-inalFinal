@@ -1,417 +1,595 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, Calendar, TrendingDown, Award } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Badge } from '../components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { getWorkouts, getExercises } from '../utils/storage';
-import { useSettings } from '../contexts/SettingsContext';
+import React, { useEffect, useMemo, useState } from "react";
+import { TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { getProgrammes, getWorkouts, getSettings, getExercises } from "../utils/storage";
 
-const ProgressPage = () => {
-  const { weightUnit } = useSettings();
-  const [selectedExercise1, setSelectedExercise1] = useState('weighted_dips');
-  const [selectedExercise2, setSelectedExercise2] = useState('weighted_chinups');
-  const [exerciseData, setExerciseData] = useState({});
-  const [exercises, setExercises] = useState([]);
-  const [timeRange, setTimeRange] = useState('all');
-  const [progressionStats, setProgressionStats] = useState({ most: null, least: null });
+const cx = (...c) => c.filter(Boolean).join(" ");
 
-  useEffect(() => {
-    loadData();
-  }, []);
+const e1rm = (w, r) => {
+  const ww = Number(w);
+  const rr = Number(r);
+  if (!Number.isFinite(ww) || !Number.isFinite(rr) || rr <= 0) return 0;
+  return ww * (1 + rr / 30);
+};
 
-  const loadData = () => {
-    const workouts = getWorkouts();
-    const availableExercises = getExercises();
-    setExercises(availableExercises);
-    
-    // Extract data for all exercises
-    const dataMap = {};
-    
-    workouts.reverse().forEach(workout => {
-      const date = new Date(workout.date).toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
-      });
+const toDate = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 
-      workout.exercises.forEach(exercise => {
-        const exerciseKey = exercise.id || exercise.name.toLowerCase().replace(/\s+/g, '_');
-        
-        if (!dataMap[exerciseKey]) {
-          dataMap[exerciseKey] = [];
-        }
-        
-        if (exercise.sets && exercise.sets.length > 0) {
-          const maxWeight = Math.max(...exercise.sets.map(s => s.weight || 0));
-          if (maxWeight > 0) {
-            dataMap[exerciseKey].push({
-              date,
-              weight: maxWeight,
-              fullDate: workout.date
-            });
-          }
-        }
-      });
-    });
-    
-    setExerciseData(dataMap);
-    calculateProgressionStats(dataMap);
-  };
+const startOfRange = (rangeKey) => {
+  const now = new Date();
+  if (rangeKey === "all") return null;
 
-  const calculateProgressionStats = (dataMap) => {
-    const progressions = [];
-    
-    Object.keys(dataMap).forEach(exerciseKey => {
-      const data = dataMap[exerciseKey];
-      if (data.length >= 2) {
-        const first = data[0].weight;
-        const last = data[data.length - 1].weight;
-        const change = last - first;
-        const percentChange = ((change / first) * 100);
-        
-        const exercise = exercises.find(ex => ex.id === exerciseKey) || 
-                        { name: exerciseKey.replace(/_/g, ' ') };
-        
-        progressions.push({
-          exerciseKey,
-          name: exercise.name || exerciseKey,
-          change,
-          percentChange,
-          dataPoints: data.length
-        });
-      }
-    });
-    
-    progressions.sort((a, b) => b.percentChange - a.percentChange);
-    
-    setProgressionStats({
-      most: progressions[0] || null,
-      least: progressions[progressions.length - 1] || null
-    });
-  };
+  const d = new Date(now);
+  if (rangeKey === "3m") d.setMonth(d.getMonth() - 3);
+  if (rangeKey === "6m") d.setMonth(d.getMonth() - 6);
+  if (rangeKey === "1y") d.setFullYear(d.getFullYear() - 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
-  const filterDataByTimeRange = (data) => {
-    if (timeRange === 'all') return data;
+const formatNumber = (n) => {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "-";
+  if (Math.abs(x) >= 100) return Math.round(x).toString();
+  return (Math.round(x * 10) / 10).toString();
+};
 
-    const now = new Date();
-    const monthsMap = { '3m': 3, '6m': 6, '1y': 12 };
-    const months = monthsMap[timeRange];
-    const cutoffDate = new Date(now.setMonth(now.getMonth() - months));
+const normKey = (nameOrId) =>
+  (nameOrId || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
 
-    return data.filter(item => new Date(item.fullDate) >= cutoffDate);
-  };
+const shortMD = (d) =>
+  d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-  const getExerciseData = (exerciseKey) => {
-    return exerciseData[exerciseKey] || [];
-  };
+const longDate = (d) =>
+  d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
-  const filteredData1 = filterDataByTimeRange(getExerciseData(selectedExercise1));
-  const filteredData2 = filterDataByTimeRange(getExerciseData(selectedExercise2));
+/** Keep 1 point per day, taking MAX for that day */
+const compressByDayMax = (pts) => {
+  const m = new Map(); // yyyy-mm-dd -> {y, meta}
+  (pts || []).forEach((p) => {
+    const dx = p?.x instanceof Date ? p.x : null;
+    if (!dx || Number.isNaN(dx.getTime())) return;
 
-  const calculateProgress = (data) => {
-    if (data.length < 2) return null;
-    const first = data[0].weight;
-    const last = data[data.length - 1].weight;
-    const change = last - first;
-    const percentChange = ((change / first) * 100).toFixed(1);
-    return { change, percentChange };
-  };
+    const y = Number(p?.y);
+    if (!Number.isFinite(y)) return;
 
-  const progress1 = calculateProgress(filteredData1);
-  const progress2 = calculateProgress(filteredData2);
+    const k = dx.toISOString().slice(0, 10);
+    const prev = m.get(k);
+    if (!prev || y > prev.y) m.set(k, { y, meta: p.meta || null });
+  });
 
-  const getExerciseName = (exerciseKey) => {
-    const exercise = exercises.find(ex => ex.id === exerciseKey);
-    return exercise?.name || exerciseKey.replace(/_/g, ' ');
-  };
+  return Array.from(m.entries())
+    .map(([k, v]) => ({ x: new Date(k), y: v.y, meta: v.meta || null }))
+    .filter((p) => p.x instanceof Date && !Number.isNaN(p.x.getTime()))
+    .sort((a, b) => a.x - b.x);
+};
+
+/** build nice 10-step ticks based on visible values */
+const buildTicks10 = (values, allowNegative = true) => {
+  const STEP = 10;
+
+  const ys = (values || []).map(Number).filter(Number.isFinite);
+  if (!ys.length) return { ticks: [0, 10], domain: [0, 10] };
+
+  let minData = Math.min(...ys);
+  let maxData = Math.max(...ys);
+
+  if (!allowNegative) minData = Math.max(0, minData);
+  if (!allowNegative) maxData = Math.max(0, maxData);
+
+  let minTick = Math.floor(minData / STEP) * STEP;
+  let maxTick = Math.ceil(maxData / STEP) * STEP;
+
+  if (!Number.isFinite(minTick)) minTick = 0;
+  if (!Number.isFinite(maxTick)) maxTick = STEP;
+  if (minTick === maxTick) maxTick = minTick + STEP;
+
+  const count = Math.round((maxTick - minTick) / STEP) + 1;
+  const ticks = Array.from({ length: count }, (_, i) => minTick + i * STEP);
+
+  return { ticks, domain: [minTick, maxTick] };
+};
+
+function CustomTooltip({ active, payload, label, unitLabel }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+
+  const dt = p?.fullDate ? toDate(p.fullDate) : null;
+  const dateText = dt ? longDate(dt) : (label || "");
+
+  const lines = [];
+  if (p?.workoutType) lines.push(`Workout: ${p.workoutType}`);
+  if (Number.isFinite(Number(p?.reps))) lines.push(`Reps: ${Number(p.reps)}`);
+  if (p?.notes) lines.push(`Notes: ${String(p.notes)}`);
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div
+      className="rounded-xl border border-border bg-card px-3 py-2 shadow-sm"
+      style={{ maxWidth: 280 }}
+    >
+      <div className="text-sm font-semibold text-foreground">
+        {formatNumber(p.weight)} {unitLabel}
+      </div>
+      <div className="text-xs text-muted-foreground">{dateText}</div>
+
+      {lines.length ? (
+        <div className="mt-1 space-y-0.5">
+          {lines.slice(0, 3).map((t, i) => (
+            <div key={i} className="text-xs text-muted-foreground">
+              {t}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function ProgressPage() {
+  const settings = getSettings();
+  const weightUnit = settings?.weightUnit || "kg";
+  const progressMetric = settings?.progressMetric === "e1rm" ? "e1rm" : "max";
+  const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
+
+  const [range, setRange] = useState("all");
+
+  // ✅ This key forces recompute when storage changes
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // ✅ Keep the “old UI” idea: select an exercise, show ONE chart
+  const [selectedExerciseKey, setSelectedExerciseKey] = useState("");
+
+  // --- Auto refresh so edits in History show up here ---
+  useEffect(() => {
+    const bump = () => setReloadKey((k) => k + 1);
+
+    const onStorage = (e) => {
+      // other tabs OR same tab if your app writes localStorage and triggers storage in some browsers
+      if (!e?.key || e.key === "workouts") bump();
+    };
+
+    const onFocus = () => bump();
+    const onVis = () => {
+      if (document.visibilityState === "visible") bump();
+    };
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+
+    // tiny fallback: when visible, check occasionally (covers “same-tab edits” reliably)
+    let t = null;
+    const start = () => {
+      if (t) return;
+      t = window.setInterval(() => {
+        if (document.visibilityState === "visible") bump();
+      }, 2000);
+    };
+    const stop = () => {
+      if (t) window.clearInterval(t);
+      t = null;
+    };
+    start();
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+      stop();
+    };
+  }, []);
+
+  const computed = useMemo(() => {
+    // Pull fresh each time reloadKey bumps
+    const programmes = getProgrammes() || [];
+    const workoutsRaw = getWorkouts() || [];
+    const exercisesList = (getExercises?.() || []).map((ex) => ({
+      id: ex?.id || normKey(ex?.name),
+      name: ex?.name || ex?.id || "Exercise",
+    }));
+
+    const start = startOfRange(range);
+
+    const workouts = workoutsRaw
+      .map((w) => ({ ...w, _dateObj: toDate(w.date) }))
+      .filter((w) => w._dateObj)
+      .filter((w) => (start ? w._dateObj >= start : true))
+      .sort((a, b) => a._dateObj - b._dateObj);
+
+    // Build per-exercise time series from history (robust)
+    const seriesByKey = new Map(); // key -> pts[]
+
+    const addPoint = (key, x, y, meta) => {
+      if (!key || !(x instanceof Date) || Number.isNaN(x.getTime())) return;
+      if (!Number.isFinite(y)) return;
+      if (!seriesByKey.has(key)) seriesByKey.set(key, []);
+      seriesByKey.get(key).push({ x, y, meta });
+    };
+
+    workouts.forEach((w) => {
+      const x = w._dateObj;
+
+      const workoutType =
+        w?.type ||
+        w?.programmeType ||
+        w?.programme ||
+        w?.name ||
+        w?.title ||
+        "";
+
+      (w.exercises || []).forEach((ex) => {
+        const name = ex?.name || ex?.id || "Exercise";
+        const key = normKey(ex?.id || name);
+
+        let best = -Infinity;
+        let bestMeta = null;
+
+        (ex.sets || []).forEach((s) => {
+          const ww = Number(s?.weight);
+          const rr = Number(s?.reps);
+
+          if (!Number.isFinite(ww)) return;
+
+          const v = progressMetric === "e1rm" ? e1rm(ww, rr) : ww;
+
+          if (Number.isFinite(v) && v > best) {
+            best = v;
+            bestMeta = {
+              workoutType: workoutType || "",
+              reps: Number.isFinite(rr) ? rr : null,
+              notes: ex?.userNotes || ex?.notes || w?.notes || "",
+            };
+          }
+        });
+
+        if (best !== -Infinity) addPoint(key, x, best, bestMeta);
+      });
+    });
+
+    const compressedByKey = new Map();
+    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compressByDayMax(pts)));
+
+    // Cards (most progress / needs attention) based on programme exercises
+    const programmeCards = programmes.map((p) => {
+      const type = String(p?.type || "").toUpperCase();
+      const programmeKey = normKey(type || p?.name || p?.title || "programme");
+      const displayName =
+        p?.name || p?.title || p?.label || (type ? `Workout ${type}` : "Workout");
+
+      const exercises = (p?.exercises || []).map((ex) => {
+        const name = ex?.name || ex?.id || "";
+        const key = normKey(ex?.id || name);
+        const pts = compressedByKey.get(key) || [];
+
+        const first = pts.length ? pts[0].y : null;
+        const latest = pts.length ? pts[pts.length - 1].y : null;
+        const delta = first != null && latest != null ? latest - first : null;
+
+        return { key, name: name || "Exercise", first, latest, delta, points: pts };
+      });
+
+      return { programmeKey, displayName, exercises };
+    });
+
+    const flat = programmeCards.flatMap((pc) =>
+      pc.exercises.map((e) => ({
+        programme: pc.displayName,
+        programmeKey: pc.programmeKey,
+        ...e,
+      }))
+    );
+
+    const withDelta = flat
+      .filter((e) => Number.isFinite(e.delta))
+      .sort((a, b) => b.delta - a.delta);
+
+    const mostProgress = withDelta.slice(0, 2);
+    const needsAttention = [...withDelta].reverse().slice(0, 2);
+
+    // Exercise dropdown options: prefer your master list, fallback to anything in history
+    const keysFromHistory = Array.from(compressedByKey.keys());
+    const optionsMap = new Map();
+    exercisesList.forEach((ex) => optionsMap.set(normKey(ex.id), ex.name));
+    keysFromHistory.forEach((k) => {
+      if (!optionsMap.has(k)) optionsMap.set(k, k.replace(/_/g, " "));
+    });
+
+    const exerciseOptions = Array.from(optionsMap.entries())
+      .map(([k, label]) => ({ key: k, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return {
+      programmeCards,
+      mostProgress,
+      needsAttention,
+      compressedByKey,
+      exerciseOptions,
+    };
+  }, [range, progressMetric, reloadKey]);
+
+  // pick a default selection (first with data) if none chosen yet
+  useEffect(() => {
+    if (selectedExerciseKey) return;
+    const firstWithData =
+      computed.exerciseOptions.find((o) => (computed.compressedByKey.get(o.key) || []).length >= 2) ||
+      computed.exerciseOptions[0];
+    if (firstWithData?.key) setSelectedExerciseKey(firstWithData.key);
+  }, [computed.exerciseOptions, computed.compressedByKey, selectedExerciseKey]);
+
+  const selectedPoints = useMemo(() => {
+    const pts = computed.compressedByKey.get(selectedExerciseKey) || [];
+    // Turn into recharts-friendly rows
+    return pts.map((p) => ({
+      date: shortMD(p.x),
+      weight: p.y,
+      fullDate: p.x.toISOString(),
+      workoutType: p.meta?.workoutType || "",
+      reps: p.meta?.reps ?? null,
+      notes: p.meta?.notes || "",
+    }));
+  }, [computed.compressedByKey, selectedExerciseKey]);
+
+  const ticksInfo = useMemo(() => {
+    return buildTicks10(selectedPoints.map((d) => d.weight), true);
+  }, [selectedPoints]);
+
+  const firstVal = selectedPoints.length ? selectedPoints[0].weight : null;
+  const lastVal = selectedPoints.length ? selectedPoints[selectedPoints.length - 1].weight : null;
+
+  const change = firstVal != null && lastVal != null ? lastVal - firstVal : null;
+  const percent =
+    firstVal != null && lastVal != null && Number(firstVal) !== 0
+      ? ((change / firstVal) * 100).toFixed(1)
+      : null;
+
+  const rangeButtons = [
+    { k: "all", label: "All time" },
+    { k: "3m", label: "3 months" },
+    { k: "6m", label: "6 months" },
+    { k: "1y", label: "1 year" },
+  ];
+
+  const selectedLabel =
+    computed.exerciseOptions.find((o) => o.key === selectedExerciseKey)?.label ||
+    selectedExerciseKey.replace(/_/g, " ");
+
+  return (
+    <div className="p-0">
       {/* Header */}
-      <div className="bg-gradient-to-b from-card to-background border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gradient-primary mb-2">
-            Progress Tracking
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Track your strength gains over time
-          </p>
+      <div className="px-4 pt-4 pb-3 bg-card">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-primary">Progress</h1>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Metric: <span className="font-medium text-foreground">{metricLabel}</span>
+              <span className="mx-2 opacity-50">•</span>
+              Unit: <span className="font-medium text-foreground">{weightUnit}</span>
+            </div>
+            <div className="mt-2">
+              <Badge className="bg-primary/15 text-primary border border-primary/30">
+                {metricLabel}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {/* Range buttons */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {rangeButtons.map((r) => (
+            <Button
+              key={r.k}
+              size="sm"
+              variant={range === r.k ? "default" : "secondary"}
+              onClick={() => setRange(r.k)}
+            >
+              {r.label}
+            </Button>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        {/* Time Range Filter */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {[
-            { value: 'all', label: 'All Time' },
-            { value: '3m', label: '3 Months' },
-            { value: '6m', label: '6 Months' },
-            { value: '1y', label: '1 Year' }
-          ].map(range => (
-            <button
-              key={range.value}
-              onClick={() => setTimeRange(range.value)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
-                timeRange === range.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              {range.label}
-            </button>
-          ))}
+      <div className="border-b border-border" />
+
+      <div className="p-4 space-y-3">
+        {/* Most progress */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-5 h-5 text-success" />
+            <h2 className="font-semibold">Most progress</h2>
+            <Badge className="ml-auto bg-success/15 text-success border border-success/30">
+              Top
+            </Badge>
+          </div>
+
+          {computed.mostProgress.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {computed.mostProgress.map((e) => (
+                <div
+                  key={`${e.programmeKey}-${e.key}`}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{e.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
+                  </div>
+                  <div className="text-sm font-semibold text-success whitespace-nowrap">
+                    +{formatNumber(e.delta)} {weightUnit}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Progression Stats Summary */}
-        {(progressionStats.most || progressionStats.least) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {progressionStats.most && (
-              <div className="bg-success/10 border border-success/30 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Award className="w-5 h-5 text-success" />
-                  <h3 className="font-bold text-foreground">Most Progress</h3>
-                </div>
-                <div className="text-lg font-bold text-success">{progressionStats.most.name}</div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  +{progressionStats.most.change.toFixed(1)} {weightUnit} ({progressionStats.most.percentChange >= 0 ? '+' : ''}{progressionStats.most.percentChange.toFixed(1)}%)
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {progressionStats.most.dataPoints} recorded workouts
-                </div>
-              </div>
-            )}
-            
-            {progressionStats.least && progressionStats.least.percentChange < 0 && (
-              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingDown className="w-5 h-5 text-destructive" />
-                  <h3 className="font-bold text-foreground">Needs Attention</h3>
-                </div>
-                <div className="text-lg font-bold text-destructive">{progressionStats.least.name}</div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  {progressionStats.least.change.toFixed(1)} {weightUnit} ({progressionStats.least.percentChange.toFixed(1)}%)
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {progressionStats.least.dataPoints} recorded workouts
-                </div>
-              </div>
-            )}
+        {/* Needs attention */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5 text-destructive" />
+            <h2 className="font-semibold">Needs attention</h2>
+            <Badge className="ml-auto bg-destructive/15 text-destructive border border-destructive/30">
+              Focus
+            </Badge>
           </div>
-        )}
 
-        {/* Exercise 1 Chart */}
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium text-muted-foreground block mb-2">
+          {computed.needsAttention.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {computed.needsAttention.map((e) => (
+                <div
+                  key={`${e.programmeKey}-${e.key}`}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{e.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
+                  </div>
+                  <div className="text-sm font-semibold text-destructive whitespace-nowrap">
+                    {formatNumber(e.delta)} {weightUnit}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ✅ Recharts chart container (your preferred look) */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-[220px]">
+              <div className="text-sm font-medium text-muted-foreground mb-2">
                 Select Exercise
-              </label>
-              <Select value={selectedExercise1} onValueChange={setSelectedExercise1}>
+              </div>
+              <Select value={selectedExerciseKey} onValueChange={setSelectedExerciseKey}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {exercises.map(ex => (
-                    <SelectItem key={ex.id} value={ex.id}>
-                      {ex.name}
+                  {computed.exerciseOptions.map((o) => (
+                    <SelectItem key={o.key} value={o.key}>
+                      {o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {progress1 && (
+
+            {change != null && percent != null ? (
               <div className="text-right">
-                <div className={`text-2xl font-bold ${
-                  progress1.change >= 0 ? 'text-success' : 'text-destructive'
-                }`}>
-                  {progress1.change >= 0 ? '+' : ''}{progress1.change} {weightUnit}
+                <div
+                  className={cx(
+                    "text-3xl font-bold",
+                    change >= 0 ? "text-success" : "text-destructive"
+                  )}
+                >
+                  {change >= 0 ? "+" : ""}
+                  {formatNumber(change)} {weightUnit}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {progress1.percentChange >= 0 ? '+' : ''}{progress1.percentChange}%
+                  {Number(percent) >= 0 ? "+" : ""}
+                  {percent}%
                 </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4">
+            {selectedPoints.length < 2 ? (
+              <div className="text-sm text-muted-foreground py-10 text-center">
+                Not enough data points yet for <span className="font-medium text-foreground">{selectedLabel}</span>.
+              </div>
+            ) : (
+              <div className="h-[360px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={selectedPoints} margin={{ top: 12, right: 14, bottom: 18, left: 12 }}>
+                    <CartesianGrid strokeDasharray="3 6" stroke="hsl(var(--border))" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="hsl(var(--muted-foreground))"
+                      style={{ fontSize: 12 }}
+                      tickMargin={8}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      style={{ fontSize: 12 }}
+                      ticks={ticksInfo.ticks}
+                      domain={ticksInfo.domain}
+                      tickMargin={8}
+                      label={{
+                        value: `Weight (${weightUnit})`,
+                        angle: -90,
+                        position: "insideLeft",
+                        style: { fill: "hsl(var(--muted-foreground))" },
+                      }}
+                    />
+                    <Tooltip
+                      content={<CustomTooltip unitLabel={weightUnit} />}
+                      wrapperStyle={{ outline: "none" }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="weight"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={4}
+                      dot={{ fill: "hsl(var(--primary))", r: 6 }}
+                      activeDot={{ r: 9, fill: "hsl(var(--primary))" }}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>
 
-          {filteredData1.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <div className="text-4xl mb-2">📊</div>
-              <p>No data yet. Complete workouts to see your progress!</p>
-            </div>
-          ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={filteredData1}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="date" 
-                    stroke="hsl(var(--muted-foreground))"
-                    style={{ fontSize: '12px' }}
-                  />
-                  <YAxis 
-                    stroke="hsl(var(--muted-foreground))"
-                    style={{ fontSize: '12px' }}
-                    label={{ 
-                      value: `Weight (${weightUnit})`, 
-                      angle: -90, 
-                      position: 'insideLeft',
-                      style: { fill: 'hsl(var(--muted-foreground))' }
-                    }}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      color: 'hsl(var(--foreground))'
-                    }}
-                    formatter={(value) => [`${value} ${weightUnit}`, 'Weight']}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="weight" 
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={3}
-                    dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                    activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {filteredData1.length > 0 && (
-            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-              <span>First: {filteredData1[0].weight} {weightUnit}</span>
-              <span>Latest: {filteredData1[filteredData1.length - 1].weight} {weightUnit}</span>
+          {selectedPoints.length >= 1 && (
+            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                First:{" "}
+                <span className="text-foreground font-medium">
+                  {formatNumber(selectedPoints[0].weight)} {weightUnit}
+                </span>
+              </span>
+              <span>
+                Latest:{" "}
+                <span className="text-foreground font-medium">
+                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)} {weightUnit}
+                </span>
+              </span>
             </div>
           )}
         </div>
 
-        {/* Exercise 2 Chart */}
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-sm font-medium text-muted-foreground block mb-2">
-                Select Exercise
-              </label>
-              <Select value={selectedExercise2} onValueChange={setSelectedExercise2}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {exercises.map(ex => (
-                    <SelectItem key={ex.id} value={ex.id}>
-                      {ex.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {progress2 && (
-              <div className="text-right">
-                <div className={`text-2xl font-bold ${
-                  progress2.change >= 0 ? 'text-success' : 'text-destructive'
-                }`}>
-                  {progress2.change >= 0 ? '+' : ''}{progress2.change} {weightUnit}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {progress2.percentChange >= 0 ? '+' : ''}{progress2.percentChange}%
-                </div>
-              </div>
-            )}
-          </div>
-
-          {filteredData2.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <div className="text-4xl mb-2">📊</div>
-              <p>No data yet. Complete workouts to see your progress!</p>
-            </div>
-          ) : (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={filteredData2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="date" 
-                    stroke="hsl(var(--muted-foreground))"
-                    style={{ fontSize: '12px' }}
-                  />
-                  <YAxis 
-                    stroke="hsl(var(--muted-foreground))"
-                    style={{ fontSize: '12px' }}
-                    label={{ 
-                      value: `Weight (${weightUnit})`, 
-                      angle: -90, 
-                      position: 'insideLeft',
-                      style: { fill: 'hsl(var(--muted-foreground))' }
-                    }}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      color: 'hsl(var(--foreground))'
-                    }}
-                    formatter={(value) => [`${value} ${weightUnit}`, 'Weight']}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="weight" 
-                    stroke="hsl(var(--chart-2))" 
-                    strokeWidth={3}
-                    dot={{ fill: 'hsl(var(--chart-2))', r: 4 }}
-                    activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {filteredData2.length > 0 && (
-            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-              <span>First: {filteredData2[0].weight} {weightUnit}</span>
-              <span>Latest: {filteredData2[filteredData2.length - 1].weight} {weightUnit}</span>
-            </div>
-          )}
+        {/* Small note so you know it’s live */}
+        <div className="text-xs text-muted-foreground px-1">
+          This page auto-refreshes workout history (focus/visibility + background check) so edits in History update here.
         </div>
-
-        {/* Progress Summary */}
-        {(filteredData1.length > 0 || filteredData2.length > 0) && (
-          <div className="bg-primary/10 border border-primary/30 rounded-xl p-6">
-            <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              Progress Summary
-            </h3>
-            <div className="space-y-3">
-              {filteredData1.length > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{getExerciseName(selectedExercise1)} Sessions:</span>
-                  <Badge variant="outline" className="text-primary border-primary/50">
-                    {filteredData1.length} workouts
-                  </Badge>
-                </div>
-              )}
-              {filteredData2.length > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{getExerciseName(selectedExercise2)} Sessions:</span>
-                  <Badge variant="outline" className="text-primary border-primary/50">
-                    {filteredData2.length} workouts
-                  </Badge>
-                </div>
-              )}
-              <div className="pt-3 border-t border-border">
-                <p className="text-xs text-muted-foreground">
-                  💡 <span className="font-semibold">Tip:</span> Consistent progressive overload is the key to gains. 
-                  Aim to add weight or reps each week while maintaining proper form.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
-};
-
-export default ProgressPage;
+}
