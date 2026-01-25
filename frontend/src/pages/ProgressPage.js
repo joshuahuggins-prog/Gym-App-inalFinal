@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+// src/pages/ProgressPage.js
+import React, { useMemo, useState } from "react";
 import { TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { getProgrammes, getWorkouts, getSettings } from "../utils/storage";
+import ProgressLineChart from "../components/charts/ProgressLineChart";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -37,9 +39,6 @@ const formatNumber = (n) => {
   return (Math.round(x * 10) / 10).toString();
 };
 
-const monthYearShort = (d) =>
-  d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
-
 const normKey = (nameOrId) =>
   (nameOrId || "")
     .toString()
@@ -71,335 +70,6 @@ const compressByDayMax = (pts) => {
     .filter((p) => p.x instanceof Date && !Number.isNaN(p.x.getTime()))
     .sort((a, b) => a.x - b.x);
 };
-
-function LineChart({
-  points = [],
-  unitLabel = "kg",
-  height = 240,
-  maxXTicks = 6,
-  allowNegative = true,
-}) {
-  const [activeIndex, setActiveIndex] = useState(null);
-
-  // Mobile-friendly sizing
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 640;
-  });
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 640);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  const w = 1000; // virtual width for layout math
-  const h = isMobile ? 320 : height;
-
-  // Slightly bigger padding on mobile for labels
-  const padL = isMobile ? 64 : 54;
-  const padR = 16;
-  const padT = 16;
-  const padB = isMobile ? 56 : 44;
-
-  // SAFE: only keep valid points
-  const safePoints = useMemo(() => {
-    return (points || [])
-      .filter((p) => p?.x instanceof Date && !Number.isNaN(p.x.getTime()))
-      .filter((p) => Number.isFinite(Number(p.y)))
-      .map((p) => ({ x: p.x, y: Number(p.y) }));
-  }, [points]);
-
-  // If active index becomes invalid after data changes, clear it
-  useEffect(() => {
-    if (activeIndex == null) return;
-    if (activeIndex < 0 || activeIndex >= safePoints.length) setActiveIndex(null);
-  }, [activeIndex, safePoints.length]);
-
-  const ys = safePoints.map((p) => p.y).filter((v) => Number.isFinite(v));
-  const minData = ys.length ? Math.min(...ys) : 0;
-  const maxData = ys.length ? Math.max(...ys) : 1;
-
-  let minY = allowNegative ? Math.min(minData, 0) : Math.max(minData, 0);
-  let maxY = Math.max(maxData, 0);
-
-  if (minY === maxY) {
-    minY -= 1;
-    maxY += 1;
-  }
-
-  const range = maxY - minY;
-  minY -= range * 0.08;
-  maxY += range * 0.08;
-
-  const plotW = w - padL - padR;
-  const plotH = h - padT - padB;
-
-  const yToPx = (y) => {
-    const t = (y - minY) / (maxY - minY);
-    return padT + (1 - t) * plotH;
-  };
-
-  const xToPx = (i) => {
-    if (safePoints.length <= 1) return padL + plotW / 2;
-    return padL + (i * plotW) / (safePoints.length - 1);
-  };
-
-  const zeroY = yToPx(0);
-
-  const gridLines = isMobile ? 3 : 4;
-  const grid = Array.from({ length: gridLines + 1 }, (_, i) => i);
-
-  // Fewer x labels on mobile
-  const ticks = isMobile ? 3 : maxXTicks;
-  const n = safePoints.length;
-  const every = Math.max(1, Math.floor(n / ticks));
-
-  const pathD =
-    safePoints.length >= 2
-      ? safePoints
-          .map((p, i) => {
-            const x = xToPx(i);
-            const y = yToPx(p.y);
-            return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-          })
-          .join(" ")
-      : "";
-
-  const formatTooltipDate = (d) =>
-    d
-      ? d.toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        })
-      : "";
-
-  // Bigger dots + ring + bigger tap target for phones
-  const hitR = isMobile ? 22 : 16;
-  const dotR = isMobile ? 6 : 4;
-  const ringR = isMobile ? 10 : 8;
-
-  return (
-    <div className="w-full overflow-hidden">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        className="block w-full h-auto"
-        preserveAspectRatio="xMidYMid meet"
-        onClick={() => setActiveIndex(null)}
-      >
-        {/* horizontal dotted grid + y labels */}
-        {grid.map((i) => {
-          const t = i / gridLines;
-          const yVal = minY + (1 - t) * (maxY - minY);
-          const y = yToPx(yVal);
-
-          return (
-            <g key={i}>
-              <line
-                x1={padL}
-                y1={y}
-                x2={w - padR}
-                y2={y}
-                stroke="currentColor"
-                opacity="0.12"
-                strokeDasharray="3 6"
-              />
-              <text
-                x={padL - 10}
-                y={y + 4}
-                textAnchor="end"
-                fontSize={isMobile ? "12" : "11"}
-                fill="currentColor"
-                opacity="0.65"
-              >
-                {formatNumber(yVal)}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* axes */}
-        <line x1={padL} y1={padT} x2={padL} y2={h - padB} stroke="currentColor" opacity="0.18" />
-        <line x1={padL} y1={h - padB} x2={w - padR} y2={h - padB} stroke="currentColor" opacity="0.18" />
-
-        {/* zero line */}
-        {zeroY >= padT && zeroY <= h - padB && (
-          <line
-            x1={padL}
-            y1={zeroY}
-            x2={w - padR}
-            y2={zeroY}
-            stroke="currentColor"
-            opacity="0.25"
-            strokeDasharray="2 4"
-          />
-        )}
-
-        {/* y-axis unit label */}
-        <text
-          x={padL}
-          y={12}
-          textAnchor="start"
-          fontSize={isMobile ? "13" : "12"}
-          fill="currentColor"
-          opacity="0.75"
-        >
-          {unitLabel}
-        </text>
-
-        {/* line */}
-        {safePoints.length >= 2 && (
-          <path
-            d={pathD}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={isMobile ? "4" : "3"}
-            opacity="0.95"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
-
-        {/* points */}
-        {safePoints.map((p, i) => {
-          const x = xToPx(i);
-          const y = yToPx(p.y);
-          const isActive = activeIndex === i;
-
-          return (
-            <g key={i}>
-              {/* big invisible hit area */}
-              <circle
-                cx={x}
-                cy={y}
-                r={hitR}
-                fill="transparent"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveIndex((prev) => (prev === i ? null : i));
-                }}
-                onTouchStart={(e) => {
-                  e.stopPropagation();
-                  setActiveIndex(i);
-                }}
-                style={{ cursor: "pointer" }}
-              />
-
-              {/* visible ring (helps you SEE where to tap) */}
-              <circle
-                cx={x}
-                cy={y}
-                r={ringR}
-                fill="transparent"
-                stroke="currentColor"
-                opacity={isActive ? "0.35" : "0.18"}
-                strokeWidth={isActive ? "3" : "2"}
-              />
-
-              {/* visible dot */}
-              <circle
-                cx={x}
-                cy={y}
-                r={isActive ? dotR + 1 : dotR}
-                fill="currentColor"
-                opacity="0.95"
-              />
-            </g>
-          );
-        })}
-
-        {/* tooltip */}
-        {activeIndex != null && safePoints[activeIndex] && (() => {
-          const p = safePoints[activeIndex];
-          const x = xToPx(activeIndex);
-          const y = yToPx(p.y);
-
-          const valueText = `${formatNumber(p.y)} ${unitLabel}`;
-          const dateText = formatTooltipDate(p.x);
-
-          const boxW = isMobile ? 230 : 178;
-          const boxH = isMobile ? 66 : 52;
-
-          let tx = x + 12;
-          let ty = y - boxH - 12;
-
-          if (tx + boxW > w - padR) tx = x - boxW - 12;
-          if (ty < padT) ty = y + 12;
-
-          return (
-            <g>
-              <line
-                x1={x}
-                y1={y}
-                x2={Math.max(padL, Math.min(w - padR, tx + 10))}
-                y2={Math.max(padT, Math.min(h - padB, ty + boxH - 10))}
-                stroke="currentColor"
-                opacity="0.25"
-                strokeDasharray="2 4"
-              />
-
-              <rect
-                x={tx}
-                y={ty}
-                width={boxW}
-                height={boxH}
-                rx="12"
-                fill="hsl(var(--card))"
-                stroke="hsl(var(--border))"
-              />
-
-              <text
-                x={tx + 12}
-                y={ty + (isMobile ? 26 : 20)}
-                fontSize={isMobile ? "14" : "12"}
-                fill="hsl(var(--foreground))"
-                opacity="0.95"
-              >
-                {valueText}
-              </text>
-
-              <text
-                x={tx + 12}
-                y={ty + (isMobile ? 48 : 38)}
-                fontSize={isMobile ? "12" : "11"}
-                fill="hsl(var(--muted-foreground))"
-                opacity="0.95"
-              >
-                {dateText}
-              </text>
-            </g>
-          );
-        })()}
-
-        {/* x labels */}
-        {safePoints.map((p, i) => {
-          if (i % every !== 0 && i !== safePoints.length - 1) return null;
-          const x = xToPx(i);
-          return (
-            <text
-              key={`x-${i}`}
-              x={x}
-              y={h - 16}
-              textAnchor="middle"
-              fontSize={isMobile ? "12" : "11"}
-              fill="currentColor"
-              opacity="0.65"
-            >
-              {monthYearShort(p.x)}
-            </text>
-          );
-        })}
-      </svg>
-
-      {safePoints.length >= 2 && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          Tip: tap a dot to see the date + {unitLabel}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ProgressPage() {
   const settings = getSettings();
@@ -481,7 +151,7 @@ export default function ProgressPage() {
         return {
           key,
           name,
-          points: pts,
+          points: pts, // ✅ stays as [{x: Date, y: number}]
           maxVal: maxVal === -Infinity ? null : maxVal,
           first,
           latest,
@@ -643,7 +313,9 @@ export default function ProgressPage() {
               <div className="px-4 py-3 border-b border-border flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold">{pc.displayName}</h3>
-                <span className="ml-auto text-xs text-muted-foreground">Tap an exercise to expand</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Tap an exercise to expand
+                </span>
               </div>
 
               <div className="p-3 space-y-2">
@@ -674,7 +346,9 @@ export default function ProgressPage() {
                               <div className="text-xs text-muted-foreground">
                                 {metricLabel} in range:{" "}
                                 <span className="font-medium text-foreground">
-                                  {ex.maxVal == null ? "-" : `${formatNumber(ex.maxVal)} ${unitLabel}`}
+                                  {ex.maxVal == null
+                                    ? "-"
+                                    : `${formatNumber(ex.maxVal)} ${unitLabel}`}
                                 </span>
                               </div>
                             </div>
@@ -699,20 +373,16 @@ export default function ProgressPage() {
                         {isOpen && (
                           <div className="rounded-lg border border-border bg-background/40 p-3">
                             {!ex.points || ex.points.length < 2 ? (
-                              <p className="text-sm text-muted-foreground">Not enough data points in this range.</p>
+                              <p className="text-sm text-muted-foreground">
+                                Not enough data points in this range.
+                              </p>
                             ) : (
                               <>
                                 <div className="text-sm font-semibold mb-2">
                                   {ex.name} — {metricLabel}
                                 </div>
 
-                                <div className="text-foreground">
-                                  <LineChart
-                                    points={ex.points}
-                                    unitLabel={unitLabel}
-                                    allowNegative={true}
-                                  />
-                                </div>
+                                <ProgressLineChart points={ex.points} unitLabel={unitLabel} />
 
                                 <div className="mt-3 grid grid-cols-2 gap-2">
                                   <div className="rounded-lg border border-border bg-card p-3">
