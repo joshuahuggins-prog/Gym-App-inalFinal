@@ -10,6 +10,11 @@
     - colour theme is set on the App wrapper with: data-theme="blue|yellow|green|red"
     - mode is set with Tailwind's dark class: class="dark"
     - all tokens are HSL (no hsl() wrapper here) so Tailwind can do: hsl(var(--token))
+
+    Added:
+    - --accent-strong + --accent-strong-foreground
+      This is your "opposite-on-the-colour-wheel" accent token.
+      It ALWAYS exists (defined in :root + .dark), so components never go transparent.
   */
 
   /* ===== Default: BLUE (Light mode) ===== */
@@ -39,6 +44,10 @@
 
     --accent: 189 94% 40%;
     --accent-foreground: 210 40% 98%;
+
+    /* ✅ Strong accent (opposite of blue/cyan → orange-ish) */
+    --accent-strong: 25 92% 50%;
+    --accent-strong-foreground: 222 47% 10%;
 
     --destructive: 0 84% 55%;
     --destructive-foreground: 210 40% 98%;
@@ -99,6 +108,10 @@
     --accent: 189 94% 50%;
     --accent-foreground: 222 38% 8%;
 
+    /* ✅ Strong accent (still orange-ish, tuned for dark mode) */
+    --accent-strong: 25 92% 58%;
+    --accent-strong-foreground: 222 38% 8%;
+
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
@@ -128,6 +141,10 @@
 
     --accent: 45 93% 50%;
     --accent-foreground: 222 47% 10%;
+
+    /* ✅ Strong accent (opposite of yellow → blue) */
+    --accent-strong: 215 75% 45%;
+    --accent-strong-foreground: 0 0% 100%;
 
     --gold: 45 93% 58%;
     --gold-foreground: 222 47% 10%;
@@ -161,6 +178,10 @@
     --accent: 45 93% 58%;
     --accent-foreground: 45 30% 8%;
 
+    /* ✅ Strong accent (opposite of yellow → blue), tuned for dark */
+    --accent-strong: 215 80% 60%;
+    --accent-strong-foreground: 215 30% 10%;
+
     --gold: 45 93% 58%;
     --gold-foreground: 45 30% 8%;
 
@@ -181,6 +202,10 @@
 
     --accent: 142 76% 34%;
     --accent-foreground: 210 40% 98%;
+
+    /* ✅ Strong accent (opposite of green → magenta) */
+    --accent-strong: 322 60% 45%;
+    --accent-strong-foreground: 0 0% 100%;
 
     --success: 142 76% 34%;
     --ring: 142 76% 34%;
@@ -210,6 +235,10 @@
     --accent: 142 76% 45%;
     --accent-foreground: 142 25% 8%;
 
+    /* ✅ Strong accent (opposite of green → magenta), tuned for dark */
+    --accent-strong: 322 70% 62%;
+    --accent-strong-foreground: 322 25% 10%;
+
     --success: 142 76% 45%;
 
     --border: 142 12% 20%;
@@ -230,6 +259,10 @@
     --accent: 0 84% 50%;
     --accent-foreground: 210 40% 98%;
 
+    /* ✅ Strong accent (opposite of red → cyan/teal) */
+    --accent-strong: 190 75% 40%;
+    --accent-strong-foreground: 0 0% 100%;
+
     --destructive: 0 84% 55%;
     --ring: 0 84% 50%;
   }
@@ -245,6 +278,10 @@
 
     --accent: 0 84% 60%;
     --accent-foreground: 0 28% 8%;
+
+    /* ✅ Strong accent (opposite of red → cyan/teal), tuned for dark */
+    --accent-strong: 190 85% 55%;
+    --accent-strong-foreground: 190 30% 10%;
 
     --destructive: 0 84% 60%;
     --ring: 0 84% 60%;
