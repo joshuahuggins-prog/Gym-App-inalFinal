@@ -71,23 +71,20 @@ export default function WorkoutActionBar({ onSaveFinish, disableFinish = false }
         type="button"
         onClick={onSaveFinish}
         disabled={disableFinish}
-        // ✅ Option B: inline styles using CSS tokens (bulletproof)
-        style={{ backgroundColor: "hotpink", borderColor: "hotpink", color: "white" }}
         className={cx(
           "border-2",
           baseBtn,
           sizeClass,
 
-          // ✅ Hover without relying on Tailwind arbitrary colors
-          "hover:brightness-110",
+          // ✅ Use your new strong accent token
+          "bg-[hsl(var(--accent-strong))] text-[hsl(var(--accent-strong-foreground))] border-[hsl(var(--accent-strong))]",
+          "hover:bg-[hsl(var(--accent-strong)/0.92)]",
 
-          // ✅ Focus ring (kept simple + reliable)
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          // ✅ Accessible focus ring
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent-strong))] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 
-          // ✅ Kill the default disabled opacity so it never looks transparent
+          // ✅ Keep it solid even when disabled
           "disabled:opacity-100",
-
-          // ✅ Disabled still looks disabled, but stays solid + themed
           "disabled:brightness-90 disabled:saturate-75 disabled:cursor-not-allowed"
         )}
         title="Save & finish"
