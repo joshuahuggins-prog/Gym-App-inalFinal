@@ -67,38 +67,22 @@ export default function WorkoutActionBar({ onSaveFinish, disableFinish = false }
 
   return (
     <div className={basePos}>
-      <Button
-        type="button"
-        onClick={onSaveFinish}
-        disabled={disableFinish}
-        className={cx(
-          "border-2",
-          baseBtn,
-          sizeClass,
-
-          // ✅ Accent colour (strong) + SOLID
-          "bg-[hsl(var(--accent-strong))] text-[hsl(var(--accent-strong-foreground))] border-[hsl(var(--accent-strong))]",
-          "hover:bg-[hsl(var(--accent-strong)/0.92)]",
-
-          // ✅ Nice keyboard focus ring in accent
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent-strong))] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-
-          // ✅ Kill the default disabled opacity so it never looks transparent
-          "disabled:opacity-100",
-
-          // ✅ Disabled still looks disabled, but stays solid + themed
-          "disabled:brightness-90 disabled:saturate-75 disabled:cursor-not-allowed"
-        )}
-        title="Save & finish"
-        aria-label="Save & finish"
-      >
-        <ThumbsUp className={cx(iconClass, collapsed ? "" : "mr-3")} />
-        {!collapsed && (
-          <span className="text-base font-semibold whitespace-nowrap">
-            Save &amp; Finish Workout
-          </span>
-        )}
-      </Button>
-    </div>
-  );
-}
+ <Button
+  type="button"
+  onClick={onSaveFinish}
+  disabled={disableFinish}
+  style={{
+    backgroundColor: "hsl(var(--accent-strong))",
+    color: "hsl(var(--accent-strong-foreground))",
+    borderColor: "hsl(var(--accent-strong))",
+  }}
+  className={cx(
+    "border-2",
+    baseBtn,
+    sizeClass,
+    "hover:brightness-110",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent-strong))] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "disabled:opacity-100",
+    "disabled:brightness-90 disabled:saturate-75 disabled:cursor-not-allowed"
+  )}
+>
