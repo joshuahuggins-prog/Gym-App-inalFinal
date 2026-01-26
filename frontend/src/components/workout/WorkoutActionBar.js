@@ -67,22 +67,43 @@ export default function WorkoutActionBar({ onSaveFinish, disableFinish = false }
 
   return (
     <div className={basePos}>
- <Button
-  type="button"
-  onClick={onSaveFinish}
-  disabled={disableFinish}
-  style={{
-    backgroundColor: "hsl(var(--accent-strong))",
-    color: "hsl(var(--accent-strong-foreground))",
-    borderColor: "hsl(var(--accent-strong))",
-  }}
-  className={cx(
-    "border-2",
-    baseBtn,
-    sizeClass,
-    "hover:brightness-110",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent-strong))] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-    "disabled:opacity-100",
-    "disabled:brightness-90 disabled:saturate-75 disabled:cursor-not-allowed"
-  )}
->
+      <Button
+        type="button"
+        onClick={onSaveFinish}
+        disabled={disableFinish}
+        // ✅ Option B: inline styles using CSS tokens (bulletproof)
+        style={{
+          backgroundColor: "hsl(var(--accent-strong))",
+          color: "hsl(var(--accent-strong-foreground))",
+          borderColor: "hsl(var(--accent-strong))",
+        }}
+        className={cx(
+          "border-2",
+          baseBtn,
+          sizeClass,
+
+          // ✅ Hover without relying on Tailwind arbitrary colors
+          "hover:brightness-110",
+
+          // ✅ Focus ring (kept simple + reliable)
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+
+          // ✅ Kill the default disabled opacity so it never looks transparent
+          "disabled:opacity-100",
+
+          // ✅ Disabled still looks disabled, but stays solid + themed
+          "disabled:brightness-90 disabled:saturate-75 disabled:cursor-not-allowed"
+        )}
+        title="Save & finish"
+        aria-label="Save & finish"
+      >
+        <ThumbsUp className={cx(iconClass, collapsed ? "" : "mr-3")} />
+        {!collapsed && (
+          <span className="text-base font-semibold whitespace-nowrap">
+            Save &amp; Finish Workout
+          </span>
+        )}
+      </Button>
+    </div>
+  );
+}
