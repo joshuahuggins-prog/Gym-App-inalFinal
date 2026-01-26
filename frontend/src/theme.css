@@ -6,6 +6,10 @@
 
   Apply a theme by setting:
     document.documentElement.dataset.theme = "green" | "yellow" | "greyRed" | "dark"
+
+  Added:
+    --accent-strong + --accent-strong-foreground
+    (a bold “opposite-on-the-colour-wheel” accent per theme)
 */
 
 /* Optional explicit dark theme (empty; :root provides the values). */
@@ -37,6 +41,10 @@
 
   --accent: 144 55% 32%;
   --accent-foreground: 140 30% 96%;
+
+  /* Strong accent (opposite on colour wheel from the green primary) */
+  --accent-strong: 324 55% 45%;
+  --accent-strong-foreground: 0 0% 100%;
 
   --destructive: 0 75% 45%;
   --destructive-foreground: 0 0% 100%;
@@ -90,6 +98,10 @@
   --accent: 45 90% 45%;
   --accent-foreground: 40 25% 12%;
 
+  /* Strong accent (opposite on colour wheel from the yellow primary) */
+  --accent-strong: 215 70% 45%;
+  --accent-strong-foreground: 0 0% 100%;
+
   --destructive: 0 75% 45%;
   --destructive-foreground: 0 0% 100%;
 
@@ -141,6 +153,10 @@
 
   --accent: 0 72% 45%;
   --accent-foreground: 0 0% 100%;
+
+  /* Strong accent (opposite on colour wheel from the red primary) */
+  --accent-strong: 190 70% 40%;
+  --accent-strong-foreground: 0 0% 100%;
 
   --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
