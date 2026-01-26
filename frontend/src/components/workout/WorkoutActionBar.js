@@ -72,11 +72,7 @@ export default function WorkoutActionBar({ onSaveFinish, disableFinish = false }
         onClick={onSaveFinish}
         disabled={disableFinish}
         // ✅ Option B: inline styles using CSS tokens (bulletproof)
-        style={{
-          backgroundColor: "hsl(var(--accent-strong))",
-          color: "hsl(var(--accent-strong-foreground))",
-          borderColor: "hsl(var(--accent-strong))",
-        }}
+        style={{ backgroundColor: "hotpink", borderColor: "hotpink", color: "white" }}
         className={cx(
           "border-2",
           baseBtn,
