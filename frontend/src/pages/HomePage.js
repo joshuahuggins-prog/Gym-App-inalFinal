@@ -56,6 +56,7 @@ const getWeekKey = (date) => {
 
   const week1 = new Date(thursday.getFullYear(), 0, 4);
   week1.setHours(0, 0, 0, 0);
+
   const weekNo =
     1 +
     Math.round(
@@ -142,7 +143,10 @@ const HomePage = () => {
     const usableProgrammes = getUsableProgrammes();
 
     const draft = getWorkoutDraft();
-    const hasTodaysDraft = isWorkoutDraftForToday(draft) && draft?.workoutType;
+
+    // ✅ FIX: accept either draft.workoutType (preferred) or legacy draft.type
+    const draftType = draft?.workoutType || draft?.type;
+    const hasTodaysDraft = isWorkoutDraftForToday(draft) && !!draftType;
 
     if (usableProgrammes.length === 0) {
       toast.error(
@@ -153,7 +157,7 @@ const HomePage = () => {
 
     // ✅ draft wins; else use last workout history A/B; else use pattern fallback
     const nextType = hasTodaysDraft
-      ? draft.workoutType
+      ? draftType
       : getNextWorkoutTypeFromHistoryAB() || peekNextWorkoutTypeFromPattern();
 
     const workout =
@@ -173,12 +177,12 @@ const HomePage = () => {
     setManualWorkoutType(workout.type);
 
     // Restore draft if today + same type
-    if (hasTodaysDraft && upper(draft.workoutType) === upper(workout.type)) {
-      const draftById = new Map((draft.exercises || []).map((e) => [e.id, e]));
+    if (hasTodaysDraft && upper(draftType) === upper(workout.type)) {
+      const draftById = new Map((draft?.exercises || []).map((e) => [e.id, e]));
 
       setWorkoutData(
-        workout.exercises.map((ex) => {
-          const lastExerciseData = lastSameWorkout?.exercises.find(
+        (workout.exercises || []).map((ex) => {
+          const lastExerciseData = lastSameWorkout?.exercises?.find(
             (e) => e.id === ex.id || e.name === ex.name
           );
           const draftEx = draftById.get(ex.id);
@@ -186,7 +190,7 @@ const HomePage = () => {
           return {
             ...ex,
             userNotes: draftEx?.userNotes || "",
-            setsData: draftEx?.setsData || [],
+            setsData: Array.isArray(draftEx?.setsData) ? draftEx.setsData : [],
             lastWorkoutData: lastExerciseData || null,
           };
         })
@@ -201,8 +205,8 @@ const HomePage = () => {
 
     // No draft - start fresh
     setWorkoutData(
-      workout.exercises.map((ex) => {
-        const lastExerciseData = lastSameWorkout?.exercises.find(
+      (workout.exercises || []).map((ex) => {
+        const lastExerciseData = lastSameWorkout?.exercises?.find(
           (e) => e.id === ex.id || e.name === ex.name
         );
         return {
@@ -227,8 +231,8 @@ const HomePage = () => {
   useEffect(() => {
     if (!currentWorkout) return;
 
-    // ✅ FIX: ticks (completed) now count as meaningful data too
-    const hasMeaningfulData = workoutData.some(
+    // ✅ Meaningful data includes notes, numbers, OR completed ticks
+    const hasMeaningfulData = (workoutData || []).some(
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
@@ -249,15 +253,15 @@ const HomePage = () => {
       }
 
       saveWorkoutDraft({
-        workoutType: currentWorkout.type,
+        workoutType: currentWorkout.type, // ✅ keep consistent key
         programmeName: currentWorkout.name,
         focus: currentWorkout.focus,
-        exercises: workoutData.map((ex) => ({
+        exercises: (workoutData || []).map((ex) => ({
           id: ex.id,
           name: ex.name,
           repScheme: ex.repScheme,
           userNotes: ex.userNotes || "",
-          setsData: ex.setsData || [],
+          setsData: Array.isArray(ex.setsData) ? ex.setsData : [],
         })),
       });
     }, 400);
@@ -294,11 +298,7 @@ const HomePage = () => {
     if (!Number.isFinite(w)) return;
 
     if (!currentPR || w > Number(currentPR.weight ?? -Infinity)) {
-      const wasNew = updatePersonalRecord(
-        exercise.id,
-        w,
-        Number(set.reps) || 0
-      );
+      const wasNew = updatePersonalRecord(exercise.id, w, Number(set.reps) || 0);
       if (wasNew) {
         setPrCelebration({
           exercise: exercise.name,
@@ -311,13 +311,15 @@ const HomePage = () => {
 
   const handleWeightChange = (exercise, setsData) => {
     setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
+      (prev || []).map((ex) => (ex.id === exercise.id ? { ...ex, setsData } : ex))
     );
   };
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+      (prev || []).map((ex) =>
+        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
+      )
     );
   };
 
@@ -326,7 +328,7 @@ const HomePage = () => {
     if (!exercise?.id) return;
 
     setWorkoutData((prev) =>
-      prev.map((ex) => {
+      (prev || []).map((ex) => {
         if (ex.id !== exercise.id) return ex;
 
         const currentSetsData = Array.isArray(ex.setsData) ? ex.setsData : [];
@@ -367,11 +369,11 @@ const HomePage = () => {
     name: currentWorkout.name,
     focus: currentWorkout.focus,
     date: new Date().toISOString(),
-    exercises: workoutData.map((ex) => ({
+    exercises: (workoutData || []).map((ex) => ({
       id: ex.id,
       name: ex.name,
       repScheme: ex.repScheme,
-      sets: ex.setsData || [],
+      sets: Array.isArray(ex.setsData) ? ex.setsData : [],
       notes: ex.userNotes || "",
     })),
   });
@@ -406,7 +408,12 @@ const HomePage = () => {
       return;
     }
 
+    // ✅ This is what drives the next load
     setDraftWorkoutType(picked.type);
+
+    // Optional: update select immediately (nice UX)
+    setManualWorkoutType(picked.type);
+
     loadRef.current?.();
 
     toast.message("Switched workout", {
@@ -484,7 +491,7 @@ const HomePage = () => {
 
   const canFinish = useMemo(
     () =>
-      workoutData.some(
+      (workoutData || []).some(
         (ex) =>
           Array.isArray(ex.setsData) &&
           ex.setsData.some(
@@ -535,7 +542,7 @@ const HomePage = () => {
       lastWorkoutData: null,
     };
 
-    setWorkoutData((prev) => [...prev, newRow]);
+    setWorkoutData((prev) => [...(prev || []), newRow]);
     setShowAddDialog(false);
     setAddSearch("");
 
@@ -691,7 +698,7 @@ const HomePage = () => {
 
       {/* Exercises */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {workoutData.map((exercise, index) => (
+        {(workoutData || []).map((exercise, index) => (
           <ExerciseCard
             key={exercise.id}
             exercise={exercise}
@@ -746,9 +753,7 @@ const HomePage = () => {
                     onClick={() => handleAddExerciseToToday(ex)}
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
-                    <div className="font-semibold text-foreground">
-                      {ex.name}
-                    </div>
+                    <div className="font-semibold text-foreground">{ex.name}</div>
                     <div className="text-xs text-muted-foreground">
                       {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
                     </div>
@@ -796,4 +801,4 @@ const HomePage = () => {
   );
 };
 
-export default HomePage; 
+export default HomePage;
