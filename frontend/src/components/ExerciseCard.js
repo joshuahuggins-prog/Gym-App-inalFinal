@@ -18,8 +18,7 @@ import { toast } from "sonner";
 import { getVideoLinks, getPersonalRecords } from "../utils/storage";
 import { EXERCISE_ALTERNATIVES } from "../data/workoutData";
 
-const clampInt = (n, min, max) =>
-  Math.max(min, Math.min(max, Math.trunc(n)));
+const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
 const normalizeGoalReps = (goalReps, count) => {
   const base = Array.isArray(goalReps) ? goalReps : [];
@@ -42,6 +41,11 @@ const normalizeSets = (setsData, count) => {
   return out;
 };
 
+const absNum = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.abs(n) : null;
+};
+
 const ExerciseCard = ({
   exercise,
   lastWorkoutData,
@@ -54,9 +58,7 @@ const ExerciseCard = ({
 }) => {
   // Always prefer live setsData length, fallback to programme default
   const desiredSetsCount = useMemo(() => {
-    const liveLen = Array.isArray(exercise?.setsData)
-      ? exercise.setsData.length
-      : 0;
+    const liveLen = Array.isArray(exercise?.setsData) ? exercise.setsData.length : 0;
     const fallback = Number(exercise?.sets ?? 3);
     const count = liveLen > 0 ? liveLen : fallback;
     return clampInt(count, 1, 40);
@@ -70,31 +72,51 @@ const ExerciseCard = ({
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(exercise?.userNotes || "");
   const [videoLink, setVideoLink] = useState("");
-  const [sets, setSets] = useState(() =>
-    normalizeSets(exercise?.setsData, desiredSetsCount)
-  );
+  const [sets, setSets] = useState(() => normalizeSets(exercise?.setsData, desiredSetsCount));
 
   const [mode, setMode] = useState(() =>
-    (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
-      ? "assisted"
-      : "weighted"
+    (exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted"
   );
 
   const userChoseModeRef = useRef(false);
   const lastExerciseIdRef = useRef(exercise?.id || "");
 
+  // PRs (treat as "max weight", NOT 1RM)
   const pr = useMemo(() => {
     const prs = getPersonalRecords?.() || {};
     return prs[exercise?.id] || null;
   }, [exercise?.id]);
 
+  // Current entered max (abs)
   const bestFromWorkout = useMemo(() => {
     const nums = (sets || [])
-      .map((s) => (s.weight === "" ? null : Number(s.weight)))
+      .map((s) => (s.weight === "" ? null : absNum(s.weight)))
       .filter((n) => Number.isFinite(n));
     if (!nums.length) return null;
-    return Math.max(...nums.map((n) => Math.abs(n)));
+    return Math.max(...nums);
   }, [sets]);
+
+  // Last workout: per-set suggested weights (abs)
+  const lastTimeSuggestions = useMemo(() => {
+    const arr = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
+    return arr.map((s) => absNum(s?.weight)).map((n) => (Number.isFinite(n) ? n : null));
+  }, [lastWorkoutData]);
+
+  // Last workout: overall max (abs)
+  const lastTimeMax = useMemo(() => {
+    const nums = lastTimeSuggestions.filter((n) => Number.isFinite(n));
+    if (!nums.length) return null;
+    return Math.max(...nums);
+  }, [lastTimeSuggestions]);
+
+  // Overall "max to show" (abs): PR max first, else last workout max, else current-entered max
+  const overallMax = useMemo(() => {
+    const prMax = pr?.weight != null ? absNum(pr.weight) : null;
+    if (Number.isFinite(prMax) && prMax > 0) return prMax;
+    if (Number.isFinite(lastTimeMax) && lastTimeMax > 0) return lastTimeMax;
+    if (Number.isFinite(bestFromWorkout) && bestFromWorkout > 0) return bestFromWorkout;
+    return null;
+  }, [pr, lastTimeMax, bestFromWorkout]);
 
   // Hydrate from storage
   useEffect(() => {
@@ -112,11 +134,7 @@ const ExerciseCard = ({
       lastExerciseIdRef.current = currentId;
       userChoseModeRef.current = false;
 
-      setMode(
-        (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
-          ? "assisted"
-          : "weighted"
-      );
+      setMode((exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted");
     }
   }, [exercise?.id, exercise?.setsData]);
 
@@ -133,9 +151,7 @@ const ExerciseCard = ({
   };
 
   const handleHeaderToggle = (e) => {
-    const interactive = e.target.closest(
-      "button, a, input, textarea, select, [data-no-toggle]"
-    );
+    const interactive = e.target.closest("button, a, input, textarea, select, [data-no-toggle]");
     if (interactive) return;
     setExpanded((v) => !v);
   };
@@ -147,33 +163,29 @@ const ExerciseCard = ({
 
     const converted = sets.map((s) => {
       if (s.weight === "") return s;
-      const v = Math.abs(Number(s.weight));
+      const v = absNum(s.weight);
+      if (!Number.isFinite(v)) return s;
       return { ...s, weight: nextMode === "assisted" ? -v : v };
     });
 
     pushUp(converted);
   };
 
-  const completedCount = useMemo(
-    () => sets.filter((s) => s.completed).length,
-    [sets]
-  );
+  const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
 
   const isExerciseComplete = useMemo(
     () => sets.length > 0 && sets.every((s) => !!s.completed),
     [sets]
   );
 
+  // Header/body label: Max weight only
   const maxLabel = useMemo(() => {
-    const best =
-      pr?.weight != null ? Math.abs(Number(pr.weight)) : bestFromWorkout;
-    if (!Number.isFinite(best) || best === 0) return null;
+    if (!Number.isFinite(overallMax) || overallMax <= 0) return null;
     const label = mode === "assisted" ? "Assist max" : "Max";
-    return `${label}: ${best}`;
-  }, [pr, bestFromWorkout, mode]);
+    return `${label}: ${overallMax}`;
+  }, [overallMax, mode]);
 
-  const showExerciseInfoNotes =
-    exercise?.notes && String(exercise.notes).trim().length > 0;
+  const showExerciseInfoNotes = exercise?.notes && String(exercise.notes).trim().length > 0;
 
   const showAlternativesToast = () => {
     const id = exercise?.id;
@@ -195,9 +207,7 @@ const ExerciseCard = ({
             </div>
           ))}
           {alts.length > 8 && (
-            <div className="text-xs text-muted-foreground mt-1">
-              +{alts.length - 8} more…
-            </div>
+            <div className="text-xs text-muted-foreground mt-1">+{alts.length - 8} more…</div>
           )}
         </div>
       ),
@@ -216,13 +226,21 @@ const ExerciseCard = ({
 
   const hasVideo = !!videoLink;
 
+  // Suggested placeholder for each set's WEIGHT input:
+  // 1) if last time has that set index, use it
+  // 2) else fallback to overall max
+  const suggestedWeightForSet = (setIndex) => {
+    const bySet = lastTimeSuggestions?.[setIndex];
+    if (Number.isFinite(bySet) && bySet > 0) return String(bySet);
+    if (Number.isFinite(overallMax) && overallMax > 0) return String(overallMax);
+    return mode === "assisted" ? "Assist" : "Weight";
+  };
+
   return (
     <div
       className={[
         "relative overflow-hidden rounded-xl border",
-        isExerciseComplete
-          ? "bg-primary/10 border-primary/40"
-          : "bg-card border-border",
+        isExerciseComplete ? "bg-primary/10 border-primary/40" : "bg-card border-border",
       ].join(" ")}
     >
       {isExerciseComplete && (
@@ -246,9 +264,7 @@ const ExerciseCard = ({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold truncate text-foreground">
-              {exercise?.name || "Exercise"}
-            </h3>
+            <h3 className="font-bold truncate text-foreground">{exercise?.name || "Exercise"}</h3>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
@@ -261,16 +277,15 @@ const ExerciseCard = ({
                 </Badge>
               )}
 
-              {pr?.weight != null && (
+              {/* Keep PR display, but it’s just max weight x reps (not 1RM) */}
+              {pr?.weight != null && pr?.reps != null && (
                 <span className="text-foreground font-semibold">
                   PR: {pr.weight} × {pr.reps}
                 </span>
               )}
 
               {isExerciseComplete && (
-                <Badge className="bg-primary/20 text-primary border-primary/40">
-                  Completed
-                </Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/40">Completed</Badge>
               )}
             </div>
 
@@ -339,11 +354,7 @@ const ExerciseCard = ({
               />
             </Button>
 
-            {expanded ? (
-              <ChevronUp className="w-5 h-5" />
-            ) : (
-              <ChevronDown className="w-5 h-5" />
-            )}
+            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
         </div>
       </div>
@@ -371,24 +382,25 @@ const ExerciseCard = ({
                 key={`${i}-${s.completed ? "c" : "n"}`}
                 className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
               >
-                <span className="text-xs text-muted-foreground">
-                  Set {i + 1}
-                </span>
+                <span className="text-xs text-muted-foreground">Set {i + 1}</span>
 
                 <Input
                   type="number"
-                  value={s.weight === "" ? "" : Math.abs(Number(s.weight))}
-                  placeholder={mode === "assisted" ? "Assist" : "Weight"}
+                  value={s.weight === "" ? "" : absNum(s.weight) ?? ""}
+                  placeholder={suggestedWeightForSet(i)}
                   onChange={(e) => {
                     const raw = e.target.value;
                     const next = [...sets];
+
                     if (raw === "") {
                       next[i] = { ...s, weight: "" };
                       pushUp(next);
                       return;
                     }
+
                     const n = Number(raw);
                     if (!Number.isFinite(n)) return;
+
                     next[i] = { ...s, weight: mode === "assisted" ? -n : n };
                     pushUp(next);
                   }}
@@ -401,13 +413,16 @@ const ExerciseCard = ({
                   onChange={(e) => {
                     const raw = e.target.value;
                     const next = [...sets];
+
                     if (raw === "") {
                       next[i] = { ...s, reps: "" };
                       pushUp(next);
                       return;
                     }
+
                     const n = Number(raw);
                     if (!Number.isFinite(n)) return;
+
                     next[i] = { ...s, reps: n };
                     pushUp(next);
                   }}
@@ -417,11 +432,7 @@ const ExerciseCard = ({
                   type="button"
                   size="sm"
                   variant={s.completed ? "default" : "outline"}
-                  className={
-                    s.completed
-                      ? "shadow-sm"
-                      : "bg-background hover:bg-muted/40"
-                  }
+                  className={s.completed ? "shadow-sm" : "bg-background hover:bg-muted/40"}
                   onClick={(e) => {
                     e.stopPropagation();
                     const next = [...sets];
@@ -446,12 +457,8 @@ const ExerciseCard = ({
 
           {showExerciseInfoNotes && (
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-              <div className="text-[11px] font-semibold text-foreground mb-1">
-                Exercise notes
-              </div>
-              <div className="whitespace-pre-wrap">
-                {String(exercise.notes).trim()}
-              </div>
+              <div className="text-[11px] font-semibold text-foreground mb-1">Exercise notes</div>
+              <div className="whitespace-pre-wrap">{String(exercise.notes).trim()}</div>
             </div>
           )}
 
@@ -514,9 +521,7 @@ const ExerciseCard = ({
 
           {lastWorkoutData && (
             <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-              <div className="font-semibold text-foreground mb-1">
-                Last time
-              </div>
+              <div className="font-semibold text-foreground mb-1">Last time</div>
               {(lastWorkoutData.sets || []).map((s2, idx) => (
                 <div key={idx}>
                   Set {idx + 1}: {s2.weight} × {s2.reps}
