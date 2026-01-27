@@ -1,167 +1,335 @@
 // src/components/RestTimer.js
-import React, { useEffect, useMemo, useState } from "react";
-import { X, Play, Pause, RotateCcw } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { X, Play, Pause, RotateCcw, MinusSquare } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 const fmt = (s) => {
-  const m = Math.floor(s / 60);
-  const r = s % 60;
+  const ss = Math.max(0, Math.floor(Number(s) || 0));
+  const m = Math.floor(ss / 60);
+  const r = ss % 60;
   return `${m}:${String(r).padStart(2, "0")}`;
 };
 
 export default function RestTimer({ duration, onComplete, onClose }) {
-  const [timeLeft, setTimeLeft] = useState(Number(duration) || 0);
+  const total = useMemo(() => Math.max(0, Math.floor(Number(duration) || 0)), [duration]);
+
+  const [timeLeft, setTimeLeft] = useState(total);
   const [paused, setPaused] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+
+  // Accurate timing (won't drift much if tab throttles)
+  const endAtRef = useRef(null);
+  const tickRef = useRef(null);
+  const completedRef = useRef(false);
 
   // Reset whenever a new duration is passed in
   useEffect(() => {
-    setTimeLeft(Number(duration) || 0);
+    const start = Math.max(0, Math.floor(Number(duration) || 0));
+    setTimeLeft(start);
     setPaused(false);
+    setMinimized(false);
+    completedRef.current = false;
+
+    // start running immediately
+    endAtRef.current = Date.now() + start * 1000;
+
+    return () => {
+      endAtRef.current = null;
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    };
   }, [duration]);
 
-  // Countdown
+  // Countdown loop
   useEffect(() => {
-    if (paused || timeLeft <= 0) return;
+    // clear any existing interval
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
 
-    const t = setInterval(() => {
-      setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
+    if (paused) return;
+    if (timeLeft <= 0) return;
 
-    return () => clearInterval(t);
+    tickRef.current = setInterval(() => {
+      const endAt = endAtRef.current;
+      if (!endAt) return;
+
+      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setTimeLeft(next);
+    }, 250);
+
+    return () => {
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    };
   }, [paused, timeLeft]);
 
-  // Fire complete once
+  // Fire complete once + auto-close (and therefore auto-disappear)
   useEffect(() => {
-    if (timeLeft === 0) onComplete?.();
-  }, [timeLeft, onComplete]);
+    if (timeLeft !== 0) return;
+    if (completedRef.current) return;
+    completedRef.current = true;
+
+    onComplete?.();
+    // disappear when done
+    onClose?.();
+  }, [timeLeft, onComplete, onClose]);
+
+  // Pause/resume keeps accurate remaining
+  const pause = () => {
+    if (paused) return;
+    const endAt = endAtRef.current;
+    if (endAt) {
+      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      setTimeLeft(next);
+    }
+    endAtRef.current = null;
+    setPaused(true);
+  };
+
+  const resume = () => {
+    if (!paused) return;
+    endAtRef.current = Date.now() + Math.max(0, timeLeft) * 1000;
+    setPaused(false);
+  };
+
+  const reset = () => {
+    const start = Math.max(0, Math.floor(Number(duration) || 0));
+    completedRef.current = false;
+    setTimeLeft(start);
+    setPaused(false);
+    endAtRef.current = Date.now() + start * 1000;
+  };
 
   const progress = useMemo(() => {
-    const d = Math.max(1, Number(duration) || 1);
+    const d = Math.max(1, total || 1);
     return ((d - Math.max(0, timeLeft)) / d) * 100;
-  }, [duration, timeLeft]);
+  }, [total, timeLeft]);
 
+  // Ring math (your existing UI)
   const r = 54;
   const c = 2 * Math.PI * r;
   const dash = c * (1 - progress / 100);
 
+  // Shared layout id => morph animation between expanded sheet and minimized chip
+  const LAYOUT_ID = "rest-timer-layout";
+
+  // If total is 0, don't show
+  const isOpen = total > 0;
+
   return (
-    <>
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 z-[9999] bg-background/70 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Bottom sheet (slides up) */}
-      <div className="fixed inset-x-0 bottom-0 z-[9999] flex justify-center pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-sm px-3 pb-3">
-          <div className="rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-[slideUp_.22s_ease-out]">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div>
-                <div className="text-sm font-semibold text-foreground">
-                  Rest Timer
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {timeLeft === 0 ? "Done" : paused ? "Paused" : "Counting down"}
-                </div>
-              </div>
-
-              <button
-                type="button"
+    <AnimatePresence>
+      {isOpen ? (
+        <motion.div
+          className="fixed inset-0 z-[9999]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {/* Overlay only when expanded (minimized = unblur + usable app) */}
+          <AnimatePresence>
+            {!minimized ? (
+              <motion.div
+                className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="Close"
-                title="Close"
+              />
+            ) : null}
+          </AnimatePresence>
+
+          {/* Expanded bottom sheet */}
+          <AnimatePresence>
+            {!minimized ? (
+              <motion.div
+                layoutId={LAYOUT_ID}
+                className="fixed inset-x-0 bottom-0 z-[9999] flex justify-center pointer-events-none"
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-5 py-6 space-y-5">
-              {/* Ring + time */}
-              <div className="grid place-items-center">
-                <div className="relative w-32 h-32">
-                  <svg className="w-full h-full -rotate-90">
-                    <circle
-                      cx="64"
-                      cy="64"
-                      r={r}
-                      stroke="hsl(var(--muted))"
-                      strokeWidth="8"
-                      fill="none"
-                    />
-                    <circle
-                      cx="64"
-                      cy="64"
-                      r={r}
-                      stroke="hsl(var(--primary))"
-                      strokeWidth="8"
-                      fill="none"
-                      strokeDasharray={c}
-                      strokeDashoffset={dash}
-                      className="transition-all duration-500 ease-linear"
-                    />
-                  </svg>
-
-                  <div className="absolute inset-0 grid place-items-center">
-                    <div className="text-center">
-                      {/* Primary color, not black */}
-                      <div className="text-4xl font-extrabold text-primary">
-                        {fmt(Math.max(0, timeLeft))}
+                <div className="pointer-events-auto w-full max-w-sm px-3 pb-3">
+                  <div className="rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">
+                          Rest Timer
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {timeLeft === 0
+                            ? "Done"
+                            : paused
+                            ? "Paused"
+                            : "Counting down"}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {timeLeft === 0 ? "Ready!" : "remaining"}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMinimized(true)}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label="Minimize"
+                          title="Minimize"
+                        >
+                          <MinusSquare className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={onClose}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label="Close"
+                          title="Close"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-5 py-6 space-y-5">
+                      {/* Ring + time */}
+                      <div className="grid place-items-center">
+                        <div className="relative w-32 h-32">
+                          <svg className="w-full h-full -rotate-90">
+                            <circle
+                              cx="64"
+                              cy="64"
+                              r={r}
+                              stroke="hsl(var(--muted))"
+                              strokeWidth="8"
+                              fill="none"
+                            />
+                            <circle
+                              cx="64"
+                              cy="64"
+                              r={r}
+                              stroke="hsl(var(--primary))"
+                              strokeWidth="8"
+                              fill="none"
+                              strokeDasharray={c}
+                              strokeDashoffset={dash}
+                              className="transition-all duration-500 ease-linear"
+                            />
+                          </svg>
+
+                          <div className="absolute inset-0 grid place-items-center">
+                            <div className="text-center">
+                              <div className="text-4xl font-extrabold text-primary tabular-nums">
+                                {fmt(timeLeft)}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {timeLeft === 0 ? "Ready!" : "remaining"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Controls */}
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            if (timeLeft === 0) return;
+                            if (paused) resume();
+                            else pause();
+                          }}
+                          disabled={timeLeft === 0}
+                          title={paused ? "Resume" : "Pause"}
+                        >
+                          {paused ? (
+                            <>
+                              <Play className="w-4 h-4 mr-2" />
+                              Resume
+                            </>
+                          ) : (
+                            <>
+                              <Pause className="w-4 h-4 mr-2" />
+                              Pause
+                            </>
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          onClick={reset}
+                          title="Reset"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      {timeLeft === 0 && (
+                        <div className="text-center text-sm font-semibold text-success">
+                          Ready for the next set 🎯
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
-              {/* Controls */}
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setPaused((p) => !p)}
-                  disabled={timeLeft === 0}
-                  title={paused ? "Resume" : "Pause"}
-                >
-                  {paused ? (
-                    <>
-                      <Play className="w-4 h-4 mr-2" />
-                      Resume
-                    </>
-                  ) : (
-                    <>
-                      <Pause className="w-4 h-4 mr-2" />
-                      Pause
-                    </>
-                  )}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setTimeLeft(Number(duration) || 0);
-                    setPaused(false);
-                  }}
-                  title="Reset"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {timeLeft === 0 && (
-                <div className="text-center text-sm font-semibold text-success">
-                  Ready for the next set 🎯
+          {/* Minimized floating chip (top-left, app remains usable) */}
+          <AnimatePresence>
+            {minimized ? (
+              <motion.button
+                type="button"
+                layoutId={LAYOUT_ID}
+                className="fixed left-3 top-3 z-[10000] flex items-center gap-3 rounded-full border border-border bg-card px-3 py-2 shadow-lg"
+                initial={{ opacity: 0, scale: 0.95, x: -8, y: -8 }}
+                animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                onClick={() => setMinimized(false)}
+                title="Tap to expand timer"
+              >
+                <div className="flex flex-col items-start leading-none">
+                  <div className="text-[11px] text-muted-foreground">Rest</div>
+                  <div className="text-sm font-semibold tabular-nums text-foreground">
+                    {fmt(timeLeft)}
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
+
+                <div className="h-2 w-24 rounded-full bg-muted overflow-hidden">
+                  <motion.div
+                    className="h-full bg-primary"
+                    initial={false}
+                    animate={{ width: `${Math.round(progress)}%` }}
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  />
+                </div>
+
+                {/* Quick close */}
+                <span
+                  className="ml-1 inline-flex items-center justify-center rounded-full p-1 hover:bg-muted/50"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose?.();
+                  }}
+                  title="Close timer"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </span>
+              </motion.button>
+            ) : null}
+          </AnimatePresence>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
