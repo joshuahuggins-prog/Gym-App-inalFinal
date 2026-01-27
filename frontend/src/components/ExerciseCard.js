@@ -15,7 +15,7 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
-import { getVideoLinks, getPersonalRecords } from "../utils/storage";
+import { getVideoLinks, getPersonalRecords, getWorkouts } from "../utils/storage";
 import { EXERCISE_ALTERNATIVES } from "../data/workoutData";
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
@@ -41,9 +41,42 @@ const normalizeSets = (setsData, count) => {
   return out;
 };
 
-const absNum = (v) => {
+const normKey = (nameOrId) =>
+  (nameOrId || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+
+const toNumOrNull = (v) => {
+  if (v === "" || v == null) return null;
   const n = Number(v);
-  return Number.isFinite(n) ? Math.abs(n) : null;
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Match ProgressPage behaviour: find best (MAX) signed weight for this exercise key from history.
+ * - For assisted dips: -18 is "better" than -56 because -18 > -56 (closer to 0)
+ * - For weighted: 56 > 40 etc
+ */
+const bestSignedFromHistory = (exerciseKey) => {
+  const workouts = getWorkouts?.() || [];
+  let best = -Infinity;
+
+  workouts.forEach((w) => {
+    (w?.exercises || []).forEach((ex) => {
+      const key = normKey(ex?.id || ex?.name);
+      if (!key || key !== exerciseKey) return;
+
+      (ex?.sets || []).forEach((s) => {
+        const ww = Number(s?.weight);
+        if (!Number.isFinite(ww)) return;
+        if (ww > best) best = ww;
+      });
+    });
+  });
+
+  return best === -Infinity ? null : best;
 };
 
 const ExerciseCard = ({
@@ -56,7 +89,6 @@ const ExerciseCard = ({
   onAddSet,
   onOpenVideo,
 }) => {
-  // Always prefer live setsData length, fallback to programme default
   const desiredSetsCount = useMemo(() => {
     const liveLen = Array.isArray(exercise?.setsData) ? exercise.setsData.length : 0;
     const fallback = Number(exercise?.sets ?? 3);
@@ -74,6 +106,7 @@ const ExerciseCard = ({
   const [videoLink, setVideoLink] = useState("");
   const [sets, setSets] = useState(() => normalizeSets(exercise?.setsData, desiredSetsCount));
 
+  // Mode is still useful for quick toggle converting sign, but DISPLAY always shows the signed value.
   const [mode, setMode] = useState(() =>
     (exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted"
   );
@@ -81,42 +114,46 @@ const ExerciseCard = ({
   const userChoseModeRef = useRef(false);
   const lastExerciseIdRef = useRef(exercise?.id || "");
 
-  // PRs (treat as "max weight", NOT 1RM)
+  // PRs: keep sign (no abs)
   const pr = useMemo(() => {
     const prs = getPersonalRecords?.() || {};
     return prs[exercise?.id] || null;
   }, [exercise?.id]);
 
-  // Current entered max (abs)
-  const bestFromWorkout = useMemo(() => {
-    const nums = (sets || [])
-      .map((s) => (s.weight === "" ? null : absNum(s.weight)))
-      .filter((n) => Number.isFinite(n));
-    if (!nums.length) return null;
-    return Math.max(...nums);
-  }, [sets]);
+  const exerciseKey = useMemo(
+    () => normKey(exercise?.id || exercise?.name),
+    [exercise?.id, exercise?.name]
+  );
 
-  // Last workout: per-set suggested weights (abs)
+  // Last workout suggestions (signed)
   const lastTimeSuggestions = useMemo(() => {
     const arr = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
-    return arr.map((s) => absNum(s?.weight)).map((n) => (Number.isFinite(n) ? n : null));
+    return arr.map((s) => toNumOrNull(s?.weight));
   }, [lastWorkoutData]);
 
-  // Last workout: overall max (abs)
-  const lastTimeMax = useMemo(() => {
-    const nums = lastTimeSuggestions.filter((n) => Number.isFinite(n));
-    if (!nums.length) return null;
-    return Math.max(...nums);
-  }, [lastTimeSuggestions]);
+  // Current-entered best (signed max)
+  const bestFromCurrentSets = useMemo(() => {
+    let best = -Infinity;
+    (sets || []).forEach((s) => {
+      const ww = toNumOrNull(s?.weight);
+      if (!Number.isFinite(ww)) return;
+      if (ww > best) best = ww;
+    });
+    return best === -Infinity ? null : best;
+  }, [sets]);
 
-  // Overall "max to show" (abs): PR max first, else last workout max, else current-entered max
-  const overallMax = useMemo(() => {
-    const prMax = pr?.weight != null ? absNum(pr.weight) : null;
-    if (Number.isFinite(prMax) && prMax > 0) return prMax;
-    if (Number.isFinite(lastTimeMax) && lastTimeMax > 0) return lastTimeMax;
-    if (Number.isFinite(bestFromWorkout) && bestFromWorkout > 0) return bestFromWorkout;
+  // ✅ Source of truth: history (same as ProgressPage), then PR, then current
+  const overallBestSigned = useMemo(() => {
+    const fromHistory = bestSignedFromHistory(exerciseKey);
+    if (Number.isFinite(fromHistory)) return fromHistory;
+
+    const prW = toNumOrNull(pr?.weight);
+    if (Number.isFinite(prW)) return prW;
+
+    if (Number.isFinite(bestFromCurrentSets)) return bestFromCurrentSets;
+
     return null;
-  }, [pr, lastTimeMax, bestFromWorkout]);
+  }, [exerciseKey, pr, bestFromCurrentSets]);
 
   // Hydrate from storage
   useEffect(() => {
@@ -163,8 +200,9 @@ const ExerciseCard = ({
 
     const converted = sets.map((s) => {
       if (s.weight === "") return s;
-      const v = absNum(s.weight);
-      if (!Number.isFinite(v)) return s;
+      const ww = toNumOrNull(s.weight);
+      if (!Number.isFinite(ww)) return s;
+      const v = Math.abs(ww);
       return { ...s, weight: nextMode === "assisted" ? -v : v };
     });
 
@@ -178,14 +216,14 @@ const ExerciseCard = ({
     [sets]
   );
 
-  // Header/body label: Max weight only
   const maxLabel = useMemo(() => {
-    if (!Number.isFinite(overallMax) || overallMax <= 0) return null;
-    const label = mode === "assisted" ? "Assist max" : "Max";
-    return `${label}: ${overallMax}`;
-  }, [overallMax, mode]);
+    if (!Number.isFinite(overallBestSigned)) return null;
+    const label = overallBestSigned < 0 ? "Best assist" : "Max";
+    return `${label}: ${overallBestSigned}`;
+  }, [overallBestSigned]);
 
-  const showExerciseInfoNotes = exercise?.notes && String(exercise.notes).trim().length > 0;
+  const showExerciseInfoNotes =
+    exercise?.notes && String(exercise.notes).trim().length > 0;
 
   const showAlternativesToast = () => {
     const id = exercise?.id;
@@ -207,7 +245,9 @@ const ExerciseCard = ({
             </div>
           ))}
           {alts.length > 8 && (
-            <div className="text-xs text-muted-foreground mt-1">+{alts.length - 8} more…</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              +{alts.length - 8} more…
+            </div>
           )}
         </div>
       ),
@@ -226,13 +266,12 @@ const ExerciseCard = ({
 
   const hasVideo = !!videoLink;
 
-  // Suggested placeholder for each set's WEIGHT input:
-  // 1) if last time has that set index, use it
-  // 2) else fallback to overall max
+  // ✅ Suggested placeholder for weight input (SIGNED)
+  // Prefer last time same set index, else fallback to overall best (signed)
   const suggestedWeightForSet = (setIndex) => {
     const bySet = lastTimeSuggestions?.[setIndex];
-    if (Number.isFinite(bySet) && bySet > 0) return String(bySet);
-    if (Number.isFinite(overallMax) && overallMax > 0) return String(overallMax);
+    if (Number.isFinite(bySet)) return String(bySet);
+    if (Number.isFinite(overallBestSigned)) return String(overallBestSigned);
     return mode === "assisted" ? "Assist" : "Weight";
   };
 
@@ -264,7 +303,9 @@ const ExerciseCard = ({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold truncate text-foreground">{exercise?.name || "Exercise"}</h3>
+            <h3 className="font-bold truncate text-foreground">
+              {exercise?.name || "Exercise"}
+            </h3>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
@@ -277,7 +318,6 @@ const ExerciseCard = ({
                 </Badge>
               )}
 
-              {/* Keep PR display, but it’s just max weight x reps (not 1RM) */}
               {pr?.weight != null && pr?.reps != null && (
                 <span className="text-foreground font-semibold">
                   PR: {pr.weight} × {pr.reps}
@@ -285,7 +325,9 @@ const ExerciseCard = ({
               )}
 
               {isExerciseComplete && (
-                <Badge className="bg-primary/20 text-primary border-primary/40">Completed</Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/40">
+                  Completed
+                </Badge>
               )}
             </div>
 
@@ -329,7 +371,7 @@ const ExerciseCard = ({
             </div>
           </div>
 
-          {/* Video icon (accent ONLY on icon) */}
+          {/* Video icon */}
           <div className="flex items-center gap-1 shrink-0">
             <Button
               type="button"
@@ -366,7 +408,7 @@ const ExerciseCard = ({
             <div className="text-xs text-muted-foreground">
               <span
                 className={
-                  mode === "assisted"
+                  Number(overallBestSigned) < 0
                     ? "text-[hsl(var(--accent-strong))] font-semibold"
                     : "text-foreground font-semibold"
                 }
@@ -384,9 +426,10 @@ const ExerciseCard = ({
               >
                 <span className="text-xs text-muted-foreground">Set {i + 1}</span>
 
+                {/* ✅ weight input shows SIGNED weight (negative stays negative) */}
                 <Input
                   type="number"
-                  value={s.weight === "" ? "" : absNum(s.weight) ?? ""}
+                  value={s.weight}
                   placeholder={suggestedWeightForSet(i)}
                   onChange={(e) => {
                     const raw = e.target.value;
@@ -401,7 +444,7 @@ const ExerciseCard = ({
                     const n = Number(raw);
                     if (!Number.isFinite(n)) return;
 
-                    next[i] = { ...s, weight: mode === "assisted" ? -n : n };
+                    next[i] = { ...s, weight: n };
                     pushUp(next);
                   }}
                 />
@@ -457,7 +500,9 @@ const ExerciseCard = ({
 
           {showExerciseInfoNotes && (
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-              <div className="text-[11px] font-semibold text-foreground mb-1">Exercise notes</div>
+              <div className="text-[11px] font-semibold text-foreground mb-1">
+                Exercise notes
+              </div>
               <div className="whitespace-pre-wrap">{String(exercise.notes).trim()}</div>
             </div>
           )}
