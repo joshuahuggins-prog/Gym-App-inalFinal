@@ -4,7 +4,7 @@
 // =====================
 // Versioning
 // =====================
-const STORAGE_VERSION = 6; // integer migrations only
+const STORAGE_VERSION = 7; // bump because we add tombstones
 const STORAGE_VERSION_KEY = "gym_storage_version";
 
 // =====================
@@ -24,6 +24,9 @@ export const STORAGE_KEYS = {
 
   // Draft workout (unsaved)
   WORKOUT_DRAFT: "gym_workout_draft",
+
+  // NEW: remembers exercises the user deleted so defaults don't respawn
+  EXERCISE_TOMBSTONES: "gym_exercise_tombstones",
 };
 
 // =====================
@@ -121,6 +124,13 @@ export const initStorage = () => {
       const existing = getStorageData(STORAGE_KEYS.EXERCISES) || [];
       const rebuilt = rebuildExerciseCatalogue(programmes, existing);
       setStorageData(STORAGE_KEYS.EXERCISES, rebuilt);
+    }
+
+    // ---- Migration to v7 ----
+    // Ensure tombstones key exists
+    if (version < 7) {
+      const t = getStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES);
+      if (!Array.isArray(t)) setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, []);
     }
 
     localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION.toString());
@@ -402,7 +412,7 @@ export const getPersonalRecords = () => {
  * - keeps exerciseName for display
  * - only overwrites if weight increases (original rule)
  *
- * NOTE: this keeps your legacy behaviour (no 0/negative PRs).
+ * NOTE: this keeps legacy behaviour (no 0/negative PRs).
  */
 export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
   const prs = getPersonalRecords();
@@ -471,112 +481,25 @@ export const updateVideoLink = (exerciseIdOrName, url) => {
 };
 
 // =====================
-// Programmes Management (Option B: auto-merge new defaults into stored programmes)
+// Programmes Management (NO forced default merges)
 // =====================
-function getDefaultProgrammesFromWorkoutData() {
-  try {
-    const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
-    return [WORKOUT_A, WORKOUT_B].filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function normaliseProgrammeType(t) {
-  return String(t || "").trim().toUpperCase();
-}
-
-function normaliseExerciseId(id) {
-  return normalizeId(id).toLowerCase();
-}
-
-/**
- * Merge behaviour:
- * - If no stored programmes => seed defaults
- * - If stored programmes exist => keep user data, but inject any missing default exercises
- *   into matching programme types (A/B) without overwriting the user's customised list.
- * - Keep any extra user-created programmes as-is.
- */
 export const getProgrammes = () => {
-  const stored = getStorageData(STORAGE_KEYS.PROGRAMMES);
-  const defaults = getDefaultProgrammesFromWorkoutData();
+  const programmes = getStorageData(STORAGE_KEYS.PROGRAMMES);
+  if (Array.isArray(programmes) && programmes.length > 0) return programmes;
 
-  // Nothing stored yet -> seed defaults
-  if (!Array.isArray(stored) || stored.length === 0) {
-    setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
-    return defaults;
-  }
-
-  // If defaults missing for some reason, just return stored
-  if (!Array.isArray(defaults) || defaults.length === 0) return stored;
-
-  let changed = false;
-
-  // Merge defaults into stored by programme type
-  const mergedCore = defaults.map((defP) => {
-    const defType = normaliseProgrammeType(defP?.type);
-    const existing = stored.find(
-      (p) => normaliseProgrammeType(p?.type) === defType
-    );
-
-    // If user doesn't have this programme type stored, add default programme
-    if (!existing) {
-      changed = true;
-      return defP;
-    }
-
-    const existingList = Array.isArray(existing.exercises)
-      ? existing.exercises
-      : [];
-    const existingIds = new Set(
-      existingList.map((e) => normaliseExerciseId(e?.id)).filter(Boolean)
-    );
-
-    const defList = Array.isArray(defP.exercises) ? defP.exercises : [];
-    const missing = defList.filter((e) => {
-      const id = normaliseExerciseId(e?.id);
-      return id && !existingIds.has(id);
-    });
-
-    if (missing.length > 0) {
-      changed = true;
-      return {
-        ...existing,
-        // Keep user's order, append new default exercises at the end
-        exercises: [...existingList, ...missing],
-      };
-    }
-
-    return existing;
-  });
-
-  // Keep any extra user-created programmes not in defaults
-  const defaultTypes = new Set(
-    defaults.map((d) => normaliseProgrammeType(d?.type)).filter(Boolean)
-  );
-  const extras = stored.filter(
-    (p) => !defaultTypes.has(normaliseProgrammeType(p?.type))
-  );
-
-  const finalProgrammes =
-    extras.length > 0 ? [...mergedCore, ...extras] : mergedCore;
-
-  if (changed) setStorageData(STORAGE_KEYS.PROGRAMMES, finalProgrammes);
-  return finalProgrammes;
+  const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
+  const defaults = [WORKOUT_A, WORKOUT_B].filter(Boolean);
+  setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
+  return defaults;
 };
 
 export const saveProgramme = (programme) => {
   const programmes = getProgrammes();
-  const type = normaliseProgrammeType(programme?.type);
-  if (!type) return false;
-
-  const existing = programmes.find(
-    (p) => normaliseProgrammeType(p?.type) === type
-  );
+  const existing = programmes.find((p) => p.type === programme.type);
 
   if (existing) {
     const updated = programmes.map((p) =>
-      normaliseProgrammeType(p?.type) === type ? programme : p
+      p.type === programme.type ? programme : p
     );
     return setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
   } else {
@@ -587,20 +510,53 @@ export const saveProgramme = (programme) => {
 
 export const deleteProgramme = (type) => {
   const programmes = getProgrammes();
-  const t = normaliseProgrammeType(type);
-  const filtered = programmes.filter(
-    (p) => normaliseProgrammeType(p?.type) !== t
-  );
+  const filtered = programmes.filter((p) => p.type !== type);
   return setStorageData(STORAGE_KEYS.PROGRAMMES, filtered);
 };
 
 // =====================
-// Exercises (SAFE catalogue rebuild)
+// Exercise tombstones (deleted defaults stay deleted)
+// =====================
+const getExerciseTombstones = () =>
+  getStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES) || [];
+
+const addExerciseTombstone = (id) => {
+  const normId = normalizeId(id).toLowerCase();
+  if (!normId) return false;
+
+  const set = new Set(
+    getExerciseTombstones().map((x) => String(x).toLowerCase())
+  );
+  set.add(normId);
+  return setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, Array.from(set));
+};
+
+const removeExerciseEverywhereFromProgrammes = (id) => {
+  const normId = normalizeId(id);
+  if (!normId) return false;
+
+  const programmes = getProgrammes();
+  const updated = programmes.map((p) => {
+    const list = Array.isArray(p.exercises) ? p.exercises : [];
+    return {
+      ...p,
+      exercises: list.filter((ex) => normalizeId(ex?.id) !== normId),
+    };
+  });
+
+  return setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
+};
+
+// =====================
+// Exercises (SAFE catalogue rebuild + respects tombstones)
 // =====================
 function getDefaultExercisesFromWorkoutData() {
   try {
-    const defaults = getDefaultProgrammesFromWorkoutData();
-    return defaults.flatMap((p) => p?.exercises || []);
+    const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
+    return [
+      ...(WORKOUT_A?.exercises || []),
+      ...(WORKOUT_B?.exercises || []),
+    ];
   } catch {
     return [];
   }
@@ -608,10 +564,18 @@ function getDefaultExercisesFromWorkoutData() {
 
 function rebuildExerciseCatalogue(programmes, existingExercises) {
   const byId = new Map();
+  const tombstones = new Set(
+    getExerciseTombstones().map((x) => String(x).toLowerCase())
+  );
 
   const add = (ex) => {
     if (!ex?.id) return;
     const id = normalizeId(ex.id);
+    if (!id) return;
+
+    // ✅ if user deleted it previously, never re-add it from defaults/legacy
+    if (tombstones.has(id.toLowerCase())) return;
+
     const prev = byId.get(id) || {};
     byId.set(id, { ...prev, ...ex, id });
   };
@@ -681,6 +645,16 @@ export const saveExercise = (exercise) => {
   const id = ex.id;
   if (!id) return false;
 
+  // If an exercise was previously deleted, "saving" it should resurrect it.
+  // So remove tombstone if present.
+  const tombs = new Set(
+    getExerciseTombstones().map((x) => String(x).toLowerCase())
+  );
+  if (tombs.has(id.toLowerCase())) {
+    tombs.delete(id.toLowerCase());
+    setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, Array.from(tombs));
+  }
+
   const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
   const idx = exercises.findIndex((e) => normalizeId(e?.id) === id);
 
@@ -714,11 +688,31 @@ export const saveExercise = (exercise) => {
 };
 
 export const deleteExercise = (id) => {
-  const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
-  const filtered = exercises.filter(
-    (e) => normalizeId(e.id) !== normalizeId(id)
-  );
-  return setStorageData(STORAGE_KEYS.EXERCISES, filtered);
+  try {
+    const normId = normalizeId(id);
+    if (!normId) return false;
+
+    // ✅ Remember deletion so defaults/legacy don't respawn
+    addExerciseTombstone(normId);
+
+    // ✅ Remove it from programmes so it disappears there too
+    removeExerciseEverywhereFromProgrammes(normId);
+
+    // Remove from stored exercises list
+    const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
+    const filtered = exercises.filter((e) => normalizeId(e.id) !== normId);
+    setStorageData(STORAGE_KEYS.EXERCISES, filtered);
+
+    // Rebuild catalogue so UI updates immediately
+    const programmes = getProgrammes();
+    const merged = rebuildExerciseCatalogue(programmes, filtered);
+    setStorageData(STORAGE_KEYS.EXERCISES, merged);
+
+    return true;
+  } catch (e) {
+    console.error("deleteExercise failed", e);
+    return false;
+  }
 };
 
 // Sync Exercise Assignment to Programme Helper
@@ -816,7 +810,15 @@ export const exportToCSV = () => {
   const workouts = getWorkouts();
   if (!Array.isArray(workouts) || workouts.length === 0) return null;
 
-  const headers = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps", "Notes"];
+  const headers = [
+    "Date",
+    "Workout",
+    "Exercise",
+    "Set",
+    "Weight",
+    "Reps",
+    "Notes",
+  ];
   const rows = [];
 
   workouts.forEach((workout) => {
@@ -846,13 +848,22 @@ export const importFromCSV = (csvText) => {
     }
 
     const headers = lines[0].split(",").map((h) => h.trim());
-    const requiredHeaders = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps"];
+    const requiredHeaders = [
+      "Date",
+      "Workout",
+      "Exercise",
+      "Set",
+      "Weight",
+      "Reps",
+    ];
 
     const hasAllHeaders = requiredHeaders.every((h) => headers.includes(h));
     if (!hasAllHeaders) {
       return {
         success: false,
-        error: `Missing required headers. Expected: ${requiredHeaders.join(", ")}`,
+        error: `Missing required headers. Expected: ${requiredHeaders.join(
+          ", "
+        )}`,
       };
     }
 
@@ -992,19 +1003,31 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
     if (data.personalRecords)
       setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
-    if (data.videoLinks) setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
+    if (data.videoLinks)
+      setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
     if (Array.isArray(data.programmes))
       setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
     if (Array.isArray(data.exercises))
       setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
     if (data.progressionSettings)
-      setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, data.progressionSettings);
+      setStorageData(
+        STORAGE_KEYS.PROGRESSION_SETTINGS,
+        data.progressionSettings
+      );
 
     if (data.workoutPattern != null) {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern);
     }
     if (data.workoutPatternIndex != null) {
-      setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, data.workoutPatternIndex);
+      setStorageData(
+        STORAGE_KEYS.WORKOUT_PATTERN_INDEX,
+        data.workoutPatternIndex
+      );
+    }
+
+    // Tombstones (keep them if present)
+    if (Array.isArray(data.exerciseTombstones)) {
+      setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, data.exerciseTombstones);
     }
 
     return { success: true };
