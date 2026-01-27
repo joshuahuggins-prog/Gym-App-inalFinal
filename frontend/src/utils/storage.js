@@ -454,8 +454,7 @@ const getDefaultVideoLinks = () => ({
   bulgarian_split_squats: "https://www.youtube.com/watch?v=2C-uNgKwPLE",
   incline_hammer_curls: "https://www.youtube.com/watch?v=zC3nLlEvin4",
   face_pulls: "https://www.youtube.com/watch?v=rep-qVOkqgk",
-  hanging_knee_raises: 
-"https://www.youtube.com/watch?v=BI7wrB3Crsc",
+  hanging_knee_raises: "https://www.youtube.com/watch?v=BI7wrB3Crsc",
 });
 
 export const getVideoLinks = () => {
@@ -472,25 +471,112 @@ export const updateVideoLink = (exerciseIdOrName, url) => {
 };
 
 // =====================
-// Programmes Management
+// Programmes Management (Option B: auto-merge new defaults into stored programmes)
 // =====================
-export const getProgrammes = () => {
-  const programmes = getStorageData(STORAGE_KEYS.PROGRAMMES);
-  if (Array.isArray(programmes) && programmes.length > 0) return programmes;
+function getDefaultProgrammesFromWorkoutData() {
+  try {
+    const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
+    return [WORKOUT_A, WORKOUT_B].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
-  const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
-  const defaults = [WORKOUT_A, WORKOUT_B];
-  setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
-  return defaults;
+function normaliseProgrammeType(t) {
+  return String(t || "").trim().toUpperCase();
+}
+
+function normaliseExerciseId(id) {
+  return normalizeId(id).toLowerCase();
+}
+
+/**
+ * Merge behaviour:
+ * - If no stored programmes => seed defaults
+ * - If stored programmes exist => keep user data, but inject any missing default exercises
+ *   into matching programme types (A/B) without overwriting the user's customised list.
+ * - Keep any extra user-created programmes as-is.
+ */
+export const getProgrammes = () => {
+  const stored = getStorageData(STORAGE_KEYS.PROGRAMMES);
+  const defaults = getDefaultProgrammesFromWorkoutData();
+
+  // Nothing stored yet -> seed defaults
+  if (!Array.isArray(stored) || stored.length === 0) {
+    setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
+    return defaults;
+  }
+
+  // If defaults missing for some reason, just return stored
+  if (!Array.isArray(defaults) || defaults.length === 0) return stored;
+
+  let changed = false;
+
+  // Merge defaults into stored by programme type
+  const mergedCore = defaults.map((defP) => {
+    const defType = normaliseProgrammeType(defP?.type);
+    const existing = stored.find(
+      (p) => normaliseProgrammeType(p?.type) === defType
+    );
+
+    // If user doesn't have this programme type stored, add default programme
+    if (!existing) {
+      changed = true;
+      return defP;
+    }
+
+    const existingList = Array.isArray(existing.exercises)
+      ? existing.exercises
+      : [];
+    const existingIds = new Set(
+      existingList.map((e) => normaliseExerciseId(e?.id)).filter(Boolean)
+    );
+
+    const defList = Array.isArray(defP.exercises) ? defP.exercises : [];
+    const missing = defList.filter((e) => {
+      const id = normaliseExerciseId(e?.id);
+      return id && !existingIds.has(id);
+    });
+
+    if (missing.length > 0) {
+      changed = true;
+      return {
+        ...existing,
+        // Keep user's order, append new default exercises at the end
+        exercises: [...existingList, ...missing],
+      };
+    }
+
+    return existing;
+  });
+
+  // Keep any extra user-created programmes not in defaults
+  const defaultTypes = new Set(
+    defaults.map((d) => normaliseProgrammeType(d?.type)).filter(Boolean)
+  );
+  const extras = stored.filter(
+    (p) => !defaultTypes.has(normaliseProgrammeType(p?.type))
+  );
+
+  const finalProgrammes =
+    extras.length > 0 ? [...mergedCore, ...extras] : mergedCore;
+
+  if (changed) setStorageData(STORAGE_KEYS.PROGRAMMES, finalProgrammes);
+  return finalProgrammes;
 };
 
 export const saveProgramme = (programme) => {
   const programmes = getProgrammes();
-  const existing = programmes.find((p) => p.type === programme.type);
+  const type = normaliseProgrammeType(programme?.type);
+  if (!type) return false;
+
+  const existing = programmes.find(
+    (p) => normaliseProgrammeType(p?.type) === type
+  );
 
   if (existing) {
     const updated = programmes.map((p) =>
-      p.type === programme.type ? programme : p
+      normaliseProgrammeType(p?.type) === type ? programme : p
     );
     return setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
   } else {
@@ -501,7 +587,10 @@ export const saveProgramme = (programme) => {
 
 export const deleteProgramme = (type) => {
   const programmes = getProgrammes();
-  const filtered = programmes.filter((p) => p.type !== type);
+  const t = normaliseProgrammeType(type);
+  const filtered = programmes.filter(
+    (p) => normaliseProgrammeType(p?.type) !== t
+  );
   return setStorageData(STORAGE_KEYS.PROGRAMMES, filtered);
 };
 
@@ -510,11 +599,8 @@ export const deleteProgramme = (type) => {
 // =====================
 function getDefaultExercisesFromWorkoutData() {
   try {
-    const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
-    return [
-      ...(WORKOUT_A?.exercises || []),
-      ...(WORKOUT_B?.exercises || []),
-    ];
+    const defaults = getDefaultProgrammesFromWorkoutData();
+    return defaults.flatMap((p) => p?.exercises || []);
   } catch {
     return [];
   }
@@ -562,48 +648,60 @@ export const getExercises = () => {
   return merged;
 };
 
-export const saveExercise = (exercise) => {
-  const id = normalizeId(exercise?.id);
-  if (!id) return false;
+function coerceExerciseForSave(exercise) {
+  const ex = { ...(exercise || {}) };
+  ex.id = normalizeId(ex.id);
 
-  const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
-  const idx = exercises.findIndex((e) => normalizeId(e.id) === id);
+  // sets
+  const setsNum = Number(ex.sets);
+  ex.sets = Number.isFinite(setsNum) && setsNum > 0 ? setsNum : 3;
 
-  if (idx !== -1) {
-    const prev = exercises[idx];
-    exercises[idx] = {
-      ...prev,
-      ...exercise,
-      id,
-      hidden:
-        typeof exercise.hidden === "boolean" ? exercise.hidden : prev.hidden,
-    };
-  } else {
-    exercises.push({ ...exercise, id });
-  }
+  // restTime
+  const restNum = Number(ex.restTime);
+  ex.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
-  // Coerce numeric fields
-  const setsNum = Number(exercise.sets);
-  exercise.sets = Number.isFinite(setsNum) && setsNum > 0 ? setsNum : 3;
-
-  const restNum = Number(exercise.restTime);
-  exercise.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
-
-  // Ensure goalReps is a clean number array
-  const rawGoalReps = Array.isArray(exercise.goalReps) ? exercise.goalReps : [];
+  // goalReps
+  const rawGoalReps = Array.isArray(ex.goalReps) ? ex.goalReps : [];
   const cleanedGoalReps = rawGoalReps
     .map((x) => (x === "" || x == null ? null : Number(x)))
     .filter((n) => Number.isFinite(n) && n > 0);
-  exercise.goalReps = cleanedGoalReps.length ? cleanedGoalReps : [8, 10, 12];
+  ex.goalReps = cleanedGoalReps.length ? cleanedGoalReps : [8, 10, 12];
+
+  // hidden
+  if (typeof ex.hidden !== "boolean") ex.hidden = false;
+
+  // assignedTo
+  if (!Array.isArray(ex.assignedTo)) ex.assignedTo = [];
+
+  return ex;
+}
+
+export const saveExercise = (exercise) => {
+  const ex = coerceExerciseForSave(exercise);
+  const id = ex.id;
+  if (!id) return false;
+
+  const exercises = getStorageData(STORAGE_KEYS.EXERCISES) || [];
+  const idx = exercises.findIndex((e) => normalizeId(e?.id) === id);
+
+  if (idx !== -1) {
+    const prev = exercises[idx] || {};
+    exercises[idx] = {
+      ...prev,
+      ...ex,
+      id,
+      hidden: typeof ex.hidden === "boolean" ? ex.hidden : prev.hidden,
+    };
+  } else {
+    exercises.push({ ...ex, id });
+  }
 
   // Update core fields inside programmes too
-  syncExerciseFieldsIntoProgrammes(exercise);
+  syncExerciseFieldsIntoProgrammes(ex);
 
   // Sync assignments based on exercise.assignedTo
-  const assignedTo = Array.isArray(exercise.assignedTo)
-    ? exercise.assignedTo
-    : [];
-  syncExerciseAssignmentsToProgrammes({ ...exercise, id, assignedTo });
+  const assignedTo = Array.isArray(ex.assignedTo) ? ex.assignedTo : [];
+  syncExerciseAssignmentsToProgrammes({ ...ex, id, assignedTo });
 
   // Persist exercises and rebuild catalogue (so assignedTo is re-derived cleanly)
   setStorageData(STORAGE_KEYS.EXERCISES, exercises);
@@ -718,15 +816,7 @@ export const exportToCSV = () => {
   const workouts = getWorkouts();
   if (!Array.isArray(workouts) || workouts.length === 0) return null;
 
-  const headers = [
-    "Date",
-    "Workout",
-    "Exercise",
-    "Set",
-    "Weight",
-    "Reps",
-    "Notes",
-  ];
+  const headers = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps", "Notes"];
   const rows = [];
 
   workouts.forEach((workout) => {
@@ -756,22 +846,13 @@ export const importFromCSV = (csvText) => {
     }
 
     const headers = lines[0].split(",").map((h) => h.trim());
-    const requiredHeaders = [
-      "Date",
-      "Workout",
-      "Exercise",
-      "Set",
-      "Weight",
-      "Reps",
-    ];
+    const requiredHeaders = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps"];
 
     const hasAllHeaders = requiredHeaders.every((h) => headers.includes(h));
     if (!hasAllHeaders) {
       return {
         success: false,
-        error: `Missing required headers. Expected: ${requiredHeaders.join(
-          ", "
-        )}`,
+        error: `Missing required headers. Expected: ${requiredHeaders.join(", ")}`,
       };
     }
 
@@ -911,8 +992,7 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
     if (data.personalRecords)
       setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
-    if (data.videoLinks)
-      setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
+    if (data.videoLinks) setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
     if (Array.isArray(data.programmes))
       setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
     if (Array.isArray(data.exercises))
@@ -924,10 +1004,7 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern);
     }
     if (data.workoutPatternIndex != null) {
-      setStorageData(
-        STORAGE_KEYS.WORKOUT_PATTERN_INDEX,
-        data.workoutPatternIndex
-      );
+      setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, data.workoutPatternIndex);
     }
 
     return { success: true };
