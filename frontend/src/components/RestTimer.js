@@ -18,12 +18,10 @@ export default function RestTimer({ duration, onComplete, onClose }) {
   const [paused, setPaused] = useState(false);
   const [minimized, setMinimized] = useState(false);
 
-  // Accurate timing (won't drift much if tab throttles)
   const endAtRef = useRef(null);
   const tickRef = useRef(null);
   const completedRef = useRef(false);
 
-  // Reset whenever a new duration is passed in
   useEffect(() => {
     const start = Math.max(0, Math.floor(Number(duration) || 0));
     setTimeLeft(start);
@@ -31,7 +29,6 @@ export default function RestTimer({ duration, onComplete, onClose }) {
     setMinimized(false);
     completedRef.current = false;
 
-    // start running immediately
     endAtRef.current = Date.now() + start * 1000;
 
     return () => {
@@ -43,9 +40,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
     };
   }, [duration]);
 
-  // Countdown loop
   useEffect(() => {
-    // clear any existing interval
     if (tickRef.current) {
       clearInterval(tickRef.current);
       tickRef.current = null;
@@ -70,18 +65,15 @@ export default function RestTimer({ duration, onComplete, onClose }) {
     };
   }, [paused, timeLeft]);
 
-  // Fire complete once + auto-close (and therefore auto-disappear)
   useEffect(() => {
     if (timeLeft !== 0) return;
     if (completedRef.current) return;
     completedRef.current = true;
 
     onComplete?.();
-    // disappear when done
     onClose?.();
   }, [timeLeft, onComplete, onClose]);
 
-  // Pause/resume keeps accurate remaining
   const pause = () => {
     if (paused) return;
     const endAt = endAtRef.current;
@@ -112,27 +104,24 @@ export default function RestTimer({ duration, onComplete, onClose }) {
     return ((d - Math.max(0, timeLeft)) / d) * 100;
   }, [total, timeLeft]);
 
-  // Ring math (your existing UI)
   const r = 54;
   const c = 2 * Math.PI * r;
   const dash = c * (1 - progress / 100);
 
-  // Shared layout id => morph animation between expanded sheet and minimized chip
   const LAYOUT_ID = "rest-timer-layout";
-
-  // If total is 0, don't show
   const isOpen = total > 0;
 
   return (
     <AnimatePresence>
       {isOpen ? (
+        // ✅ Key fix: when minimized, this full-screen layer does NOT eat touches
         <motion.div
-          className="fixed inset-0 z-[9999]"
+          className={`fixed inset-0 z-[9999] ${minimized ? "pointer-events-none" : "pointer-events-auto"}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          {/* Overlay only when expanded (minimized = unblur + usable app) */}
+          {/* Overlay only when expanded */}
           <AnimatePresence>
             {!minimized ? (
               <motion.div
@@ -165,11 +154,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                           Rest Timer
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {timeLeft === 0
-                            ? "Done"
-                            : paused
-                            ? "Paused"
-                            : "Counting down"}
+                          {timeLeft === 0 ? "Done" : paused ? "Paused" : "Counting down"}
                         </div>
                       </div>
 
@@ -198,7 +183,6 @@ export default function RestTimer({ duration, onComplete, onClose }) {
 
                     {/* Body */}
                     <div className="px-5 py-6 space-y-5">
-                      {/* Ring + time */}
                       <div className="grid place-items-center">
                         <div className="relative w-32 h-32">
                           <svg className="w-full h-full -rotate-90">
@@ -236,7 +220,6 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                         </div>
                       </div>
 
-                      {/* Controls */}
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
@@ -262,11 +245,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                           )}
                         </Button>
 
-                        <Button
-                          variant="outline"
-                          onClick={reset}
-                          title="Reset"
-                        >
+                        <Button variant="outline" onClick={reset} title="Reset">
                           <RotateCcw className="w-4 h-4" />
                         </Button>
                       </div>
@@ -283,13 +262,13 @@ export default function RestTimer({ duration, onComplete, onClose }) {
             ) : null}
           </AnimatePresence>
 
-          {/* Minimized floating chip (top-left, app remains usable) */}
+          {/* Minimized chip — MUST be clickable even though parent is pointer-events-none */}
           <AnimatePresence>
             {minimized ? (
               <motion.button
                 type="button"
                 layoutId={LAYOUT_ID}
-                className="fixed left-3 top-3 z-[10000] flex items-center gap-3 rounded-full border border-border bg-card px-3 py-2 shadow-lg"
+                className="fixed left-3 top-3 z-[10000] flex items-center gap-3 rounded-full border border-border bg-card px-3 py-2 shadow-lg pointer-events-auto"
                 initial={{ opacity: 0, scale: 0.95, x: -8, y: -8 }}
                 animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
@@ -313,9 +292,8 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                   />
                 </div>
 
-                {/* Quick close */}
                 <span
-                  className="ml-1 inline-flex items-center justify-center rounded-full p-1 hover:bg-muted/50"
+                  className="ml-1 inline-flex items-center justify-center rounded-full p-1 hover:bg-muted/50 pointer-events-auto"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
