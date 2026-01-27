@@ -15,6 +15,15 @@ export const WORKOUT_A = {
       notes: 'Reverse Pyramid Training - Start heavy, drop weight each set'
     },
     {
+      id: 'hanging_knee_raises',
+      name: 'Hanging Knee Raises',
+      sets: 3,
+      repScheme: 'Kino Reps',
+      goalReps: [12, 12, 12],
+      restTime: 60, // seconds
+      notes: 'When you can complete 3 sets of 12 reps, increase the weight. Rest for only a minue betwewn sets'
+    },
+    {
       id: 'incline_db_bench',
       name: 'Incline DB Bench',
       sets: 3,
@@ -46,7 +55,7 @@ export const WORKOUT_A = {
       name: 'Lateral Raises',
       sets: 1,
       repScheme: 'Rest-Pause',
-      goalReps: [12],
+      goalReps: [12,6,6,6],
       restTime: 15,
       notes: '12-15 reps + 3 mini-sets of 4-6 reps (15s rest)'
     },
@@ -127,7 +136,8 @@ export const EXERCISE_ALTERNATIVES = {
   db_romanian_deadlifts: ['Reverse Lunges', 'Weighted Step-Ups','Single-Leg Leg Press'],
   bulgarian_split_squats: ['Walking Lunges', 'Reverse Lunges', 'Leg Press'],
   incline_hammer_curls: ['Standing Hammer Curls', 'Rope Hammer Curls', 'Cross-Body Curls'],
-  face_pulls: ['Reverse Fly', 'Band Pull-Aparts', 'Rear Delt Fly Machine']
+  face_pulls: ['Reverse Fly', 'Band Pull-Aparts', 'Rear Delt Fly Machine'],
+  hanging_knee_raises: ['Lying Leg Raises', 'Reverse Crunches', 'Captains Chair Knee Raises', 'Ab Wheel Rollouts']
 };
 
 // Helper functions
