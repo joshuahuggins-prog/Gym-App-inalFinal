@@ -454,7 +454,8 @@ const getDefaultVideoLinks = () => ({
   bulgarian_split_squats: "https://www.youtube.com/watch?v=2C-uNgKwPLE",
   incline_hammer_curls: "https://www.youtube.com/watch?v=zC3nLlEvin4",
   face_pulls: "https://www.youtube.com/watch?v=rep-qVOkqgk",
-  hanging_knee_raises: "www.youtube.com/watch?v=BI7wrB3Crsc",
+  hanging_knee_raises: 
+"https://www.youtube.com/watch?v=BI7wrB3Crsc",
 });
 
 export const getVideoLinks = () => {
