@@ -462,7 +462,7 @@ const getDefaultVideoLinks = () => ({
   weighted_chinups: "https://www.youtube.com/watch?v=bZ6Ysk9jf6E",
   db_romanian_deadlifts: "https://www.youtube.com/watch?v=hQgFixeXdZo",
   bulgarian_split_squats: "https://www.youtube.com/watch?v=2C-uNgKwPLE",
-  incline_hammer_curls: "https://www.youtube.com/watch?v=zC3nLlEvin4",
+  incline_hammer_curls: "https://youtube.com/watch?v=dYmwchQHqEA",
   face_pulls: "https://www.youtube.com/watch?v=rep-qVOkqgk",
   hanging_knee_raises: "https://www.youtube.com/watch?v=BI7wrB3Crsc",
 });
