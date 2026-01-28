@@ -50,9 +50,23 @@ const toNumOrNull = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
+// round to 1dp (keeps integers clean too)
+const round1 = (n) => {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return n;
+  return Math.round(x * 10) / 10;
+};
+
+// Format for placeholders: always 1dp if not an integer
+const fmt1 = (n) => {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return "";
+  if (Number.isInteger(x)) return String(x);
+  return round1(x).toFixed(1);
+};
+
 /**
  * Find best (MAX) signed weight for this exercise key from ALL history.
- * For assisted: -18 is "better" than -56 because -18 > -56 (closer to 0).
  */
 const bestSignedFromHistory = (exerciseKey) => {
   const workouts = getWorkouts?.() || [];
@@ -76,9 +90,6 @@ const bestSignedFromHistory = (exerciseKey) => {
 
 /**
  * Derive a PR (weight x reps) from workout history instead of trusting personalRecords.
- * Strategy:
- * - pick the set with the highest signed weight
- * - if multiple sets share that weight, pick the one with highest reps
  */
 const bestSetFromHistory = (exerciseKey) => {
   const workouts = getWorkouts?.() || [];
@@ -137,7 +148,6 @@ const ExerciseCard = ({
   const [videoLink, setVideoLink] = useState("");
   const [sets, setSets] = useState(() => normalizeSets(exercise?.setsData, desiredSetsCount));
 
-  // Mode toggle only affects sign conversion; display stays signed.
   const [mode, setMode] = useState(() =>
     (exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted"
   );
@@ -150,7 +160,7 @@ const ExerciseCard = ({
     [exercise?.id, exercise?.name]
   );
 
-  // ✅ PR from history (prevents stale/deleted PR objects messing the card up)
+  // ✅ PR from history
   const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
 
   // Last workout weights (signed)
@@ -180,7 +190,7 @@ const ExerciseCard = ({
     return null;
   }, [exerciseKey, bestFromCurrentSets]);
 
-  // Hydrate from storage
+  // Hydrate video link + sets/notes
   useEffect(() => {
     setSets(normalizeSets(exercise?.setsData, desiredSetsCount));
     setNotes(exercise?.userNotes || "");
@@ -244,7 +254,7 @@ const ExerciseCard = ({
   const maxLabel = useMemo(() => {
     if (!Number.isFinite(overallBestSigned)) return null;
     const label = overallBestSigned < 0 ? "Best assist" : "Max";
-    return `${label}: ${overallBestSigned}`;
+    return `${label}: ${fmt1(overallBestSigned)}`;
   }, [overallBestSigned]);
 
   const showExerciseInfoNotes =
@@ -255,9 +265,7 @@ const ExerciseCard = ({
     const alts = id ? EXERCISE_ALTERNATIVES?.[id] : null;
 
     if (!alts || !alts.length) {
-      toast.message("Alternatives", {
-        description: "No alternatives saved for this exercise.",
-      });
+      toast.message("Alternatives", { description: "No alternatives saved for this exercise." });
       return;
     }
 
@@ -265,9 +273,7 @@ const ExerciseCard = ({
       description: (
         <div className="mt-1 space-y-1">
           {alts.slice(0, 8).map((a, i) => (
-            <div key={i} className="text-sm">
-              • {a}
-            </div>
+            <div key={i} className="text-sm">• {a}</div>
           ))}
           {alts.length > 8 && (
             <div className="text-xs text-muted-foreground mt-1">
@@ -291,11 +297,35 @@ const ExerciseCard = ({
 
   const hasVideo = !!videoLink;
 
-  // ==========================
-  // ✅ Suggested weights logic
-  // ==========================
-  const progressionSettings = useMemo(() => getProgressionSettings?.() || {}, []);
-  const appSettings = useMemo(() => getSettings?.() || {}, []);
+  // ==========================================
+  // ✅ Live settings sync + suggested weights
+  // ==========================================
+  // These are re-read whenever Settings page writes to localStorage
+  const [settingsVersion, setSettingsVersion] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setSettingsVersion((v) => v + 1);
+    window.addEventListener("storage", handler);
+
+    // same-tab changes (your Settings page updates localStorage in the same tab)
+    window.addEventListener("gymapp:settingsChanged", handler);
+    window.addEventListener("gymapp:progressionChanged", handler);
+
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.removeEventListener("gymapp:settingsChanged", handler);
+      window.removeEventListener("gymapp:progressionChanged", handler);
+    };
+  }, []);
+
+  const progressionSettings = useMemo(
+    () => (getProgressionSettings?.() || {}),
+    [settingsVersion]
+  );
+  const appSettings = useMemo(
+    () => (getSettings?.() || {}),
+    [settingsVersion]
+  );
 
   const globalIncrement = useMemo(() => {
     const unit = (appSettings?.weightUnit || "kg").toLowerCase();
@@ -315,12 +345,10 @@ const ExerciseCard = ({
 
     const out = new Array(count).fill(null);
 
-    // last workout weights
     const lastSets = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
     const lastWeights = lastSets.map((s) => toNumOrNull(s?.weight));
     const lastReps = lastSets.map((s) => toNumOrNull(s?.reps));
 
-    // helper: find index of heaviest (signed max) set in last workout
     const heaviestIndexLast = (() => {
       let best = -Infinity;
       let idx = -1;
@@ -335,26 +363,20 @@ const ExerciseCard = ({
       return idx;
     })();
 
-    // Determine base "top weight"
     let base = null;
 
     if (isKinoOrPause) {
-      // For Kino/Pause, base is the heaviest set from last time (even if user logged sets in descending order)
       if (heaviestIndexLast >= 0 && Number.isFinite(lastWeights[heaviestIndexLast])) {
         base = lastWeights[heaviestIndexLast];
       } else if (Number.isFinite(overallBestSigned)) {
         base = overallBestSigned;
       }
     } else {
-      // For RPT & default, base uses first set last time if present, else overall best
       const first = lastWeights?.[0];
       if (Number.isFinite(first)) base = first;
       else if (Number.isFinite(overallBestSigned)) base = overallBestSigned;
     }
 
-    // Progression check:
-    // - RPT: increase base only if Set 1 reps hit its goal
-    // - Kino/Pause: increase base only if LAST (heaviest target set) hit its goal last time (using the actual heaviest set logged)
     const shouldBumpBase = (() => {
       if (!Number.isFinite(base) || !Number.isFinite(globalIncrement) || globalIncrement === 0) return false;
 
@@ -367,10 +389,7 @@ const ExerciseCard = ({
       if (isKinoOrPause) {
         const lastGoalIndex = Math.max(0, count - 1);
         const g = toNumOrNull(goalReps?.[lastGoalIndex] ?? goalReps?.[0]);
-
-        // compare goal for "heaviest set" against the reps achieved on the heaviest set from last time
         const r = heaviestIndexLast >= 0 ? lastReps?.[heaviestIndexLast] : null;
-
         return Number.isFinite(r) && Number.isFinite(g) && r >= g;
       }
 
@@ -380,42 +399,40 @@ const ExerciseCard = ({
     if (shouldBumpBase) base = base + globalIncrement;
 
     if (!Number.isFinite(base)) {
-      // fallback to last-time per-set suggestions if any exist
       for (let i = 0; i < count; i++) {
-        if (Number.isFinite(lastWeights[i])) out[i] = lastWeights[i];
+        if (Number.isFinite(lastWeights[i])) out[i] = round1(lastWeights[i]);
       }
       return out;
     }
 
     if (isRPT) {
-      // Reverse Pyramid: highest first, then drop by percentages
       const p2 = Number(progressionSettings?.rptSet2Percentage ?? 90);
       const p3 = Number(progressionSettings?.rptSet3Percentage ?? 80);
 
-      out[0] = base;
-      if (count >= 2) out[1] = Number.isFinite(p2) ? (base * p2) / 100 : base;
-      if (count >= 3) out[2] = Number.isFinite(p3) ? (base * p3) / 100 : base;
+      out[0] = round1(base);
+      if (count >= 2) out[1] = round1(Number.isFinite(p2) ? (base * p2) / 100 : base);
+      if (count >= 3) out[2] = round1(Number.isFinite(p3) ? (base * p3) / 100 : base);
 
       for (let i = 3; i < count; i++) {
-        out[i] = Number.isFinite(lastWeights[i]) ? lastWeights[i] : out[i - 1];
+        out[i] = round1(Number.isFinite(lastWeights[i]) ? lastWeights[i] : out[i - 1]);
       }
       return out;
     }
 
     if (isKinoOrPause) {
-      // Kino/Pause: LOW -> HIGH, ending on the heaviest "base"
       if (!Number.isFinite(globalIncrement) || globalIncrement === 0) {
-        for (let i = 0; i < count; i++) out[i] = base;
+        for (let i = 0; i < count; i++) out[i] = round1(base);
         return out;
       }
 
       const start = base - globalIncrement * (count - 1);
-      for (let i = 0; i < count; i++) out[i] = start + globalIncrement * i;
+      for (let i = 0; i < count; i++) out[i] = round1(start + globalIncrement * i);
       return out;
     }
 
-    // Default: prefer last-time per set, else use base
-    for (let i = 0; i < count; i++) out[i] = Number.isFinite(lastWeights[i]) ? lastWeights[i] : base;
+    for (let i = 0; i < count; i++) {
+      out[i] = round1(Number.isFinite(lastWeights[i]) ? lastWeights[i] : base);
+    }
     return out;
   }, [
     desiredSetsCount,
@@ -429,7 +446,7 @@ const ExerciseCard = ({
 
   const suggestedWeightForSet = (setIndex) => {
     const ww = suggestedWeights?.[setIndex];
-    if (Number.isFinite(ww)) return String(ww);
+    if (Number.isFinite(ww)) return fmt1(ww);
     return mode === "assisted" ? "Assist" : "Weight";
   };
 
@@ -476,7 +493,7 @@ const ExerciseCard = ({
 
               {pr?.weight != null && pr?.reps != null && (
                 <span className="text-foreground font-semibold">
-                  PR: {pr.weight} × {pr.reps}
+                  PR: {fmt1(pr.weight)} × {pr.reps}
                 </span>
               )}
 
@@ -538,9 +555,7 @@ const ExerciseCard = ({
               data-no-toggle
               className={hasVideo ? "hover:bg-muted/40" : "text-muted-foreground"}
             >
-              <Video
-                className={hasVideo ? "w-4 h-4 text-[hsl(var(--accent-strong))]" : "w-4 h-4"}
-              />
+              <Video className={hasVideo ? "w-4 h-4 text-[hsl(var(--accent-strong))]" : "w-4 h-4"} />
             </Button>
 
             {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -575,6 +590,8 @@ const ExerciseCard = ({
 
                 <Input
                   type="number"
+                  inputMode="decimal"
+                  step="0.1"
                   value={s.weight}
                   placeholder={suggestedWeightForSet(i)}
                   onChange={(e) => {
