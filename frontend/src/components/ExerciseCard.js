@@ -8,7 +8,6 @@ import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import {
   getVideoLinks,
-  getPersonalRecords,
   getWorkouts,
   getProgressionSettings,
   getSettings,
@@ -52,9 +51,8 @@ const toNumOrNull = (v) => {
 };
 
 /**
- * Match ProgressPage behaviour: find best (MAX) signed weight for this exercise key from history.
- * - For assisted dips: -18 is "better" than -56 because -18 > -56 (closer to 0)
- * - For weighted: 56 > 40 etc
+ * Find best (MAX) signed weight for this exercise key from ALL history.
+ * For assisted: -18 is "better" than -56 because -18 > -56 (closer to 0).
  */
 const bestSignedFromHistory = (exerciseKey) => {
   const workouts = getWorkouts?.() || [];
@@ -74,6 +72,42 @@ const bestSignedFromHistory = (exerciseKey) => {
   });
 
   return best === -Infinity ? null : best;
+};
+
+/**
+ * Derive a PR (weight x reps) from workout history instead of trusting personalRecords.
+ * Strategy:
+ * - pick the set with the highest signed weight
+ * - if multiple sets share that weight, pick the one with highest reps
+ */
+const bestSetFromHistory = (exerciseKey) => {
+  const workouts = getWorkouts?.() || [];
+  let bestW = -Infinity;
+  let bestR = -Infinity;
+  let bestDate = null;
+
+  workouts.forEach((w) => {
+    const wDate = w?.date || null;
+    (w?.exercises || []).forEach((ex) => {
+      const key = normKey(ex?.id || ex?.name);
+      if (!key || key !== exerciseKey) return;
+
+      (ex?.sets || []).forEach((s) => {
+        const ww = toNumOrNull(s?.weight);
+        const rr = toNumOrNull(s?.reps);
+        if (!Number.isFinite(ww) || !Number.isFinite(rr)) return;
+
+        if (ww > bestW || (ww === bestW && rr > bestR)) {
+          bestW = ww;
+          bestR = rr;
+          bestDate = wDate;
+        }
+      });
+    });
+  });
+
+  if (bestW === -Infinity) return null;
+  return { weight: bestW, reps: bestR, date: bestDate };
 };
 
 const ExerciseCard = ({
@@ -103,7 +137,7 @@ const ExerciseCard = ({
   const [videoLink, setVideoLink] = useState("");
   const [sets, setSets] = useState(() => normalizeSets(exercise?.setsData, desiredSetsCount));
 
-  // Mode is still useful for quick toggle converting sign, but DISPLAY always shows the signed value.
+  // Mode toggle only affects sign conversion; display stays signed.
   const [mode, setMode] = useState(() =>
     (exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted"
   );
@@ -111,15 +145,15 @@ const ExerciseCard = ({
   const userChoseModeRef = useRef(false);
   const lastExerciseIdRef = useRef(exercise?.id || "");
 
-  // PRs: keep sign (no abs)
-  const pr = useMemo(() => {
-    const prs = getPersonalRecords?.() || {};
-    return prs[exercise?.id] || null;
-  }, [exercise?.id]);
+  const exerciseKey = useMemo(
+    () => normKey(exercise?.id || exercise?.name),
+    [exercise?.id, exercise?.name]
+  );
 
-  const exerciseKey = useMemo(() => normKey(exercise?.id || exercise?.name), [exercise?.id, exercise?.name]);
+  // ✅ PR from history (prevents stale/deleted PR objects messing the card up)
+  const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
 
-  // Last workout suggestions (signed)
+  // Last workout weights (signed)
   const lastTimeSuggestions = useMemo(() => {
     const arr = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
     return arr.map((s) => toNumOrNull(s?.weight));
@@ -136,18 +170,15 @@ const ExerciseCard = ({
     return best === -Infinity ? null : best;
   }, [sets]);
 
-  // ✅ Source of truth: history (same as ProgressPage), then PR, then current
+  // ✅ Source of truth: history best, then current best
   const overallBestSigned = useMemo(() => {
     const fromHistory = bestSignedFromHistory(exerciseKey);
     if (Number.isFinite(fromHistory)) return fromHistory;
 
-    const prW = toNumOrNull(pr?.weight);
-    if (Number.isFinite(prW)) return prW;
-
     if (Number.isFinite(bestFromCurrentSets)) return bestFromCurrentSets;
 
     return null;
-  }, [exerciseKey, pr, bestFromCurrentSets]);
+  }, [exerciseKey, bestFromCurrentSets]);
 
   // Hydrate from storage
   useEffect(() => {
@@ -205,7 +236,10 @@ const ExerciseCard = ({
 
   const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
 
-  const isExerciseComplete = useMemo(() => sets.length > 0 && sets.every((s) => !!s.completed), [sets]);
+  const isExerciseComplete = useMemo(
+    () => sets.length > 0 && sets.every((s) => !!s.completed),
+    [sets]
+  );
 
   const maxLabel = useMemo(() => {
     if (!Number.isFinite(overallBestSigned)) return null;
@@ -213,7 +247,8 @@ const ExerciseCard = ({
     return `${label}: ${overallBestSigned}`;
   }, [overallBestSigned]);
 
-  const showExerciseInfoNotes = exercise?.notes && String(exercise.notes).trim().length > 0;
+  const showExerciseInfoNotes =
+    exercise?.notes && String(exercise.notes).trim().length > 0;
 
   const showAlternativesToast = () => {
     const id = exercise?.id;
@@ -235,7 +270,9 @@ const ExerciseCard = ({
             </div>
           ))}
           {alts.length > 8 && (
-            <div className="text-xs text-muted-foreground mt-1">+{alts.length - 8} more…</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              +{alts.length - 8} more…
+            </div>
           )}
         </div>
       ),
@@ -278,41 +315,74 @@ const ExerciseCard = ({
 
     const out = new Array(count).fill(null);
 
-    // Prefer last time weights if they exist (signed)
-    const last = (lastWorkoutData?.sets || []).map((s) => toNumOrNull(s?.weight));
+    // last workout weights
+    const lastSets = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
+    const lastWeights = lastSets.map((s) => toNumOrNull(s?.weight));
+    const lastReps = lastSets.map((s) => toNumOrNull(s?.reps));
 
-    // Base ("max") weight source
+    // helper: find index of heaviest (signed max) set in last workout
+    const heaviestIndexLast = (() => {
+      let best = -Infinity;
+      let idx = -1;
+      for (let i = 0; i < lastWeights.length; i++) {
+        const w = lastWeights[i];
+        if (!Number.isFinite(w)) continue;
+        if (w > best) {
+          best = w;
+          idx = i;
+        }
+      }
+      return idx;
+    })();
+
+    // Determine base "top weight"
     let base = null;
 
-    // Anchor set for progression check:
-    // - RPT: Set 1
-    // - Kino/Pause: last set
-    const anchorIndex = isRPT ? 0 : isKinoOrPause ? Math.max(0, count - 1) : 0;
-    const lastAnchor = lastWorkoutData?.sets?.[anchorIndex];
-    const lastAnchorW = toNumOrNull(lastAnchor?.weight);
-    const lastAnchorR = toNumOrNull(lastAnchor?.reps);
-    const goal = toNumOrNull(goalReps?.[anchorIndex] ?? goalReps?.[0]);
-
-    if (Number.isFinite(lastAnchorW)) base = lastAnchorW;
-    else if (Number.isFinite(overallBestSigned)) base = overallBestSigned;
-
-    // Progression: if last anchor hit goal reps, bump base by global increment
-    if (
-      Number.isFinite(base) &&
-      Number.isFinite(lastAnchorW) &&
-      Number.isFinite(lastAnchorR) &&
-      Number.isFinite(goal) &&
-      lastAnchorR >= goal &&
-      Number.isFinite(globalIncrement) &&
-      globalIncrement !== 0
-    ) {
-      base = base + globalIncrement;
+    if (isKinoOrPause) {
+      // For Kino/Pause, base is the heaviest set from last time (even if user logged sets in descending order)
+      if (heaviestIndexLast >= 0 && Number.isFinite(lastWeights[heaviestIndexLast])) {
+        base = lastWeights[heaviestIndexLast];
+      } else if (Number.isFinite(overallBestSigned)) {
+        base = overallBestSigned;
+      }
+    } else {
+      // For RPT & default, base uses first set last time if present, else overall best
+      const first = lastWeights?.[0];
+      if (Number.isFinite(first)) base = first;
+      else if (Number.isFinite(overallBestSigned)) base = overallBestSigned;
     }
 
+    // Progression check:
+    // - RPT: increase base only if Set 1 reps hit its goal
+    // - Kino/Pause: increase base only if LAST (heaviest target set) hit its goal last time (using the actual heaviest set logged)
+    const shouldBumpBase = (() => {
+      if (!Number.isFinite(base) || !Number.isFinite(globalIncrement) || globalIncrement === 0) return false;
+
+      if (isRPT) {
+        const r = lastReps?.[0];
+        const g = toNumOrNull(goalReps?.[0] ?? goalReps?.[0]);
+        return Number.isFinite(r) && Number.isFinite(g) && r >= g;
+      }
+
+      if (isKinoOrPause) {
+        const lastGoalIndex = Math.max(0, count - 1);
+        const g = toNumOrNull(goalReps?.[lastGoalIndex] ?? goalReps?.[0]);
+
+        // compare goal for "heaviest set" against the reps achieved on the heaviest set from last time
+        const r = heaviestIndexLast >= 0 ? lastReps?.[heaviestIndexLast] : null;
+
+        return Number.isFinite(r) && Number.isFinite(g) && r >= g;
+      }
+
+      return false;
+    })();
+
+    if (shouldBumpBase) base = base + globalIncrement;
+
     if (!Number.isFinite(base)) {
-      // fall back to last time per-set if we have it
+      // fallback to last-time per-set suggestions if any exist
       for (let i = 0; i < count; i++) {
-        if (Number.isFinite(last[i])) out[i] = last[i];
+        if (Number.isFinite(lastWeights[i])) out[i] = lastWeights[i];
       }
       return out;
     }
@@ -326,16 +396,14 @@ const ExerciseCard = ({
       if (count >= 2) out[1] = Number.isFinite(p2) ? (base * p2) / 100 : base;
       if (count >= 3) out[2] = Number.isFinite(p3) ? (base * p3) / 100 : base;
 
-      // For 4+ sets: prefer last-time if available; otherwise keep dropping flat
       for (let i = 3; i < count; i++) {
-        out[i] = Number.isFinite(last[i]) ? last[i] : out[i - 1];
+        out[i] = Number.isFinite(lastWeights[i]) ? lastWeights[i] : out[i - 1];
       }
-
       return out;
     }
 
     if (isKinoOrPause) {
-      // Kino/Pause: lowest first then increase by global increment up to base
+      // Kino/Pause: LOW -> HIGH, ending on the heaviest "base"
       if (!Number.isFinite(globalIncrement) || globalIncrement === 0) {
         for (let i = 0; i < count; i++) out[i] = base;
         return out;
@@ -347,9 +415,7 @@ const ExerciseCard = ({
     }
 
     // Default: prefer last-time per set, else use base
-    for (let i = 0; i < count; i++) {
-      out[i] = Number.isFinite(last[i]) ? last[i] : base;
-    }
+    for (let i = 0; i < count; i++) out[i] = Number.isFinite(lastWeights[i]) ? lastWeights[i] : base;
     return out;
   }, [
     desiredSetsCount,
@@ -361,7 +427,6 @@ const ExerciseCard = ({
     progressionSettings,
   ]);
 
-  // ✅ Suggested placeholder for weight input (SIGNED)
   const suggestedWeightForSet = (setIndex) => {
     const ww = suggestedWeights?.[setIndex];
     if (Number.isFinite(ww)) return String(ww);
@@ -425,7 +490,9 @@ const ExerciseCard = ({
                 type="button"
                 data-no-toggle
                 className={`px-2 py-1 text-[11px] ${
-                  mode === "weighted" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-muted/40"
+                  mode === "weighted"
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:bg-muted/40"
                 }`}
                 onClick={(e) => {
                   e.preventDefault();
@@ -506,7 +573,6 @@ const ExerciseCard = ({
               >
                 <span className="text-xs text-muted-foreground">Set {i + 1}</span>
 
-                {/* ✅ weight input shows SIGNED weight (negative stays negative) */}
                 <Input
                   type="number"
                   value={s.weight}
