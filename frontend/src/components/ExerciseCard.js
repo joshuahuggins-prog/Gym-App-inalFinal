@@ -1,21 +1,18 @@
 // src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ChevronUp,
-  Timer,
-  Video,
-  Shuffle,
-  Plus,
-  Minus,
-  Check,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Timer, Video, Shuffle, Plus, Minus, Check } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
-import { getVideoLinks, getPersonalRecords, getWorkouts } from "../utils/storage";
+import {
+  getVideoLinks,
+  getPersonalRecords,
+  getWorkouts,
+  getProgressionSettings,
+  getSettings,
+} from "../utils/storage";
 import { EXERCISE_ALTERNATIVES } from "../data/workoutData";
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
@@ -120,10 +117,7 @@ const ExerciseCard = ({
     return prs[exercise?.id] || null;
   }, [exercise?.id]);
 
-  const exerciseKey = useMemo(
-    () => normKey(exercise?.id || exercise?.name),
-    [exercise?.id, exercise?.name]
-  );
+  const exerciseKey = useMemo(() => normKey(exercise?.id || exercise?.name), [exercise?.id, exercise?.name]);
 
   // Last workout suggestions (signed)
   const lastTimeSuggestions = useMemo(() => {
@@ -211,10 +205,7 @@ const ExerciseCard = ({
 
   const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
 
-  const isExerciseComplete = useMemo(
-    () => sets.length > 0 && sets.every((s) => !!s.completed),
-    [sets]
-  );
+  const isExerciseComplete = useMemo(() => sets.length > 0 && sets.every((s) => !!s.completed), [sets]);
 
   const maxLabel = useMemo(() => {
     if (!Number.isFinite(overallBestSigned)) return null;
@@ -222,8 +213,7 @@ const ExerciseCard = ({
     return `${label}: ${overallBestSigned}`;
   }, [overallBestSigned]);
 
-  const showExerciseInfoNotes =
-    exercise?.notes && String(exercise.notes).trim().length > 0;
+  const showExerciseInfoNotes = exercise?.notes && String(exercise.notes).trim().length > 0;
 
   const showAlternativesToast = () => {
     const id = exercise?.id;
@@ -245,9 +235,7 @@ const ExerciseCard = ({
             </div>
           ))}
           {alts.length > 8 && (
-            <div className="text-xs text-muted-foreground mt-1">
-              +{alts.length - 8} more…
-            </div>
+            <div className="text-xs text-muted-foreground mt-1">+{alts.length - 8} more…</div>
           )}
         </div>
       ),
@@ -266,12 +254,117 @@ const ExerciseCard = ({
 
   const hasVideo = !!videoLink;
 
+  // ==========================
+  // ✅ Suggested weights logic
+  // ==========================
+  const progressionSettings = useMemo(() => getProgressionSettings?.() || {}, []);
+  const appSettings = useMemo(() => getSettings?.() || {}, []);
+
+  const globalIncrement = useMemo(() => {
+    const unit = (appSettings?.weightUnit || "kg").toLowerCase();
+    const inc =
+      unit === "lbs"
+        ? Number(progressionSettings?.globalIncrementLbs)
+        : Number(progressionSettings?.globalIncrementKg);
+    return Number.isFinite(inc) ? inc : 0;
+  }, [appSettings?.weightUnit, progressionSettings]);
+
+  const suggestedWeights = useMemo(() => {
+    const count = desiredSetsCount;
+    const schemeRaw = String(exercise?.repScheme || "").trim();
+    const scheme = schemeRaw.toLowerCase();
+    const isRPT = scheme === "rpt";
+    const isKinoOrPause = scheme.includes("kino") || scheme.includes("pause");
+
+    const out = new Array(count).fill(null);
+
+    // Prefer last time weights if they exist (signed)
+    const last = (lastWorkoutData?.sets || []).map((s) => toNumOrNull(s?.weight));
+
+    // Base ("max") weight source
+    let base = null;
+
+    // Anchor set for progression check:
+    // - RPT: Set 1
+    // - Kino/Pause: last set
+    const anchorIndex = isRPT ? 0 : isKinoOrPause ? Math.max(0, count - 1) : 0;
+    const lastAnchor = lastWorkoutData?.sets?.[anchorIndex];
+    const lastAnchorW = toNumOrNull(lastAnchor?.weight);
+    const lastAnchorR = toNumOrNull(lastAnchor?.reps);
+    const goal = toNumOrNull(goalReps?.[anchorIndex] ?? goalReps?.[0]);
+
+    if (Number.isFinite(lastAnchorW)) base = lastAnchorW;
+    else if (Number.isFinite(overallBestSigned)) base = overallBestSigned;
+
+    // Progression: if last anchor hit goal reps, bump base by global increment
+    if (
+      Number.isFinite(base) &&
+      Number.isFinite(lastAnchorW) &&
+      Number.isFinite(lastAnchorR) &&
+      Number.isFinite(goal) &&
+      lastAnchorR >= goal &&
+      Number.isFinite(globalIncrement) &&
+      globalIncrement !== 0
+    ) {
+      base = base + globalIncrement;
+    }
+
+    if (!Number.isFinite(base)) {
+      // fall back to last time per-set if we have it
+      for (let i = 0; i < count; i++) {
+        if (Number.isFinite(last[i])) out[i] = last[i];
+      }
+      return out;
+    }
+
+    if (isRPT) {
+      // Reverse Pyramid: highest first, then drop by percentages
+      const p2 = Number(progressionSettings?.rptSet2Percentage ?? 90);
+      const p3 = Number(progressionSettings?.rptSet3Percentage ?? 80);
+
+      out[0] = base;
+      if (count >= 2) out[1] = Number.isFinite(p2) ? (base * p2) / 100 : base;
+      if (count >= 3) out[2] = Number.isFinite(p3) ? (base * p3) / 100 : base;
+
+      // For 4+ sets: prefer last-time if available; otherwise keep dropping flat
+      for (let i = 3; i < count; i++) {
+        out[i] = Number.isFinite(last[i]) ? last[i] : out[i - 1];
+      }
+
+      return out;
+    }
+
+    if (isKinoOrPause) {
+      // Kino/Pause: lowest first then increase by global increment up to base
+      if (!Number.isFinite(globalIncrement) || globalIncrement === 0) {
+        for (let i = 0; i < count; i++) out[i] = base;
+        return out;
+      }
+
+      const start = base - globalIncrement * (count - 1);
+      for (let i = 0; i < count; i++) out[i] = start + globalIncrement * i;
+      return out;
+    }
+
+    // Default: prefer last-time per set, else use base
+    for (let i = 0; i < count; i++) {
+      out[i] = Number.isFinite(last[i]) ? last[i] : base;
+    }
+    return out;
+  }, [
+    desiredSetsCount,
+    exercise?.repScheme,
+    goalReps,
+    lastWorkoutData,
+    overallBestSigned,
+    globalIncrement,
+    progressionSettings,
+  ]);
+
   // ✅ Suggested placeholder for weight input (SIGNED)
-  // Prefer last time same set index, else fallback to overall best (signed)
   const suggestedWeightForSet = (setIndex) => {
-    const bySet = lastTimeSuggestions?.[setIndex];
-    if (Number.isFinite(bySet)) return String(bySet);
-    if (Number.isFinite(overallBestSigned)) return String(overallBestSigned);
+    const ww = suggestedWeights?.[setIndex];
+    if (Number.isFinite(ww)) return String(ww);
     return mode === "assisted" ? "Assist" : "Weight";
   };
 
@@ -303,9 +396,7 @@ const ExerciseCard = ({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold truncate text-foreground">
-              {exercise?.name || "Exercise"}
-            </h3>
+            <h3 className="font-bold truncate text-foreground">{exercise?.name || "Exercise"}</h3>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
@@ -325,23 +416,16 @@ const ExerciseCard = ({
               )}
 
               {isExerciseComplete && (
-                <Badge className="bg-primary/20 text-primary border-primary/40">
-                  Completed
-                </Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/40">Completed</Badge>
               )}
             </div>
 
-            <div
-              className="mt-2 inline-flex border border-border rounded-md overflow-hidden"
-              data-no-toggle
-            >
+            <div className="mt-2 inline-flex border border-border rounded-md overflow-hidden" data-no-toggle>
               <button
                 type="button"
                 data-no-toggle
                 className={`px-2 py-1 text-[11px] ${
-                  mode === "weighted"
-                    ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground hover:bg-muted/40"
+                  mode === "weighted" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-muted/40"
                 }`}
                 onClick={(e) => {
                   e.preventDefault();
@@ -388,11 +472,7 @@ const ExerciseCard = ({
               className={hasVideo ? "hover:bg-muted/40" : "text-muted-foreground"}
             >
               <Video
-                className={
-                  hasVideo
-                    ? "w-4 h-4 text-[hsl(var(--accent-strong))]"
-                    : "w-4 h-4"
-                }
+                className={hasVideo ? "w-4 h-4 text-[hsl(var(--accent-strong))]" : "w-4 h-4"}
               />
             </Button>
 
@@ -500,9 +580,7 @@ const ExerciseCard = ({
 
           {showExerciseInfoNotes && (
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-              <div className="text-[11px] font-semibold text-foreground mb-1">
-                Exercise notes
-              </div>
+              <div className="text-[11px] font-semibold text-foreground mb-1">Exercise notes</div>
               <div className="whitespace-pre-wrap">{String(exercise.notes).trim()}</div>
             </div>
           )}
