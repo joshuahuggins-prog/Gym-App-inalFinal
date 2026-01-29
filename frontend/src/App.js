@@ -1,20 +1,4 @@
 // src/App.js
-import useUpsideDown from "./hooks/useUpsideDown";
-
-function App() {
-  const upsideDown = useUpsideDown();
-
-  return (
-    <div
-      className={`min-h-screen transition-transform duration-300 ease-out ${
-        upsideDown ? "rotate-180" : ""
-      }`}
-    >
-      {/* your existing app */}
-    </div>
-  );
-}
-
 import React, { useState } from "react";
 import {
   Home,
@@ -38,7 +22,11 @@ import EditWorkoutPage from "./pages/EditWorkoutPage";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
 
+import useUpsideDown from "./hooks/useUpsideDown";
+
 const App = () => {
+  const upsideDown = useUpsideDown();
+
   const [currentPage, setCurrentPage] = useState("home");
 
   // Edit workout page state
@@ -75,8 +63,9 @@ const App = () => {
 
       case "edit-workout":
         // Safety: if somehow opened without an id, bounce to history
-        if (!editingWorkoutId)
+        if (!editingWorkoutId) {
           return <HistoryPage onEditWorkout={openEditWorkout} />;
+        }
         return (
           <EditWorkoutPage
             workoutId={editingWorkoutId}
@@ -85,11 +74,7 @@ const App = () => {
         );
 
       case "progress":
-        return <ProgressPage />; // ✅ FIX: this was StatsPage
-
-      // Optional: keep StatsPage available if you still want it later
-      case "stats":
-        return <StatsPage />;
+        return <ProgressPage />;
 
       case "programmes":
         return <ProgrammesPage />;
@@ -110,65 +95,72 @@ const App = () => {
 
   return (
     <SettingsProvider>
-      <div className="flex flex-col h-full bg-background text-foreground">
-        {/* Main Content */}
-        <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
-          {renderPage()}
-        </main>
+      {/* ✅ Upside-down wrapper: rotates whole UI when angle ~180 */}
+      <div
+        className={`min-h-screen transform-gpu transition-transform duration-350 ease-ui-out ${
+          upsideDown ? "rotate-180" : ""
+        }`}
+      >
+        <div className="flex flex-col h-full bg-background text-foreground">
+          {/* Main Content */}
+          <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
+            {renderPage()}
+          </main>
 
-        {/* Bottom Navigation (hidden while editing a workout) */}
-        {!isEditMode && (
-          <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-            <div className="overflow-x-auto scrollbar-hide">
-              <div className="flex items-center h-16 px-2 min-w-max">
-                <NavButton
-                  icon={<Home className="w-5 h-5" />}
-                  label="Today"
-                  active={currentPage === "home"}
-                  onClick={() => handleNavigate("home")}
-                />
-                <NavButton
-                  icon={<History className="w-5 h-5" />}
-                  label="History"
-                  active={currentPage === "history"}
-                  onClick={() => handleNavigate("history")}
-                />
-                <NavButton
-                  icon={<TrendingUp className="w-5 h-5" />}
-                  label="Progress"
-                  active={currentPage === "progress"}
-                  onClick={() => handleNavigate("progress")}
-                />
-                <NavButton
-                  icon={<FileText className="w-5 h-5" />}
-                  label="Programmes"
-                  active={currentPage === "programmes"}
-                  onClick={() => handleNavigate("programmes")}
-                />
-                <NavButton
-                  icon={<Dumbbell className="w-5 h-5" />}
-                  label="Exercises"
-                  active={currentPage === "exercises"}
-                  onClick={() => handleNavigate("exercises")}
-                />
-                <NavButton
-                  icon={<Settings className="w-5 h-5" />}
-                  label="Settings"
-                  active={currentPage === "settings"}
-                  onClick={() => handleNavigate("settings")}
-                />
-                <NavButton
-                  icon={<Download className="w-5 h-5" />}
-                  label="Data"
-                  active={currentPage === "import-export"}
-                  onClick={() => handleNavigate("import-export")}
-                />
+          {/* Bottom Navigation (hidden while editing a workout) */}
+          {!isEditMode && (
+            <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex items-center h-16 px-2 min-w-max">
+                  <NavButton
+                    icon={<Home className="w-5 h-5" />}
+                    label="Today"
+                    active={currentPage === "home"}
+                    onClick={() => handleNavigate("home")}
+                  />
+                  <NavButton
+                    icon={<History className="w-5 h-5" />}
+                    label="History"
+                    active={currentPage === "history"}
+                    onClick={() => handleNavigate("history")}
+                  />
+                  <NavButton
+                    icon={<TrendingUp className="w-5 h-5" />}
+                    label="Progress"
+                    active={currentPage === "progress"}
+                    onClick={() => handleNavigate("progress")}
+                  />
+                  <NavButton
+                    icon={<FileText className="w-5 h-5" />}
+                    label="Programmes"
+                    active={currentPage === "programmes"}
+                    onClick={() => handleNavigate("programmes")}
+                  />
+                  <NavButton
+                    icon={<Dumbbell className="w-5 h-5" />}
+                    label="Exercises"
+                    active={currentPage === "exercises"}
+                    onClick={() => handleNavigate("exercises")}
+                  />
+                  <NavButton
+                    icon={<Settings className="w-5 h-5" />}
+                    label="Settings"
+                    active={currentPage === "settings"}
+                    onClick={() => handleNavigate("settings")}
+                  />
+                  <NavButton
+                    icon={<Download className="w-5 h-5" />}
+                    label="Data"
+                    active={currentPage === "import-export"}
+                    onClick={() => handleNavigate("import-export")}
+                  />
+                </div>
               </div>
-            </div>
-          </nav>
-        )}
+            </nav>
+          )}
 
-        <Toaster />
+          <Toaster />
+        </div>
       </div>
     </SettingsProvider>
   );
