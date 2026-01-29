@@ -40,14 +40,14 @@ import {
   setWorkoutPatternIndex,
   resetWithBackup,
 
-  // ✅ new reset helpers (from storage.js)
+  // ✅ reset helpers (from storage.js)
   resetSettingsToDefaults,
   resetProgrammesToDefaults,
   resetExercisesToDefaults,
   resetAppToBlank,
 } from "../utils/storage";
 
-// ✅ App version display (CRA/CRACO supports importing package.json)
+// ✅ App version display
 import pkg from "../../package.json";
 
 const numberOrFallback = (value, fallback) => {
@@ -62,17 +62,14 @@ const makeChallenge = () => {
   const ops = ["+", "-", "*"];
   const op = ops[randInt(0, ops.length - 1)];
 
-  // single/double digits
   let a = randInt(1, 99);
   let b = randInt(1, 99);
 
   if (op === "*") {
-    // don't use digits over 12 in *
     a = randInt(1, 12);
     b = randInt(1, 12);
   }
 
-  // keep subtraction non-negative (nicer UX)
   if (op === "-" && b > a) [a, b] = [b, a];
 
   let result = 0;
@@ -80,10 +77,7 @@ const makeChallenge = () => {
   if (op === "-") result = a - b;
   if (op === "*") result = a * b;
 
-  return {
-    text: `${a} ${op} ${b}`,
-    result,
-  };
+  return { text: `${a} ${op} ${b}`, result };
 };
 
 export default function SettingsPage() {
@@ -105,9 +99,15 @@ export default function SettingsPage() {
     return getUsableProgrammes().map((p) => String(p.type).toUpperCase());
   }, []);
 
-  useEffect(() => {
+  // Hydrate page state from storage
+  const hydrateFromStorage = () => {
     setProgressionSettings(getProgressionSettings());
     setWorkoutPatternState(getWorkoutPattern());
+  };
+
+  useEffect(() => {
+    hydrateFromStorage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSaveProgression = () => {
@@ -154,7 +154,11 @@ export default function SettingsPage() {
     const res = await resetWithBackup({ merge: false });
     if (!res?.success) {
       alert(res?.error || "Update failed");
+      return;
     }
+
+    toast.success("App data rebuilt");
+    setTimeout(() => window.location.reload(), 650);
   };
 
   // ==========================
@@ -186,12 +190,16 @@ export default function SettingsPage() {
     setChallenge(makeChallenge());
   };
 
-  // ✅ show toast, then refresh so everything re-hydrates from storage defaults
+  // ✅ show toast, then force a real reload
   const toastAndReload = (message) => {
-    toast.success(message);
-    setTimeout(() => {
-      window.location.reload();
-    }, 650);
+    toast.success(message, { duration: 1200 });
+    // Give Sonner a beat to render before hard refresh.
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        // This is slightly more "certain" than reload on some PWAs
+        window.location.href = window.location.href;
+      }, 700);
+    });
   };
 
   const runSelectedReset = async () => {
@@ -207,7 +215,6 @@ export default function SettingsPage() {
       return;
     }
 
-    // extra friendly warning for full reset
     if (resetMode === "full") {
       const ok = window.confirm(
         "Full app reset will clear your history and restore the app to a fresh default state.\n\nIf you want to keep history, export a backup first.\n\nContinue?"
