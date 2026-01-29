@@ -1,5 +1,4 @@
 // src/pages/SettingsPage.js
-
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -10,6 +9,9 @@ import {
   Palette,
   Sun,
   Moon,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
 } from "lucide-react";
 
 import { Button } from "../components/ui/button";
@@ -37,6 +39,12 @@ import {
   getUsableProgrammes,
   setWorkoutPatternIndex,
   resetWithBackup,
+
+  // ✅ new reset helpers
+  resetSettingsToDefaults,
+  resetProgrammesToDefaults,
+  resetExercisesToDefaults,
+  resetAppToBlank,
 } from "../utils/storage";
 
 // ✅ App version display (CRA/CRACO supports importing package.json)
@@ -45,6 +53,37 @@ import pkg from "../../package.json";
 const numberOrFallback = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+};
+
+// Math challenge generator
+const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+const makeChallenge = () => {
+  const ops = ["+", "-", "*"];
+  const op = ops[randInt(0, ops.length - 1)];
+
+  // single/double digits
+  let a = randInt(1, 99);
+  let b = randInt(1, 99);
+
+  if (op === "*") {
+    // don't use digits over 12 in *
+    a = randInt(1, 12);
+    b = randInt(1, 12);
+  }
+
+  // keep subtraction non-negative (nicer UX)
+  if (op === "-" && b > a) [a, b] = [b, a];
+
+  let result = 0;
+  if (op === "+") result = a + b;
+  if (op === "-") result = a - b;
+  if (op === "*") result = a * b;
+
+  return {
+    text: `${a} ${op} ${b}`,
+    result,
+  };
 };
 
 export default function SettingsPage() {
@@ -108,13 +147,95 @@ export default function SettingsPage() {
 
   const handleForceUpdate = async () => {
     const ok = window.confirm(
-      "Force Update will:\n\n1) Back up your data\n2) Reset local app storage\n3) Restore your backup\n\nThis is safe for history, but please export a manual backup first (Data tab), just in case.\n\nContinue?"
+      "Update app data (keep data) will:\n\n1) Back up your data\n2) Rebuild local storage\n3) Restore your backup\n\nThis normally keeps all history.\nWe still recommend exporting a manual backup first (Data tab), just in case.\n\nContinue?"
     );
     if (!ok) return;
 
     const res = await resetWithBackup({ merge: false });
     if (!res?.success) {
-      alert(res?.error || "Force Update failed");
+      alert(res?.error || "Update failed");
+    }
+  };
+
+  // ==========================
+  // Reset App UI state
+  // ==========================
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetMode, setResetMode] = useState(""); // "settings" | "programmes" | "exercises" | "full"
+  const [challenge, setChallenge] = useState(() => makeChallenge());
+  const [answer, setAnswer] = useState("");
+
+  const resetLabel = useMemo(() => {
+    if (resetMode === "settings") return "Reset settings to default";
+    if (resetMode === "programmes") return "Reset programmes to default";
+    if (resetMode === "exercises") return "Reset exercises to default";
+    if (resetMode === "full") return "Full app reset (blank)";
+    return "";
+  }, [resetMode]);
+
+  const closeResetBox = () => {
+    setResetOpen(false);
+    setResetMode("");
+    setAnswer("");
+    setChallenge(makeChallenge());
+  };
+
+  const handlePickResetMode = (v) => {
+    setResetMode(v);
+    setAnswer("");
+    setChallenge(makeChallenge());
+  };
+
+  const runSelectedReset = async () => {
+    if (!resetMode) {
+      toast.error("Choose a reset option first.");
+      return;
+    }
+
+    const userAnswer = Number(String(answer).trim());
+    if (!Number.isFinite(userAnswer) || userAnswer !== challenge.result) {
+      toast.error("Wrong answer.");
+      closeResetBox();
+      return;
+    }
+
+    // extra friendly warning for full reset
+    if (resetMode === "full") {
+      const ok = window.confirm(
+        "Full app reset will clear your history and restore the app to a fresh default state.\n\nIf you want to keep history, export a backup first.\n\nContinue?"
+      );
+      if (!ok) {
+        closeResetBox();
+        return;
+      }
+    }
+
+    try {
+      if (resetMode === "settings") {
+        resetSettingsToDefaults();
+        toast.success("Settings reset to default");
+      }
+
+      if (resetMode === "programmes") {
+        resetProgrammesToDefaults();
+        toast.success("Programmes reset to default");
+      }
+
+      if (resetMode === "exercises") {
+        resetExercisesToDefaults();
+        toast.success("Exercises reset to default");
+      }
+
+      if (resetMode === "full") {
+        const res = await resetAppToBlank();
+        if (!res?.success) throw new Error(res?.error || "Reset failed");
+        toast.success("App reset complete");
+      }
+
+      closeResetBox();
+    } catch (e) {
+      toast.error(e?.message || "Reset failed");
+      closeResetBox();
     }
   };
 
@@ -298,20 +419,94 @@ export default function SettingsPage() {
         <Button onClick={handleSavePattern}>Save pattern</Button>
       </section>
 
-      {/* ===== Force Update ===== */}
-      <section className="rounded-xl border border-red-500/40 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-red-500">
+      {/* ===== Reset App (NEW) ===== */}
+      <section className="rounded-xl border border-border p-4 space-y-3 bg-card/30">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between text-left"
+          onClick={() => setResetOpen((v) => !v)}
+        >
+          <div className="flex items-center gap-2">
+            <RotateCcw className="h-5 w-5" />
+            <h2 className="font-semibold">Reset app</h2>
+          </div>
+          {resetOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+        </button>
+
+        <p className="text-sm text-muted-foreground">
+          Restore parts of the app back to the default version from the app code.
+        </p>
+
+        {resetOpen && (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label className="text-sm">Choose reset type</Label>
+              <Select value={resetMode} onValueChange={handlePickResetMode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick one..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="settings">Settings reset (defaults)</SelectItem>
+                  <SelectItem value="programmes">Programme reset (defaults)</SelectItem>
+                  <SelectItem value="exercises">Exercise reset (defaults)</SelectItem>
+                  <SelectItem value="full">Full app reset (blank)</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {resetMode === "full" && (
+                <div className="text-xs text-muted-foreground">
+                  Full reset clears history and restores a fresh default app.
+                </div>
+              )}
+            </div>
+
+            {resetMode && (
+              <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                <div className="text-sm font-medium">{resetLabel}</div>
+
+                <div className="text-xs text-muted-foreground">
+                  Solve to confirm: <span className="font-semibold text-foreground">{challenge.text}</span>
+                </div>
+
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder="Answer"
+                  />
+                  <Button variant="secondary" onClick={() => { setChallenge(makeChallenge()); setAnswer(""); }}>
+                    New
+                  </Button>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={runSelectedReset}>Reset</Button>
+                  <Button variant="outline" onClick={closeResetBox}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ===== Update app data (keep data) ===== */}
+      <section className="rounded-xl border border-yellow-500/40 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-yellow-500">
           <AlertTriangle className="h-5 w-5" />
-          <h2 className="font-semibold">Force Update</h2>
+          <h2 className="font-semibold">Update app data (keep data)</h2>
         </div>
 
         <p className="text-sm opacity-80">
-          Rebuilds local app data after an update by backing up, resetting storage, then restoring
-          your backup. Use only if something looks stuck.
+          Rebuilds local app data after an update by backing up, rebuilding storage, then restoring
+          your backup. This normally keeps your history. We recommend exporting a manual backup first.
         </p>
 
-        <Button variant="destructive" onClick={handleForceUpdate}>
-          Force Update (keep data)
+        <Button variant="secondary" onClick={handleForceUpdate}>
+          Update app data (keep data)
         </Button>
       </section>
     </div>
