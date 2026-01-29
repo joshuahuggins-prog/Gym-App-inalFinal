@@ -1057,7 +1057,157 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
     return { success: false, error: `Import failed: ${e.message}` };
   }
 };
+// =====================
+// Reset helpers (restore defaults from app code)
+// =====================
 
+// Default settings for a "fresh" app state
+export const getDefaultSettings = () => ({
+  weightUnit: "kg",
+  colorMode: "light",
+  colorTheme: "blue",
+  progressMetric: "max",
+  theme: "light", // legacy sync
+});
+
+export const getDefaultProgressionSettings = () => ({
+  globalIncrementLbs: 5,
+  globalIncrementKg: 2.5,
+  rptSet2Percentage: 90,
+  rptSet3Percentage: 80,
+  exerciseSpecific: {},
+});
+
+// Internal helper: build default programmes from workoutData
+const getDefaultProgrammesFromWorkoutData = () => {
+  const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
+  return [WORKOUT_A, WORKOUT_B].filter(Boolean);
+};
+
+// Rebuild catalogue and store exercises (and emit)
+const rebuildAndStoreExercisesFromProgrammes = (programmes) => {
+  const existing = getStorageData(STORAGE_KEYS.EXERCISES) || [];
+  const merged = rebuildExerciseCatalogue(programmes, existing);
+  // store + emit exercises change
+  if (typeof APP_EVENTS !== "undefined") {
+    return setStorageDataAndEmit(STORAGE_KEYS.EXERCISES, merged, APP_EVENTS.EXERCISES_CHANGED);
+  }
+  return setStorageData(STORAGE_KEYS.EXERCISES, merged);
+};
+
+// Reset ONLY settings + progression + pattern back to defaults (keeps workouts/history)
+export const resetSettingsToDefaults = () => {
+  const ok1 =
+    typeof APP_EVENTS !== "undefined"
+      ? setStorageDataAndEmit(STORAGE_KEYS.SETTINGS, getDefaultSettings(), APP_EVENTS.SETTINGS_CHANGED)
+      : setStorageData(STORAGE_KEYS.SETTINGS, getDefaultSettings());
+
+  const ok2 =
+    typeof APP_EVENTS !== "undefined"
+      ? setStorageDataAndEmit(
+          STORAGE_KEYS.PROGRESSION_SETTINGS,
+          getDefaultProgressionSettings(),
+          APP_EVENTS.PROGRESSION_CHANGED
+        )
+      : setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, getDefaultProgressionSettings());
+
+  // pattern defaults
+  setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, "A,B");
+  setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, 0);
+
+  // let listeners refresh
+  if (typeof APP_EVENTS !== "undefined") {
+    emit(APP_EVENTS.SETTINGS_CHANGED);
+    emit(APP_EVENTS.PROGRESSION_CHANGED);
+  }
+
+  return !!(ok1 && ok2);
+};
+
+// Reset ONLY programmes back to workoutData defaults (keeps workouts/history)
+export const resetProgrammesToDefaults = () => {
+  const defaults = getDefaultProgrammesFromWorkoutData();
+
+  const ok =
+    typeof APP_EVENTS !== "undefined"
+      ? setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, defaults, APP_EVENTS.PROGRAMMES_CHANGED)
+      : setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
+
+  // Rebuild exercises catalogue so assignments match programmes
+  rebuildAndStoreExercisesFromProgrammes(defaults);
+
+  return !!ok;
+};
+
+// Reset ONLY exercises + video links + tombstones (keeps workouts/history + programmes)
+export const resetExercisesToDefaults = () => {
+  // Clear tombstones so defaults can come back
+  setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, []);
+
+  // Reset video links back to the app defaults
+  const okLinks =
+    typeof APP_EVENTS !== "undefined"
+      ? setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, getDefaultVideoLinks(), APP_EVENTS.VIDEO_LINKS_CHANGED)
+      : setStorageData(STORAGE_KEYS.VIDEO_LINKS, getDefaultVideoLinks());
+
+  // Clear custom exercises list (catalogue will rebuild)
+  setStorageData(STORAGE_KEYS.EXERCISES, []);
+
+  const programmes = getProgrammes(); // uses stored or defaults
+  rebuildAndStoreExercisesFromProgrammes(programmes);
+
+  return !!okLinks;
+};
+
+// Full reset: blank history + defaults everywhere
+export const resetAppToBlank = async () => {
+  try {
+    // wipe all app keys
+    Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
+    localStorage.removeItem(STORAGE_VERSION_KEY);
+
+    // optional: clear caches (PWA)
+    if (typeof caches !== "undefined") {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+
+    // seed fresh defaults
+    setStorageData(STORAGE_KEYS.WORKOUTS, []);
+    setStorageData(STORAGE_KEYS.BODY_WEIGHT, []);
+    setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, {});
+    setStorageData(STORAGE_KEYS.SETTINGS, getDefaultSettings());
+    setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, getDefaultProgressionSettings());
+    setStorageData(STORAGE_KEYS.VIDEO_LINKS, getDefaultVideoLinks());
+    setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, "A,B");
+    setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, 0);
+    setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, []);
+
+    // default programmes + derived exercises
+    const defaults = getDefaultProgrammesFromWorkoutData();
+    setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
+    setStorageData(STORAGE_KEYS.EXERCISES, rebuildExerciseCatalogue(defaults, []));
+
+    // re-init version/migrations
+    initStorage();
+
+    // notify UI
+    if (typeof APP_EVENTS !== "undefined") {
+      emit(APP_EVENTS.SETTINGS_CHANGED);
+      emit(APP_EVENTS.PROGRESSION_CHANGED);
+      emit(APP_EVENTS.PROGRAMMES_CHANGED);
+      emit(APP_EVENTS.EXERCISES_CHANGED);
+      emit(APP_EVENTS.VIDEO_LINKS_CHANGED);
+      emit(APP_EVENTS.WORKOUTS_CHANGED);
+      emit(APP_EVENTS.BODY_WEIGHT_CHANGED);
+      emit(APP_EVENTS.PRS_CHANGED);
+    }
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e?.message || "Reset failed" };
+  }
+};
 // =====================
 // Force Update helpers
 // =====================
