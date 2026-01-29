@@ -95,14 +95,15 @@ const App = () => {
 
   return (
     <SettingsProvider>
-      {/* ✅ Upside-down wrapper: rotates whole UI when angle ~180 */}
+      {/* ✅ IMPORTANT: fixed viewport wrapper prevents "fixed" children from scrolling
+          when the app is rotated (transform would otherwise break position: fixed). */}
       <div
-        className={`min-h-screen transform-gpu transition-transform duration-350 ease-ui-out ${
+        className={`fixed inset-0 transform-gpu transition-transform duration-350 ease-out ${
           upsideDown ? "rotate-180" : ""
         }`}
       >
         <div className="flex flex-col h-full bg-background text-foreground">
-          {/* Main Content */}
+          {/* Main Content (ONLY scrolling area) */}
           <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
             {renderPage()}
           </main>
