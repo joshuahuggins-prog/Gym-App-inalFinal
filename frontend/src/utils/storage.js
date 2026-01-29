@@ -30,6 +30,33 @@ export const STORAGE_KEYS = {
 };
 
 // =====================
+// App events (same-tab sync)
+// =====================
+// NOTE: `storage` events DO NOT fire in the same tab that calls localStorage.setItem.
+// These custom events allow components (like ExerciseCard) to update immediately.
+export const APP_EVENTS = {
+  SETTINGS_CHANGED: "gymapp:settingsChanged",
+  PROGRESSION_CHANGED: "gymapp:progressionChanged",
+  WORKOUTS_CHANGED: "gymapp:workoutsChanged",
+  PROGRAMMES_CHANGED: "gymapp:programmesChanged",
+  EXERCISES_CHANGED: "gymapp:exercisesChanged",
+  PRS_CHANGED: "gymapp:prsChanged",
+  VIDEO_LINKS_CHANGED: "gymapp:videoLinksChanged",
+  BODY_WEIGHT_CHANGED: "gymapp:bodyWeightChanged",
+  WORKOUT_DRAFT_CHANGED: "gymapp:workoutDraftChanged",
+};
+
+const emit = (eventName) => {
+  try {
+    if (typeof window !== "undefined" && window?.dispatchEvent) {
+      window.dispatchEvent(new Event(eventName));
+    }
+  } catch {
+    // ignore
+  }
+};
+
+// =====================
 // Helpers (string/id/date)
 // =====================
 const normalizeId = (s) => (s || "").toString().trim();
@@ -109,6 +136,13 @@ export const setStorageData = (key, value) => {
   }
 };
 
+// Write + emit an event so same-tab listeners update immediately
+const setStorageDataAndEmit = (key, value, eventName) => {
+  const ok = setStorageData(key, value);
+  if (ok && eventName) emit(eventName);
+  return ok;
+};
+
 // =====================
 // Init + migration
 // =====================
@@ -147,7 +181,7 @@ export const getWorkoutPattern = () => {
 };
 
 export const setWorkoutPattern = (patternString) => {
-  return setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, patternString);
+  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_PATTERN, patternString, APP_EVENTS.SETTINGS_CHANGED);
 };
 
 export const getWorkoutPatternIndex = () => {
@@ -155,7 +189,7 @@ export const getWorkoutPatternIndex = () => {
 };
 
 export const setWorkoutPatternIndex = (index) => {
-  return setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, index);
+  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, index, APP_EVENTS.SETTINGS_CHANGED);
 };
 
 // Parse "A,B,B,C" -> ["A","B","B","C"]
@@ -248,7 +282,7 @@ export const saveWorkout = (workout) => {
     id: workout.id || Date.now().toString(),
     date: workout.date || new Date().toISOString(),
   });
-  return setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
+  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, workouts, APP_EVENTS.WORKOUTS_CHANGED);
 };
 
 export const updateWorkout = (id, updates) => {
@@ -257,13 +291,13 @@ export const updateWorkout = (id, updates) => {
   if (index === -1) return false;
 
   workouts[index] = { ...workouts[index], ...updates };
-  return setStorageData(STORAGE_KEYS.WORKOUTS, workouts);
+  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, workouts, APP_EVENTS.WORKOUTS_CHANGED);
 };
 
 export const deleteWorkout = (id) => {
   const workouts = getWorkouts();
   const filtered = workouts.filter((w) => w.id !== id);
-  return setStorageData(STORAGE_KEYS.WORKOUTS, filtered);
+  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, filtered, APP_EVENTS.WORKOUTS_CHANGED);
 };
 
 // =====================
@@ -283,7 +317,7 @@ export const setWorkoutDraft = (draft) => {
         }
       : draft;
 
-  return setStorageData(STORAGE_KEYS.WORKOUT_DRAFT, enriched);
+  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_DRAFT, enriched, APP_EVENTS.WORKOUT_DRAFT_CHANGED);
 };
 
 // Alias some older imports may use
@@ -292,6 +326,7 @@ export const saveWorkoutDraft = (draft) => setWorkoutDraft(draft);
 export const clearWorkoutDraft = () => {
   try {
     localStorage.removeItem(STORAGE_KEYS.WORKOUT_DRAFT);
+    emit(APP_EVENTS.WORKOUT_DRAFT_CHANGED);
     return true;
   } catch (e) {
     console.error("Failed to clear workout draft", e);
@@ -359,7 +394,7 @@ export const updateSettings = (updates) => {
   // keep legacy key in sync (optional)
   if (updates?.colorMode) next.theme = updates.colorMode;
 
-  return setStorageData(STORAGE_KEYS.SETTINGS, next);
+  return setStorageDataAndEmit(STORAGE_KEYS.SETTINGS, next, APP_EVENTS.SETTINGS_CHANGED);
 };
 
 // =====================
@@ -377,13 +412,13 @@ export const addBodyWeight = (weight, note = "") => {
     date: new Date().toISOString(),
   };
   weights.unshift(newEntry);
-  return setStorageData(STORAGE_KEYS.BODY_WEIGHT, weights);
+  return setStorageDataAndEmit(STORAGE_KEYS.BODY_WEIGHT, weights, APP_EVENTS.BODY_WEIGHT_CHANGED);
 };
 
 export const deleteBodyWeight = (id) => {
   const weights = getBodyWeights();
   const filtered = weights.filter((w) => w.id !== id);
-  return setStorageData(STORAGE_KEYS.BODY_WEIGHT, filtered);
+  return setStorageDataAndEmit(STORAGE_KEYS.BODY_WEIGHT, filtered, APP_EVENTS.BODY_WEIGHT_CHANGED);
 };
 
 // =====================
@@ -442,7 +477,7 @@ export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
       date: date || new Date().toISOString(),
       previousWeight: prev?.weight ?? null,
     };
-    setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, prs);
+    setStorageDataAndEmit(STORAGE_KEYS.PERSONAL_RECORDS, prs, APP_EVENTS.PRS_CHANGED);
     return true;
   }
 
@@ -477,7 +512,7 @@ export const updateVideoLink = (exerciseIdOrName, url) => {
   const key = toKeyIdOrName(exerciseIdOrName);
   if (!key) return false;
   links[key] = url;
-  return setStorageData(STORAGE_KEYS.VIDEO_LINKS, links);
+  return setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, links, APP_EVENTS.VIDEO_LINKS_CHANGED);
 };
 
 // =====================
@@ -501,17 +536,17 @@ export const saveProgramme = (programme) => {
     const updated = programmes.map((p) =>
       p.type === programme.type ? programme : p
     );
-    return setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
+    return setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, updated, APP_EVENTS.PROGRAMMES_CHANGED);
   } else {
     programmes.push(programme);
-    return setStorageData(STORAGE_KEYS.PROGRAMMES, programmes);
+    return setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, programmes, APP_EVENTS.PROGRAMMES_CHANGED);
   }
 };
 
 export const deleteProgramme = (type) => {
   const programmes = getProgrammes();
   const filtered = programmes.filter((p) => p.type !== type);
-  return setStorageData(STORAGE_KEYS.PROGRAMMES, filtered);
+  return setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, filtered, APP_EVENTS.PROGRAMMES_CHANGED);
 };
 
 // =====================
@@ -682,7 +717,7 @@ export const saveExercise = (exercise) => {
 
   const programmes = getProgrammes();
   const merged = rebuildExerciseCatalogue(programmes, exercises);
-  setStorageData(STORAGE_KEYS.EXERCISES, merged);
+  setStorageDataAndEmit(STORAGE_KEYS.EXERCISES, merged, APP_EVENTS.EXERCISES_CHANGED);
 
   return true;
 };
@@ -706,7 +741,7 @@ export const deleteExercise = (id) => {
     // Rebuild catalogue so UI updates immediately
     const programmes = getProgrammes();
     const merged = rebuildExerciseCatalogue(programmes, filtered);
-    setStorageData(STORAGE_KEYS.EXERCISES, merged);
+    setStorageDataAndEmit(STORAGE_KEYS.EXERCISES, merged, APP_EVENTS.EXERCISES_CHANGED);
 
     return true;
   } catch (e) {
@@ -754,7 +789,7 @@ function syncExerciseAssignmentsToProgrammes(exercise) {
     return { ...p, exercises: list };
   });
 
-  setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
+  setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, updated, APP_EVENTS.PROGRAMMES_CHANGED);
 }
 
 function syncExerciseFieldsIntoProgrammes(exercise) {
@@ -781,7 +816,7 @@ function syncExerciseFieldsIntoProgrammes(exercise) {
     return { ...p, exercises: changed };
   });
 
-  setStorageData(STORAGE_KEYS.PROGRAMMES, updated);
+  setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, updated, APP_EVENTS.PROGRAMMES_CHANGED);
 }
 
 // =====================
@@ -800,7 +835,11 @@ export const getProgressionSettings = () => {
 };
 
 export const updateProgressionSettings = (settings) => {
-  return setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, settings);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.PROGRESSION_SETTINGS,
+    settings,
+    APP_EVENTS.PROGRESSION_CHANGED
+  );
 };
 
 // =====================
@@ -810,15 +849,7 @@ export const exportToCSV = () => {
   const workouts = getWorkouts();
   if (!Array.isArray(workouts) || workouts.length === 0) return null;
 
-  const headers = [
-    "Date",
-    "Workout",
-    "Exercise",
-    "Set",
-    "Weight",
-    "Reps",
-    "Notes",
-  ];
+  const headers = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps", "Notes"];
   const rows = [];
 
   workouts.forEach((workout) => {
@@ -848,22 +879,13 @@ export const importFromCSV = (csvText) => {
     }
 
     const headers = lines[0].split(",").map((h) => h.trim());
-    const requiredHeaders = [
-      "Date",
-      "Workout",
-      "Exercise",
-      "Set",
-      "Weight",
-      "Reps",
-    ];
+    const requiredHeaders = ["Date", "Workout", "Exercise", "Set", "Weight", "Reps"];
 
     const hasAllHeaders = requiredHeaders.every((h) => headers.includes(h));
     if (!hasAllHeaders) {
       return {
         success: false,
-        error: `Missing required headers. Expected: ${requiredHeaders.join(
-          ", "
-        )}`,
+        error: `Missing required headers. Expected: ${requiredHeaders.join(", ")}`,
       };
     }
 
@@ -877,8 +899,7 @@ export const importFromCSV = (csvText) => {
         continue;
       }
 
-      const [date, workoutType, exerciseName, setNum, weight, reps, notes = ""] =
-        values;
+      const [date, workoutType, exerciseName, setNum, weight, reps, notes = ""] = values;
 
       if (!date || !workoutType || !exerciseName) {
         errors.push(`Line ${i + 1}: Missing required fields`);
@@ -916,7 +937,7 @@ export const importFromCSV = (csvText) => {
     const existing = getWorkouts();
     const combined = [...importedWorkouts, ...existing];
 
-    setStorageData(STORAGE_KEYS.WORKOUTS, combined);
+    setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, combined, APP_EVENTS.WORKOUTS_CHANGED);
 
     return {
       success: true,
@@ -948,12 +969,10 @@ export const exportAllDataToJSON = () => {
         programmes: getProgrammes(),
         exercises: getExercises(),
         progressionSettings: getProgressionSettings(),
-        workoutPattern:
-          typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
+        workoutPattern: typeof getWorkoutPattern === "function" ? getWorkoutPattern() : null,
         workoutPatternIndex:
-          typeof getWorkoutPatternIndex === "function"
-            ? getWorkoutPatternIndex()
-            : null,
+          typeof getWorkoutPatternIndex === "function" ? getWorkoutPatternIndex() : null,
+        exerciseTombstones: getStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES) || [],
       },
     };
 
@@ -992,36 +1011,38 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
         data.workouts.forEach((w) => {
           if (w?.id) byId.set(w.id, w);
         });
-        setStorageData(STORAGE_KEYS.WORKOUTS, Array.from(byId.values()));
+        setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, Array.from(byId.values()), APP_EVENTS.WORKOUTS_CHANGED);
       } else {
-        setStorageData(STORAGE_KEYS.WORKOUTS, data.workouts);
+        setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, data.workouts, APP_EVENTS.WORKOUTS_CHANGED);
       }
     }
 
-    if (data.settings) setStorageData(STORAGE_KEYS.SETTINGS, data.settings);
+    if (data.settings) setStorageDataAndEmit(STORAGE_KEYS.SETTINGS, data.settings, APP_EVENTS.SETTINGS_CHANGED);
     if (Array.isArray(data.bodyWeights))
-      setStorageData(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights);
+      setStorageDataAndEmit(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights, APP_EVENTS.BODY_WEIGHT_CHANGED);
     if (data.personalRecords)
-      setStorageData(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords);
+      setStorageDataAndEmit(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords, APP_EVENTS.PRS_CHANGED);
     if (data.videoLinks)
-      setStorageData(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks);
+      setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks, APP_EVENTS.VIDEO_LINKS_CHANGED);
     if (Array.isArray(data.programmes))
-      setStorageData(STORAGE_KEYS.PROGRAMMES, data.programmes);
+      setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, data.programmes, APP_EVENTS.PROGRAMMES_CHANGED);
     if (Array.isArray(data.exercises))
-      setStorageData(STORAGE_KEYS.EXERCISES, data.exercises);
+      setStorageDataAndEmit(STORAGE_KEYS.EXERCISES, data.exercises, APP_EVENTS.EXERCISES_CHANGED);
     if (data.progressionSettings)
-      setStorageData(
+      setStorageDataAndEmit(
         STORAGE_KEYS.PROGRESSION_SETTINGS,
-        data.progressionSettings
+        data.progressionSettings,
+        APP_EVENTS.PROGRESSION_CHANGED
       );
 
     if (data.workoutPattern != null) {
-      setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern);
+      setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_PATTERN, data.workoutPattern, APP_EVENTS.SETTINGS_CHANGED);
     }
     if (data.workoutPatternIndex != null) {
-      setStorageData(
+      setStorageDataAndEmit(
         STORAGE_KEYS.WORKOUT_PATTERN_INDEX,
-        data.workoutPatternIndex
+        data.workoutPatternIndex,
+        APP_EVENTS.SETTINGS_CHANGED
       );
     }
 
