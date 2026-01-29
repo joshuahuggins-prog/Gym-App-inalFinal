@@ -12,7 +12,10 @@ const fmt = (s) => {
 };
 
 export default function RestTimer({ duration, onComplete, onClose }) {
-  const total = useMemo(() => Math.max(0, Math.floor(Number(duration) || 0)), [duration]);
+  const total = useMemo(
+    () => Math.max(0, Math.floor(Number(duration) || 0)),
+    [duration]
+  );
 
   const [timeLeft, setTimeLeft] = useState(total);
   const [paused, setPaused] = useState(false);
@@ -114,9 +117,10 @@ export default function RestTimer({ duration, onComplete, onClose }) {
   return (
     <AnimatePresence>
       {isOpen ? (
-        // ✅ Key fix: when minimized, this full-screen layer does NOT eat touches
         <motion.div
-          className={`fixed inset-0 z-[9999] ${minimized ? "pointer-events-none" : "pointer-events-auto"}`}
+          className={`fixed inset-0 z-[9999] ${
+            minimized ? "pointer-events-none" : "pointer-events-auto"
+          }`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -154,7 +158,11 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                           Rest Timer
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {timeLeft === 0 ? "Done" : paused ? "Paused" : "Counting down"}
+                          {timeLeft === 0
+                            ? "Done"
+                            : paused
+                            ? "Paused"
+                            : "Counting down"}
                         </div>
                       </div>
 
@@ -262,13 +270,21 @@ export default function RestTimer({ duration, onComplete, onClose }) {
             ) : null}
           </AnimatePresence>
 
-          {/* Minimized chip — MUST be clickable even though parent is pointer-events-none */}
+          {/* Minimized chip (inverted colors + ~20% bigger) */}
           <AnimatePresence>
             {minimized ? (
               <motion.button
                 type="button"
                 layoutId={LAYOUT_ID}
-                className="fixed left-3 top-3 z-[10000] flex items-center gap-3 rounded-full border border-border bg-card px-3 py-2 shadow-lg pointer-events-auto"
+                className={[
+                  "fixed left-4 top-4 z-[10000] pointer-events-auto",
+                  "flex items-center gap-4",
+                  "rounded-full border shadow-xl",
+                  // ✅ Invert: container uses accent (primary), text flips to primary-foreground
+                  "bg-primary text-primary-foreground border-primary/30",
+                  // ✅ ~20% bigger than before
+                  "px-4 py-3",
+                ].join(" ")}
                 initial={{ opacity: 0, scale: 0.95, x: -8, y: -8 }}
                 animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
@@ -277,15 +293,16 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                 title="Tap to expand timer"
               >
                 <div className="flex flex-col items-start leading-none">
-                  <div className="text-[11px] text-muted-foreground">Rest</div>
-                  <div className="text-sm font-semibold tabular-nums text-foreground">
+                  <div className="text-[12px] opacity-90">Rest</div>
+                  <div className="text-base font-semibold tabular-nums">
                     {fmt(timeLeft)}
                   </div>
                 </div>
 
-                <div className="h-2 w-24 rounded-full bg-muted overflow-hidden">
+                {/* Bar: track is light/dark relative to primary via primary-foreground transparency */}
+                <div className="h-2.5 w-28 rounded-full bg-primary-foreground/25 overflow-hidden">
                   <motion.div
-                    className="h-full bg-primary"
+                    className="h-full bg-primary-foreground"
                     initial={false}
                     animate={{ width: `${Math.round(progress)}%` }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -293,7 +310,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                 </div>
 
                 <span
-                  className="ml-1 inline-flex items-center justify-center rounded-full p-1 hover:bg-muted/50 pointer-events-auto"
+                  className="ml-1 inline-flex items-center justify-center rounded-full p-1.5 hover:bg-primary-foreground/15 pointer-events-auto"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -301,7 +318,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                   }}
                   title="Close timer"
                 >
-                  <X className="w-4 h-4 text-muted-foreground" />
+                  <X className="w-4 h-4 opacity-90" />
                 </span>
               </motion.button>
             ) : null}
