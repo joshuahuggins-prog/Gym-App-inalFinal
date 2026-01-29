@@ -1,37 +1,94 @@
+/* ----------------------------------------
+   Base app styles
+----------------------------------------- */
+
 .App-logo {
-    height: 40vmin;
-    pointer-events: none;
+  height: 40vmin;
+  pointer-events: none;
+  will-change: transform;
 }
 
+/* Only animate if user allows motion */
 @media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+  .App-logo {
+    animation: App-logo-spin 20s linear infinite;
+  }
 }
 
 .App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+  background-color: #0f0f10;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  font-size: calc(10px + 2vmin);
+  color: white;
 }
 
 .App-link {
-    color: #61dafb;
+  color: #61dafb;
 }
 
-/* add to src/index.css (or your global css) */
-@keyframes slideUp {
+/* ----------------------------------------
+   Global animation primitives
+   (used only when Tailwind / Framer isn't)
+----------------------------------------- */
+
+/* Smooth slide-up entrance */
+@keyframes slide-up {
   from {
-    transform: translateY(16px);
+    transform: translateY(16px) scale(0.985);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
+  }
+}
+
+/* Fade + subtle scale (good fallback) */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ----------------------------------------
+   Utility classes (optional)
+----------------------------------------- */
+
+.animate-slide-up {
+  animation: slide-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 220ms ease-out both;
+}
+
+/* ----------------------------------------
+   Upside-down support polish
+----------------------------------------- */
+
+/* Prevent blur during rotate on Android */
+.rotate-180 {
+  transform: rotate(180deg);
+  transform-origin: center;
+  will-change: transform;
+}
+
+/* Respect accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up,
+  .animate-fade-in,
+  .App-logo {
+    animation: none !important;
+    transition: none !important;
   }
 }
