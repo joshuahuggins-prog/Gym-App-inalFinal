@@ -5,12 +5,12 @@ export default function useUpsideDown() {
 
   useEffect(() => {
     const readAngle = () => {
-      // Android Chrome / Samsung Internet
+      // Modern Android browsers
       if (window.screen?.orientation?.angle != null) {
         return window.screen.orientation.angle;
       }
 
-      // Older fallback
+      // Legacy fallback
       if (typeof window.orientation === "number") {
         return window.orientation;
       }
@@ -20,7 +20,13 @@ export default function useUpsideDown() {
 
     const update = () => {
       const angle = Number(readAngle());
-      setUpsideDown(angle === 180);
+
+      // ✅ Tolerance window avoids jitter (150–210 ≈ upside-down portrait)
+      const isUpsideDown = angle > 150 && angle < 210;
+
+      setUpsideDown((prev) =>
+        prev !== isUpsideDown ? isUpsideDown : prev
+      );
     };
 
     update();
