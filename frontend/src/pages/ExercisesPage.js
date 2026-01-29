@@ -33,9 +33,7 @@ import {
   getProgrammes,
   getVideoLinks,
   updateVideoLink,
-
-  // ✅ needs to exist from your earlier storage.js change
-  getDefaultVideoLinks,
+  getDefaultVideoLinks, // ✅ must be exported from storage.js
 } from "../utils/storage";
 import { toast } from "sonner";
 
@@ -110,7 +108,6 @@ const ExercisesPage = () => {
   // Build defaults map from app code (workoutData)
   const defaultExerciseMap = useMemo(() => {
     try {
-      // These are the app-coded defaults
       const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
       const all = [
         ...(WORKOUT_A?.exercises || []),
@@ -129,7 +126,6 @@ const ExercisesPage = () => {
           goalReps: Array.isArray(ex?.goalReps) ? ex.goalReps : [8, 10, 12],
           restTime: ex?.restTime ?? 120,
           notes: ex?.notes ?? "",
-          // keep any other fields from defaults (safe)
           ...ex,
         });
       });
@@ -338,7 +334,6 @@ const ExercisesPage = () => {
     }
 
     try {
-      // overwrite fields back to app default
       const ok = saveExercise({
         id: def.id,
         name: def.name,
@@ -347,9 +342,7 @@ const ExercisesPage = () => {
         goalReps: Array.isArray(def.goalReps) ? def.goalReps : [8, 10, 12],
         restTime: def.restTime ?? 120,
         notes: def.notes ?? "",
-        // keep hidden if present in stored item
         hidden: typeof exercise?.hidden === "boolean" ? exercise.hidden : false,
-        // keep assignedTo untouched here (catalogue rebuild derives it anyway)
         assignedTo: Array.isArray(exercise?.assignedTo) ? exercise.assignedTo : [],
       });
 
@@ -359,10 +352,8 @@ const ExercisesPage = () => {
         return;
       }
 
-      // reset video link back to default if the app has one
-      const defaults = (typeof getDefaultVideoLinks === "function"
-        ? getDefaultVideoLinks()
-        : {}) || {};
+      const defaults =
+        (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) || {};
       if (defaults[id]) {
         updateVideoLink(id, defaults[id]);
       }
@@ -406,7 +397,7 @@ const ExercisesPage = () => {
       <div className="bg-gradient-to-b from-card to-background border-b border-border">
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-4">
-            <div>
+            <div className="min-w-0">
               <h1 className="text-3xl font-bold text--primary">
                 Exercise Library
               </h1>
@@ -425,7 +416,7 @@ const ExercisesPage = () => {
 
           {/* Filters */}
           <div className="flex gap-3">
-            <div className="flex-1 relative">
+            <div className="flex-1 relative min-w-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 value={searchTerm}
@@ -473,16 +464,20 @@ const ExercisesPage = () => {
               const isOpen = resetOpenId === exercise.id;
 
               // Only enable reset if NOT user-made AND exists in app defaults map
-              const canReset = !userMade && defaultExerciseMap.has(String(exercise.id || "").trim());
+              const canReset =
+                !userMade && defaultExerciseMap.has(String(exercise.id || "").trim());
 
               return (
                 <div
                   key={exercise.id}
                   className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors"
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-3 gap-2">
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-bold text-foreground mb-1 truncate">
+                      <h3
+                        className="text-lg font-bold text-foreground mb-1 break-words whitespace-normal leading-snug"
+                        style={{ overflowWrap: "anywhere" }}
+                      >
                         {exercise.name}
                       </h3>
 
@@ -507,7 +502,7 @@ const ExercisesPage = () => {
                       </div>
                     </div>
 
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 shrink-0">
                       {/* ✅ Reset to default (per exercise) */}
                       <Button
                         variant="ghost"
@@ -518,11 +513,7 @@ const ExercisesPage = () => {
                           if (isOpen) closeResetUI();
                           else openResetFor(exercise.id);
                         }}
-                        className={
-                          canReset
-                            ? ""
-                            : "opacity-40 cursor-not-allowed"
-                        }
+                        className={canReset ? "" : "opacity-40 cursor-not-allowed"}
                         title={
                           userMade
                             ? "Custom exercises can’t be reset to app defaults."
@@ -554,23 +545,26 @@ const ExercisesPage = () => {
                   </div>
 
                   <div className="space-y-1 text-sm text-muted-foreground">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span>Sets:</span>
-                      <span className="text-foreground font-semibold">{exercise.sets}</span>
+                      <span className="text-foreground font-semibold break-words whitespace-normal">
+                        {exercise.sets}
+                      </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span>Reps:</span>
-                      <span className="text-foreground font-semibold">
+                      <span
+                        className="text-foreground font-semibold text-right break-words whitespace-normal"
+                        style={{ overflowWrap: "anywhere" }}
+                      >
                         {(exercise.goalReps || []).join(", ")}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span>Rest:</span>
-                      <span className="text-foreground font-semibold">
-                        {exercise.restTime}s
-                      </span>
+                      <span className="text-foreground font-semibold">{exercise.restTime}s</span>
                     </div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center gap-2">
                       <span>Scheme:</span>
                       <Badge variant="secondary" className="text-xs">
                         {exercise.repScheme}
@@ -579,7 +573,10 @@ const ExercisesPage = () => {
                   </div>
 
                   {exercise.notes ? (
-                    <div className="mt-3 text-xs text-muted-foreground p-2 bg-muted/30 rounded border border-border">
+                    <div
+                      className="mt-3 text-xs text-muted-foreground p-2 bg-muted/30 rounded border border-border break-words whitespace-pre-wrap"
+                      style={{ overflowWrap: "anywhere" }}
+                    >
                       {exercise.notes}
                     </div>
                   ) : null}
@@ -618,9 +615,7 @@ const ExercisesPage = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        <Button onClick={() => runExerciseReset(exercise)}>
-                          Reset
-                        </Button>
+                        <Button onClick={() => runExerciseReset(exercise)}>Reset</Button>
                         <Button variant="outline" onClick={closeResetUI}>
                           Cancel
                         </Button>
