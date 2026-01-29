@@ -47,7 +47,6 @@ import {
   resetAppToBlank,
 } from "../utils/storage";
 
-// ✅ App version display
 import pkg from "../../package.json";
 
 const numberOrFallback = (value, fallback) => {
@@ -99,15 +98,10 @@ export default function SettingsPage() {
     return getUsableProgrammes().map((p) => String(p.type).toUpperCase());
   }, []);
 
-  // Hydrate page state from storage
-  const hydrateFromStorage = () => {
+  // ✅ Hydrate from storage on mount (no eslint rule needed)
+  useEffect(() => {
     setProgressionSettings(getProgressionSettings());
     setWorkoutPatternState(getWorkoutPattern());
-  };
-
-  useEffect(() => {
-    hydrateFromStorage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSaveProgression = () => {
@@ -158,7 +152,9 @@ export default function SettingsPage() {
     }
 
     toast.success("App data rebuilt");
-    setTimeout(() => window.location.reload(), 650);
+    setTimeout(() => {
+      window.location.href = window.location.href;
+    }, 650);
   };
 
   // ==========================
@@ -190,16 +186,11 @@ export default function SettingsPage() {
     setChallenge(makeChallenge());
   };
 
-  // ✅ show toast, then force a real reload
   const toastAndReload = (message) => {
     toast.success(message, { duration: 1200 });
-    // Give Sonner a beat to render before hard refresh.
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        // This is slightly more "certain" than reload on some PWAs
-        window.location.href = window.location.href;
-      }, 700);
-    });
+    setTimeout(() => {
+      window.location.href = window.location.href;
+    }, 650);
   };
 
   const runSelectedReset = async () => {
@@ -336,11 +327,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                {colorMode === "dark" ? (
-                  <Moon className="h-4 w-4" />
-                ) : (
-                  <Sun className="h-4 w-4" />
-                )}
+                {colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 <div className="font-medium">Dark mode</div>
               </div>
               <div className="text-xs text-muted-foreground">
