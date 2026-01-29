@@ -487,7 +487,7 @@ export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
 // =====================
 // Video Links
 // =====================
-const getDefaultVideoLinks = () => ({
+export const getDefaultVideoLinks = () => ({
   weighted_dips: "https://www.youtube.com/watch?v=2z8JmcrW-As",
   incline_db_bench: "https://www.youtube.com/watch?v=8iPEnn-ltC8",
   flat_db_bench: "https://www.youtube.com/watch?v=VmB1G1K7v94",
