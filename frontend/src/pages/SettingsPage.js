@@ -40,7 +40,7 @@ import {
   setWorkoutPatternIndex,
   resetWithBackup,
 
-  // ✅ new reset helpers
+  // ✅ new reset helpers (from storage.js)
   resetSettingsToDefaults,
   resetProgrammesToDefaults,
   resetExercisesToDefaults,
@@ -186,6 +186,14 @@ export default function SettingsPage() {
     setChallenge(makeChallenge());
   };
 
+  // ✅ show toast, then refresh so everything re-hydrates from storage defaults
+  const toastAndReload = (message) => {
+    toast.success(message);
+    setTimeout(() => {
+      window.location.reload();
+    }, 650);
+  };
+
   const runSelectedReset = async () => {
     if (!resetMode) {
       toast.error("Choose a reset option first.");
@@ -213,26 +221,32 @@ export default function SettingsPage() {
     try {
       if (resetMode === "settings") {
         resetSettingsToDefaults();
-        toast.success("Settings reset to default");
+        closeResetBox();
+        toastAndReload("Settings reset to default");
+        return;
       }
 
       if (resetMode === "programmes") {
         resetProgrammesToDefaults();
-        toast.success("Programmes reset to default");
+        closeResetBox();
+        toastAndReload("Programmes reset to default");
+        return;
       }
 
       if (resetMode === "exercises") {
         resetExercisesToDefaults();
-        toast.success("Exercises reset to default");
+        closeResetBox();
+        toastAndReload("Exercises reset to default");
+        return;
       }
 
       if (resetMode === "full") {
         const res = await resetAppToBlank();
         if (!res?.success) throw new Error(res?.error || "Reset failed");
-        toast.success("App reset complete");
+        closeResetBox();
+        toastAndReload("App reset complete");
+        return;
       }
-
-      closeResetBox();
     } catch (e) {
       toast.error(e?.message || "Reset failed");
       closeResetBox();
@@ -465,7 +479,8 @@ export default function SettingsPage() {
                 <div className="text-sm font-medium">{resetLabel}</div>
 
                 <div className="text-xs text-muted-foreground">
-                  Solve to confirm: <span className="font-semibold text-foreground">{challenge.text}</span>
+                  Solve to confirm:{" "}
+                  <span className="font-semibold text-foreground">{challenge.text}</span>
                 </div>
 
                 <div className="flex gap-2 items-center">
@@ -476,7 +491,13 @@ export default function SettingsPage() {
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="Answer"
                   />
-                  <Button variant="secondary" onClick={() => { setChallenge(makeChallenge()); setAnswer(""); }}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setChallenge(makeChallenge());
+                      setAnswer("");
+                    }}
+                  >
                     New
                   </Button>
                 </div>
