@@ -1,10 +1,11 @@
-// frontend/src/utils/storage.js
-// LocalStorage utility functions for workout data
+// src/utils/storage.js
+// LocalStorage utility functions for workout data (single source of truth)
 
 // =====================
 // Versioning
 // =====================
-const STORAGE_VERSION = 7; // bump because we add tombstones
+// v8: videoLinks now always merges defaults + stored (so missing keys never hide videos)
+const STORAGE_VERSION = 8;
 const STORAGE_VERSION_KEY = "gym_storage_version";
 
 // =====================
@@ -25,7 +26,7 @@ export const STORAGE_KEYS = {
   // Draft workout (unsaved)
   WORKOUT_DRAFT: "gym_workout_draft",
 
-  // NEW: remembers exercises the user deleted so defaults don't respawn
+  // Remembers exercises the user deleted so defaults don't respawn
   EXERCISE_TOMBSTONES: "gym_exercise_tombstones",
 };
 
@@ -167,6 +168,13 @@ export const initStorage = () => {
       if (!Array.isArray(t)) setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, []);
     }
 
+    // ---- Migration to v8 ----
+    // Ensure videoLinks always has defaults merged in (persist merged so older UI also benefits)
+    if (version < 8) {
+      const merged = getVideoLinks(); // (this merges defaults + stored)
+      setStorageData(STORAGE_KEYS.VIDEO_LINKS, merged);
+    }
+
     localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION.toString());
   } catch (e) {
     console.error("Storage init failed", e);
@@ -181,7 +189,11 @@ export const getWorkoutPattern = () => {
 };
 
 export const setWorkoutPattern = (patternString) => {
-  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_PATTERN, patternString, APP_EVENTS.SETTINGS_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.WORKOUT_PATTERN,
+    patternString,
+    APP_EVENTS.SETTINGS_CHANGED
+  );
 };
 
 export const getWorkoutPatternIndex = () => {
@@ -189,7 +201,11 @@ export const getWorkoutPatternIndex = () => {
 };
 
 export const setWorkoutPatternIndex = (index) => {
-  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, index, APP_EVENTS.SETTINGS_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.WORKOUT_PATTERN_INDEX,
+    index,
+    APP_EVENTS.SETTINGS_CHANGED
+  );
 };
 
 // Parse "A,B,B,C" -> ["A","B","B","C"]
@@ -282,7 +298,11 @@ export const saveWorkout = (workout) => {
     id: workout.id || Date.now().toString(),
     date: workout.date || new Date().toISOString(),
   });
-  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, workouts, APP_EVENTS.WORKOUTS_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.WORKOUTS,
+    workouts,
+    APP_EVENTS.WORKOUTS_CHANGED
+  );
 };
 
 export const updateWorkout = (id, updates) => {
@@ -291,13 +311,21 @@ export const updateWorkout = (id, updates) => {
   if (index === -1) return false;
 
   workouts[index] = { ...workouts[index], ...updates };
-  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, workouts, APP_EVENTS.WORKOUTS_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.WORKOUTS,
+    workouts,
+    APP_EVENTS.WORKOUTS_CHANGED
+  );
 };
 
 export const deleteWorkout = (id) => {
   const workouts = getWorkouts();
   const filtered = workouts.filter((w) => w.id !== id);
-  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, filtered, APP_EVENTS.WORKOUTS_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.WORKOUTS,
+    filtered,
+    APP_EVENTS.WORKOUTS_CHANGED
+  );
 };
 
 // =====================
@@ -317,7 +345,11 @@ export const setWorkoutDraft = (draft) => {
         }
       : draft;
 
-  return setStorageDataAndEmit(STORAGE_KEYS.WORKOUT_DRAFT, enriched, APP_EVENTS.WORKOUT_DRAFT_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.WORKOUT_DRAFT,
+    enriched,
+    APP_EVENTS.WORKOUT_DRAFT_CHANGED
+  );
 };
 
 // Alias some older imports may use
@@ -394,7 +426,11 @@ export const updateSettings = (updates) => {
   // keep legacy key in sync (optional)
   if (updates?.colorMode) next.theme = updates.colorMode;
 
-  return setStorageDataAndEmit(STORAGE_KEYS.SETTINGS, next, APP_EVENTS.SETTINGS_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.SETTINGS,
+    next,
+    APP_EVENTS.SETTINGS_CHANGED
+  );
 };
 
 // =====================
@@ -412,13 +448,21 @@ export const addBodyWeight = (weight, note = "") => {
     date: new Date().toISOString(),
   };
   weights.unshift(newEntry);
-  return setStorageDataAndEmit(STORAGE_KEYS.BODY_WEIGHT, weights, APP_EVENTS.BODY_WEIGHT_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.BODY_WEIGHT,
+    weights,
+    APP_EVENTS.BODY_WEIGHT_CHANGED
+  );
 };
 
 export const deleteBodyWeight = (id) => {
   const weights = getBodyWeights();
   const filtered = weights.filter((w) => w.id !== id);
-  return setStorageDataAndEmit(STORAGE_KEYS.BODY_WEIGHT, filtered, APP_EVENTS.BODY_WEIGHT_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.BODY_WEIGHT,
+    filtered,
+    APP_EVENTS.BODY_WEIGHT_CHANGED
+  );
 };
 
 // =====================
@@ -427,7 +471,7 @@ export const deleteBodyWeight = (id) => {
 export const getPersonalRecords = () => {
   const prs = getStorageData(STORAGE_KEYS.PERSONAL_RECORDS) || {};
 
-  // Ensure each PR has exerciseName populated (Stats page uses it)
+  // Ensure each PR has exerciseName populated
   let changed = false;
   Object.keys(prs).forEach((k) => {
     if (prs[k] && !prs[k].exerciseName) {
@@ -445,7 +489,7 @@ export const getPersonalRecords = () => {
  * - accepts exerciseId OR exerciseName
  * - stores under underscore key
  * - keeps exerciseName for display
- * - only overwrites if weight increases (original rule)
+ * - only overwrites if weight increases (legacy rule)
  *
  * NOTE: this keeps legacy behaviour (no 0/negative PRs).
  */
@@ -477,7 +521,11 @@ export const updatePersonalRecord = (exerciseIdOrName, weight, reps, date) => {
       date: date || new Date().toISOString(),
       previousWeight: prev?.weight ?? null,
     };
-    setStorageDataAndEmit(STORAGE_KEYS.PERSONAL_RECORDS, prs, APP_EVENTS.PRS_CHANGED);
+    setStorageDataAndEmit(
+      STORAGE_KEYS.PERSONAL_RECORDS,
+      prs,
+      APP_EVENTS.PRS_CHANGED
+    );
     return true;
   }
 
@@ -502,17 +550,46 @@ export const getDefaultVideoLinks = () => ({
   hanging_knee_raises: "https://www.youtube.com/watch?v=BI7wrB3Crsc",
 });
 
+/**
+ * ✅ Critical fix:
+ * Always merge defaults + stored so missing keys never hide video icons.
+ * Stored values override defaults.
+ */
 export const getVideoLinks = () => {
-  return getStorageData(STORAGE_KEYS.VIDEO_LINKS) || getDefaultVideoLinks();
+  const stored = getStorageData(STORAGE_KEYS.VIDEO_LINKS);
+  const safeStored =
+    stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+  return { ...getDefaultVideoLinks(), ...safeStored };
 };
 
 // Accept id OR name (legacy) as first param
 export const updateVideoLink = (exerciseIdOrName, url) => {
-  const links = getVideoLinks();
   const key = toKeyIdOrName(exerciseIdOrName);
   if (!key) return false;
+
+  const links = getVideoLinks(); // merged base
   links[key] = url;
-  return setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, links, APP_EVENTS.VIDEO_LINKS_CHANGED);
+
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.VIDEO_LINKS,
+    links,
+    APP_EVENTS.VIDEO_LINKS_CHANGED
+  );
+};
+
+// (optional) remove a link entirely (falls back to default if default exists)
+export const deleteVideoLink = (exerciseIdOrName) => {
+  const key = toKeyIdOrName(exerciseIdOrName);
+  if (!key) return false;
+
+  const links = getVideoLinks();
+  delete links[key];
+
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.VIDEO_LINKS,
+    links,
+    APP_EVENTS.VIDEO_LINKS_CHANGED
+  );
 };
 
 // =====================
@@ -536,17 +613,29 @@ export const saveProgramme = (programme) => {
     const updated = programmes.map((p) =>
       p.type === programme.type ? programme : p
     );
-    return setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, updated, APP_EVENTS.PROGRAMMES_CHANGED);
+    return setStorageDataAndEmit(
+      STORAGE_KEYS.PROGRAMMES,
+      updated,
+      APP_EVENTS.PROGRAMMES_CHANGED
+    );
   } else {
     programmes.push(programme);
-    return setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, programmes, APP_EVENTS.PROGRAMMES_CHANGED);
+    return setStorageDataAndEmit(
+      STORAGE_KEYS.PROGRAMMES,
+      programmes,
+      APP_EVENTS.PROGRAMMES_CHANGED
+    );
   }
 };
 
 export const deleteProgramme = (type) => {
   const programmes = getProgrammes();
   const filtered = programmes.filter((p) => p.type !== type);
-  return setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, filtered, APP_EVENTS.PROGRAMMES_CHANGED);
+  return setStorageDataAndEmit(
+    STORAGE_KEYS.PROGRAMMES,
+    filtered,
+    APP_EVENTS.PROGRAMMES_CHANGED
+  );
 };
 
 // =====================
@@ -608,7 +697,7 @@ function rebuildExerciseCatalogue(programmes, existingExercises) {
     const id = normalizeId(ex.id);
     if (!id) return;
 
-    // ✅ if user deleted it previously, never re-add it from defaults/legacy
+    // if user deleted it previously, never re-add it from defaults/legacy
     if (tombstones.has(id.toLowerCase())) return;
 
     const prev = byId.get(id) || {};
@@ -727,10 +816,10 @@ export const deleteExercise = (id) => {
     const normId = normalizeId(id);
     if (!normId) return false;
 
-    // ✅ Remember deletion so defaults/legacy don't respawn
+    // Remember deletion so defaults/legacy don't respawn
     addExerciseTombstone(normId);
 
-    // ✅ Remove it from programmes so it disappears there too
+    // Remove it from programmes so it disappears there too
     removeExerciseEverywhereFromProgrammes(normId);
 
     // Remove from stored exercises list
@@ -773,9 +862,7 @@ function syncExerciseAssignmentsToProgrammes(exercise) {
         name: exercise.name,
         sets: exercise.sets ?? 3,
         repScheme: exercise.repScheme ?? "RPT",
-        goalReps: Array.isArray(exercise.goalReps)
-          ? exercise.goalReps
-          : [8, 10, 12],
+        goalReps: Array.isArray(exercise.goalReps) ? exercise.goalReps : [8, 10, 12],
         restTime: exercise.restTime ?? 120,
         notes: exercise.notes ?? "",
       });
@@ -1011,7 +1098,11 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
         data.workouts.forEach((w) => {
           if (w?.id) byId.set(w.id, w);
         });
-        setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, Array.from(byId.values()), APP_EVENTS.WORKOUTS_CHANGED);
+        setStorageDataAndEmit(
+          STORAGE_KEYS.WORKOUTS,
+          Array.from(byId.values()),
+          APP_EVENTS.WORKOUTS_CHANGED
+        );
       } else {
         setStorageDataAndEmit(STORAGE_KEYS.WORKOUTS, data.workouts, APP_EVENTS.WORKOUTS_CHANGED);
       }
@@ -1022,8 +1113,13 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageDataAndEmit(STORAGE_KEYS.BODY_WEIGHT, data.bodyWeights, APP_EVENTS.BODY_WEIGHT_CHANGED);
     if (data.personalRecords)
       setStorageDataAndEmit(STORAGE_KEYS.PERSONAL_RECORDS, data.personalRecords, APP_EVENTS.PRS_CHANGED);
-    if (data.videoLinks)
-      setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, data.videoLinks, APP_EVENTS.VIDEO_LINKS_CHANGED);
+
+    // ✅ Important: merge imported videoLinks with defaults too
+    if (data.videoLinks && typeof data.videoLinks === "object") {
+      const merged = { ...getDefaultVideoLinks(), ...data.videoLinks };
+      setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, merged, APP_EVENTS.VIDEO_LINKS_CHANGED);
+    }
+
     if (Array.isArray(data.programmes))
       setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, data.programmes, APP_EVENTS.PROGRAMMES_CHANGED);
     if (Array.isArray(data.exercises))
@@ -1051,12 +1147,16 @@ export const importAllDataFromJSON = (jsonText, options = { merge: false }) => {
       setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, data.exerciseTombstones);
     }
 
+    // bump stored version so migrations don't re-run weirdly
+    localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION.toString());
+
     return { success: true };
   } catch (e) {
     console.error("Failed to import all data", e);
     return { success: false, error: `Import failed: ${e.message}` };
   }
 };
+
 // =====================
 // Reset helpers (restore defaults from app code)
 // =====================
@@ -1088,38 +1188,30 @@ const getDefaultProgrammesFromWorkoutData = () => {
 const rebuildAndStoreExercisesFromProgrammes = (programmes) => {
   const existing = getStorageData(STORAGE_KEYS.EXERCISES) || [];
   const merged = rebuildExerciseCatalogue(programmes, existing);
-  // store + emit exercises change
-  if (typeof APP_EVENTS !== "undefined") {
-    return setStorageDataAndEmit(STORAGE_KEYS.EXERCISES, merged, APP_EVENTS.EXERCISES_CHANGED);
-  }
-  return setStorageData(STORAGE_KEYS.EXERCISES, merged);
+  return setStorageDataAndEmit(STORAGE_KEYS.EXERCISES, merged, APP_EVENTS.EXERCISES_CHANGED);
 };
 
 // Reset ONLY settings + progression + pattern back to defaults (keeps workouts/history)
 export const resetSettingsToDefaults = () => {
-  const ok1 =
-    typeof APP_EVENTS !== "undefined"
-      ? setStorageDataAndEmit(STORAGE_KEYS.SETTINGS, getDefaultSettings(), APP_EVENTS.SETTINGS_CHANGED)
-      : setStorageData(STORAGE_KEYS.SETTINGS, getDefaultSettings());
+  const ok1 = setStorageDataAndEmit(
+    STORAGE_KEYS.SETTINGS,
+    getDefaultSettings(),
+    APP_EVENTS.SETTINGS_CHANGED
+  );
 
-  const ok2 =
-    typeof APP_EVENTS !== "undefined"
-      ? setStorageDataAndEmit(
-          STORAGE_KEYS.PROGRESSION_SETTINGS,
-          getDefaultProgressionSettings(),
-          APP_EVENTS.PROGRESSION_CHANGED
-        )
-      : setStorageData(STORAGE_KEYS.PROGRESSION_SETTINGS, getDefaultProgressionSettings());
+  const ok2 = setStorageDataAndEmit(
+    STORAGE_KEYS.PROGRESSION_SETTINGS,
+    getDefaultProgressionSettings(),
+    APP_EVENTS.PROGRESSION_CHANGED
+  );
 
   // pattern defaults
   setStorageData(STORAGE_KEYS.WORKOUT_PATTERN, "A,B");
   setStorageData(STORAGE_KEYS.WORKOUT_PATTERN_INDEX, 0);
 
   // let listeners refresh
-  if (typeof APP_EVENTS !== "undefined") {
-    emit(APP_EVENTS.SETTINGS_CHANGED);
-    emit(APP_EVENTS.PROGRESSION_CHANGED);
-  }
+  emit(APP_EVENTS.SETTINGS_CHANGED);
+  emit(APP_EVENTS.PROGRESSION_CHANGED);
 
   return !!(ok1 && ok2);
 };
@@ -1128,10 +1220,11 @@ export const resetSettingsToDefaults = () => {
 export const resetProgrammesToDefaults = () => {
   const defaults = getDefaultProgrammesFromWorkoutData();
 
-  const ok =
-    typeof APP_EVENTS !== "undefined"
-      ? setStorageDataAndEmit(STORAGE_KEYS.PROGRAMMES, defaults, APP_EVENTS.PROGRAMMES_CHANGED)
-      : setStorageData(STORAGE_KEYS.PROGRAMMES, defaults);
+  const ok = setStorageDataAndEmit(
+    STORAGE_KEYS.PROGRAMMES,
+    defaults,
+    APP_EVENTS.PROGRAMMES_CHANGED
+  );
 
   // Rebuild exercises catalogue so assignments match programmes
   rebuildAndStoreExercisesFromProgrammes(defaults);
@@ -1144,11 +1237,12 @@ export const resetExercisesToDefaults = () => {
   // Clear tombstones so defaults can come back
   setStorageData(STORAGE_KEYS.EXERCISE_TOMBSTONES, []);
 
-  // Reset video links back to the app defaults
-  const okLinks =
-    typeof APP_EVENTS !== "undefined"
-      ? setStorageDataAndEmit(STORAGE_KEYS.VIDEO_LINKS, getDefaultVideoLinks(), APP_EVENTS.VIDEO_LINKS_CHANGED)
-      : setStorageData(STORAGE_KEYS.VIDEO_LINKS, getDefaultVideoLinks());
+  // Reset video links back to the app defaults (and emit)
+  const okLinks = setStorageDataAndEmit(
+    STORAGE_KEYS.VIDEO_LINKS,
+    getDefaultVideoLinks(),
+    APP_EVENTS.VIDEO_LINKS_CHANGED
+  );
 
   // Clear custom exercises list (catalogue will rebuild)
   setStorageData(STORAGE_KEYS.EXERCISES, []);
@@ -1192,22 +1286,21 @@ export const resetAppToBlank = async () => {
     initStorage();
 
     // notify UI
-    if (typeof APP_EVENTS !== "undefined") {
-      emit(APP_EVENTS.SETTINGS_CHANGED);
-      emit(APP_EVENTS.PROGRESSION_CHANGED);
-      emit(APP_EVENTS.PROGRAMMES_CHANGED);
-      emit(APP_EVENTS.EXERCISES_CHANGED);
-      emit(APP_EVENTS.VIDEO_LINKS_CHANGED);
-      emit(APP_EVENTS.WORKOUTS_CHANGED);
-      emit(APP_EVENTS.BODY_WEIGHT_CHANGED);
-      emit(APP_EVENTS.PRS_CHANGED);
-    }
+    emit(APP_EVENTS.SETTINGS_CHANGED);
+    emit(APP_EVENTS.PROGRESSION_CHANGED);
+    emit(APP_EVENTS.PROGRAMMES_CHANGED);
+    emit(APP_EVENTS.EXERCISES_CHANGED);
+    emit(APP_EVENTS.VIDEO_LINKS_CHANGED);
+    emit(APP_EVENTS.WORKOUTS_CHANGED);
+    emit(APP_EVENTS.BODY_WEIGHT_CHANGED);
+    emit(APP_EVENTS.PRS_CHANGED);
 
     return { success: true };
   } catch (e) {
     return { success: false, error: e?.message || "Reset failed" };
   }
 };
+
 // =====================
 // Force Update helpers
 // =====================
