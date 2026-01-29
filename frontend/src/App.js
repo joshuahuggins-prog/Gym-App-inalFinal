@@ -1,4 +1,20 @@
 // src/App.js
+import useUpsideDown from "./hooks/useUpsideDown";
+
+function App() {
+  const upsideDown = useUpsideDown();
+
+  return (
+    <div
+      className={`min-h-screen transition-transform duration-300 ease-out ${
+        upsideDown ? "rotate-180" : ""
+      }`}
+    >
+      {/* your existing app */}
+    </div>
+  );
+}
+
 import React, { useState } from "react";
 import {
   Home,
