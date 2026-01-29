@@ -1,7 +1,14 @@
 // src/pages/ExercisesPage.js
-
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Edit2, Trash2, Search, Save, Video } from "lucide-react";
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Save,
+  Video,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -26,6 +33,9 @@ import {
   getProgrammes,
   getVideoLinks,
   updateVideoLink,
+
+  // ✅ needs to exist from your earlier storage.js change
+  getDefaultVideoLinks,
 } from "../utils/storage";
 import { toast } from "sonner";
 
@@ -33,6 +43,37 @@ const MAX_SETS = 8;
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
 const norm = (s) => String(s || "").trim().toLowerCase();
+
+// Math challenge generator (same rules as Settings reset)
+const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+const makeChallenge = () => {
+  const ops = ["+", "-", "*"];
+  const op = ops[randInt(0, ops.length - 1)];
+
+  // single/double digits
+  let a = randInt(1, 99);
+  let b = randInt(1, 99);
+
+  if (op === "*") {
+    // don't use digits over 12 in *
+    a = randInt(1, 12);
+    b = randInt(1, 12);
+  }
+
+  // keep subtraction non-negative (nicer UX)
+  if (op === "-" && b > a) [a, b] = [b, a];
+
+  let result = 0;
+  if (op === "+") result = a + b;
+  if (op === "-") result = a - b;
+  if (op === "*") result = a * b;
+
+  return {
+    text: `${a} ${op} ${b}`,
+    result,
+  };
+};
 
 const ExercisesPage = () => {
   const [exercises, setExercises] = useState([]);
@@ -46,6 +87,11 @@ const ExercisesPage = () => {
   // draft strings prevent "stuck" inputs when clearing/typing
   const [setsDraft, setSetsDraft] = useState("");
 
+  // ✅ Per-card reset UI state
+  const [resetOpenId, setResetOpenId] = useState("");
+  const [resetChallenge, setResetChallenge] = useState(() => makeChallenge());
+  const [resetAnswer, setResetAnswer] = useState("");
+
   useEffect(() => {
     loadData();
   }, []);
@@ -54,6 +100,45 @@ const ExercisesPage = () => {
     setExercises(getExercises() || []);
     setProgrammes(getProgrammes() || []);
   };
+
+  const toastAndReload = (message) => {
+    toast.success(message);
+    // Let toast render then reload so UI re-hydrates from storage
+    setTimeout(() => window.location.reload(), 650);
+  };
+
+  // Build defaults map from app code (workoutData)
+  const defaultExerciseMap = useMemo(() => {
+    try {
+      // These are the app-coded defaults
+      const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
+      const all = [
+        ...(WORKOUT_A?.exercises || []),
+        ...(WORKOUT_B?.exercises || []),
+      ];
+
+      const map = new Map();
+      all.forEach((ex) => {
+        const id = String(ex?.id || "").trim();
+        if (!id) return;
+        map.set(id, {
+          id,
+          name: ex?.name || "",
+          sets: ex?.sets ?? 3,
+          repScheme: ex?.repScheme ?? "RPT",
+          goalReps: Array.isArray(ex?.goalReps) ? ex.goalReps : [8, 10, 12],
+          restTime: ex?.restTime ?? 120,
+          notes: ex?.notes ?? "",
+          // keep any other fields from defaults (safe)
+          ...ex,
+        });
+      });
+
+      return map;
+    } catch {
+      return new Map();
+    }
+  }, []);
 
   /**
    * programmeUsageMap: exerciseId -> array of programme objects that contain that id
@@ -79,7 +164,7 @@ const ExercisesPage = () => {
     const goalReps = [8, 10, 12];
 
     setEditingExercise({
-      id: `exercise_${Date.now()}`,
+      id: `exercise_${Date.now()}`, // ✅ user-created marker
       name: "",
       sets,
       repScheme: "RPT",
@@ -212,6 +297,84 @@ const ExercisesPage = () => {
     }
   };
 
+  // ✅ identify user created exercises (reset disabled)
+  const isUserCreatedExercise = (exercise) => {
+    const id = String(exercise?.id || "");
+    return id.startsWith("exercise_");
+  };
+
+  // ✅ open/close reset UI per card
+  const openResetFor = (exerciseId) => {
+    setResetOpenId(exerciseId);
+    setResetAnswer("");
+    setResetChallenge(makeChallenge());
+  };
+
+  const closeResetUI = () => {
+    setResetOpenId("");
+    setResetAnswer("");
+    setResetChallenge(makeChallenge());
+  };
+
+  // ✅ reset one exercise back to app default (only if it's in workoutData defaults)
+  const runExerciseReset = (exercise) => {
+    const id = String(exercise?.id || "").trim();
+    if (!id) return;
+
+    if (isUserCreatedExercise(exercise)) return;
+
+    const userAnswer = Number(String(resetAnswer).trim());
+    if (!Number.isFinite(userAnswer) || userAnswer !== resetChallenge.result) {
+      toast.error("Wrong answer.");
+      closeResetUI();
+      return;
+    }
+
+    const def = defaultExerciseMap.get(id);
+    if (!def) {
+      toast.error("No app default found for this exercise.");
+      closeResetUI();
+      return;
+    }
+
+    try {
+      // overwrite fields back to app default
+      const ok = saveExercise({
+        id: def.id,
+        name: def.name,
+        sets: def.sets ?? 3,
+        repScheme: def.repScheme ?? "RPT",
+        goalReps: Array.isArray(def.goalReps) ? def.goalReps : [8, 10, 12],
+        restTime: def.restTime ?? 120,
+        notes: def.notes ?? "",
+        // keep hidden if present in stored item
+        hidden: typeof exercise?.hidden === "boolean" ? exercise.hidden : false,
+        // keep assignedTo untouched here (catalogue rebuild derives it anyway)
+        assignedTo: Array.isArray(exercise?.assignedTo) ? exercise.assignedTo : [],
+      });
+
+      if (!ok) {
+        toast.error("Reset failed");
+        closeResetUI();
+        return;
+      }
+
+      // reset video link back to default if the app has one
+      const defaults = (typeof getDefaultVideoLinks === "function"
+        ? getDefaultVideoLinks()
+        : {}) || {};
+      if (defaults[id]) {
+        updateVideoLink(id, defaults[id]);
+      }
+
+      closeResetUI();
+      toastAndReload(`Reset "${def.name || exercise.name}" to default`);
+    } catch (e) {
+      toast.error(e?.message || "Reset failed");
+      closeResetUI();
+    }
+  };
+
   const filteredExercises = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
@@ -306,6 +469,12 @@ const ExercisesPage = () => {
           <div className="grid gap-4 md:grid-cols-2">
             {filteredExercises.map((exercise) => {
               const usedBy = programmeUsageMap.get(norm(exercise.id)) || [];
+              const userMade = isUserCreatedExercise(exercise);
+              const isOpen = resetOpenId === exercise.id;
+
+              // Only enable reset if NOT user-made AND exists in app defaults map
+              const canReset = !userMade && defaultExerciseMap.has(String(exercise.id || "").trim());
+
               return (
                 <div
                   key={exercise.id}
@@ -329,10 +498,42 @@ const ExercisesPage = () => {
                             Not in any programme
                           </Badge>
                         )}
+
+                        {userMade && (
+                          <Badge variant="secondary" className="text-xs">
+                            Custom
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex gap-1">
+                      {/* ✅ Reset to default (per exercise) */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={!canReset}
+                        onClick={() => {
+                          if (!canReset) return;
+                          if (isOpen) closeResetUI();
+                          else openResetFor(exercise.id);
+                        }}
+                        className={
+                          canReset
+                            ? ""
+                            : "opacity-40 cursor-not-allowed"
+                        }
+                        title={
+                          userMade
+                            ? "Custom exercises can’t be reset to app defaults."
+                            : !defaultExerciseMap.has(String(exercise.id || "").trim())
+                              ? "No app default exists for this exercise."
+                              : "Reset this exercise back to app defaults"
+                        }
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+
                       <Button
                         variant="ghost"
                         size="sm"
@@ -340,6 +541,7 @@ const ExercisesPage = () => {
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
+
                       <Button
                         variant="ghost"
                         size="sm"
@@ -381,6 +583,50 @@ const ExercisesPage = () => {
                       {exercise.notes}
                     </div>
                   ) : null}
+
+                  {/* ✅ Reset confirmation (math challenge) */}
+                  {isOpen && (
+                    <div className="mt-3 rounded-lg border border-border bg-background/40 p-3 space-y-2">
+                      <div className="text-sm font-medium text-foreground">
+                        Reset to app default
+                      </div>
+
+                      <div className="text-xs text-muted-foreground">
+                        Solve to confirm:{" "}
+                        <span className="font-semibold text-foreground">
+                          {resetChallenge.text}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={resetAnswer}
+                          onChange={(e) => setResetAnswer(e.target.value)}
+                          placeholder="Answer"
+                        />
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setResetChallenge(makeChallenge());
+                            setResetAnswer("");
+                          }}
+                        >
+                          New
+                        </Button>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button onClick={() => runExerciseReset(exercise)}>
+                          Reset
+                        </Button>
+                        <Button variant="outline" onClick={closeResetUI}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
