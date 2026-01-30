@@ -4,10 +4,6 @@ import "./index.css";
 import "./theme.css";
 import App from "./App";
 
-import { initStorage } from "./utils/storage";
-
-initStorage();
-
 // TEMP DEBUG: capture InvalidCharacterError source on white-screen crashes
 (() => {
   const wrap = (obj, name) => {
@@ -17,14 +13,12 @@ initStorage();
       try {
         return orig.apply(this, args);
       } catch (e) {
-        // Log EVERYTHING we can while still allowing the crash to show up
         console.error(`🔥 THROW in ${name}`, { args, error: e, thisObj: this });
         throw e;
       }
     };
   };
 
-  // Most common sources of InvalidCharacterError
   wrap(Document.prototype, "createElement");
   wrap(Document.prototype, "createElementNS");
 
@@ -39,14 +33,26 @@ initStorage();
   wrap(Element.prototype, "querySelectorAll");
   wrap(Element.prototype, "matches");
 
-  // Also grab global errors
   window.addEventListener("error", (evt) => {
     console.error("🔥 window.error", evt?.error || evt);
   });
   window.addEventListener("unhandledrejection", (evt) => {
     console.error("🔥 unhandledrejection", evt?.reason || evt);
   });
+
+  console.log("✅ debug hooks armed");
 })();
+
+import { initStorage } from "./utils/storage";
+
+// Wrap initStorage so we can see if it’s the trigger
+try {
+  initStorage();
+  console.log("✅ initStorage ok");
+} catch (e) {
+  console.error("🔥 initStorage threw", e);
+  throw e;
+}
 
 // PWA service worker
 import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
@@ -58,12 +64,10 @@ root.render(
   </React.StrictMode>
 );
 
-// Register service worker (offline + installable)
+// DEBUG: disable service worker while diagnosing
 serviceWorkerRegistration.unregister();
-
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
     regs.forEach((r) => r.unregister());
   });
-};
-)
+}
