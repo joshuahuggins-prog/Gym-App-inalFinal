@@ -57,13 +57,54 @@ const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
 
 const norm = (s) => String(s || "").trim().toLowerCase();
 
-// 🔒 CRITICAL: Radix Select requires token-safe "value" strings.
-// Spaces, slashes, commas, etc. can crash with InvalidCharacterError.
+// 🔒 CRITICAL: Radix Select is safest when "value" strings are token-safe.
+// Use this any time you store something as a Select "value".
 const toSafeToken = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "_");
+
+// Rep scheme: keep stored/display label human-readable, but Select uses token-safe values
+const REP_SCHEME_OPTIONS = [
+  { token: "rpt", label: "RPT (Reverse Pyramid)" },
+  { token: "kino_reps", label: "Kino Reps" },
+  { token: "rest_pause", label: "Rest-Pause" },
+  { token: "straight_sets", label: "Straight Sets" },
+];
+
+// Backward-compatible mapping:
+// - Some older saved data may store "RPT" or "RPT (Reverse Pyramid)" etc.
+const repSchemeTokenFromStored = (stored) => {
+  const s = String(stored || "").trim();
+
+  // Common historical values
+  if (!s) return "rpt";
+  if (s === "RPT") return "rpt";
+  if (s === "RPT (Reverse Pyramid)") return "rpt";
+  if (s === "Kino Reps") return "kino_reps";
+  if (s === "Rest-Pause") return "rest_pause";
+  if (s === "Straight Sets") return "straight_sets";
+
+  // If already token-like
+  const tokenish = toSafeToken(s);
+  const match = REP_SCHEME_OPTIONS.find((o) => o.token === tokenish);
+  return match ? match.token : "rpt";
+};
+
+const repSchemeLabelFromToken = (token) => {
+  const t = String(token || "").trim();
+  const found = REP_SCHEME_OPTIONS.find((o) => o.token === t);
+  return found ? found.label : REP_SCHEME_OPTIONS[0].label;
+};
+
+// When saving to storage, keep the label in a consistent, human form.
+// For RPT, store "RPT" to match your existing data style.
+const repSchemeStoredFromToken = (token) => {
+  const t = String(token || "").trim();
+  if (t === "rpt") return "RPT";
+  return repSchemeLabelFromToken(t);
+};
 
 /* ======================================================
    Reset challenge helpers
@@ -196,7 +237,9 @@ function ProgrammesPanel() {
         <div className="text-center py-12">
           <div className="text-4xl mb-2">📋</div>
           <p className="text-lg text-muted-foreground mb-2">No programmes yet</p>
-          <Button onClick={handleCreateProgramme}>Create your first programme</Button>
+          <Button onClick={handleCreateProgramme}>
+            Create your first programme
+          </Button>
         </div>
       ) : (
         programmes.map((programme) => {
@@ -280,7 +323,8 @@ function ProgrammesPanel() {
                           {(exercise.goalReps || []).join(", ")}
                         </div>
                         <div>
-                          Rest: {exercise.restTime}s • Scheme: {exercise.repScheme}
+                          Rest: {exercise.restTime}s • Scheme:{" "}
+                          {String(exercise.repScheme || "")}
                         </div>
                         {exercise.notes ? (
                           <div className="text-xs mt-2 p-2 bg-card rounded border border-border break-words whitespace-pre-wrap">
@@ -318,7 +362,10 @@ function ProgrammesPanel() {
                   <Input
                     value={editingProgramme.type}
                     onChange={(e) =>
-                      setEditingProgramme({ ...editingProgramme, type: e.target.value })
+                      setEditingProgramme({
+                        ...editingProgramme,
+                        type: e.target.value,
+                      })
                     }
                     placeholder="A"
                     disabled={!!programmes.find((p) => p.type === editingProgramme.type)}
@@ -332,7 +379,10 @@ function ProgrammesPanel() {
                   <Input
                     value={editingProgramme.name}
                     onChange={(e) =>
-                      setEditingProgramme({ ...editingProgramme, name: e.target.value })
+                      setEditingProgramme({
+                        ...editingProgramme,
+                        name: e.target.value,
+                      })
                     }
                     placeholder="Workout A"
                   />
@@ -346,7 +396,10 @@ function ProgrammesPanel() {
                 <Input
                   value={editingProgramme.focus}
                   onChange={(e) =>
-                    setEditingProgramme({ ...editingProgramme, focus: e.target.value })
+                    setEditingProgramme({
+                      ...editingProgramme,
+                      focus: e.target.value,
+                    })
                   }
                   placeholder="Chest Emphasis"
                 />
@@ -563,7 +616,10 @@ function ExercisesPanel() {
       goalReps = goalReps.slice(0, safeSets);
     }
 
-    setEditingExercise({ ...exercise, sets: safeSets, goalReps, videoUrl });
+    // IMPORTANT: Keep stored repScheme label, but drive Select with a token
+    const repScheme = String(exercise.repScheme || "RPT").trim() || "RPT";
+
+    setEditingExercise({ ...exercise, sets: safeSets, goalReps, repScheme, videoUrl });
     setSetsDraft(String(safeSets));
     setShowEditDialog(true);
   };
@@ -619,6 +675,11 @@ function ExercisesPanel() {
 
     const restNum = Number(exerciseData.restTime);
     exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
+
+    // Ensure repScheme stays in your existing stored format (human readable)
+    // If it somehow became a token, normalize it back to stored label.
+    const possibleToken = repSchemeTokenFromStored(exerciseData.repScheme);
+    exerciseData.repScheme = repSchemeStoredFromToken(possibleToken);
 
     const ok = saveExercise(exerciseData);
     if (!ok) {
@@ -738,7 +799,9 @@ function ExercisesPanel() {
       const prog = (programmes || []).find(
         (p) => toSafeToken(p?.type) === filterProgramme
       );
-      const ids = new Set((prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean));
+      const ids = new Set(
+        (prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean)
+      );
       allowedIds = ids;
     }
 
@@ -877,7 +940,11 @@ function ExercisesPanel() {
                       <RotateCcw className="w-4 h-4" />
                     </Button>
 
-                    <Button variant="ghost" size="sm" onClick={() => handleEditExercise(exercise)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEditExercise(exercise)}
+                    >
                       <Edit2 className="w-4 h-4" />
                     </Button>
 
@@ -910,7 +977,9 @@ function ExercisesPanel() {
                   </div>
                   <div className="flex justify-between gap-2">
                     <span>Rest:</span>
-                    <span className="text-foreground font-semibold">{exercise.restTime}s</span>
+                    <span className="text-foreground font-semibold">
+                      {exercise.restTime}s
+                    </span>
                   </div>
                   <div className="flex justify-between items-center gap-2">
                     <span>Scheme:</span>
@@ -1047,20 +1116,24 @@ function ExercisesPanel() {
                   <label className="text-sm font-medium text-foreground block mb-2">
                     Rep Scheme
                   </label>
+
+                  {/* ✅ FIX: Select uses token-safe values */}
                   <Select
-                    value={editingExercise.repScheme}
-                    onValueChange={(value) =>
-                      setEditingExercise({ ...editingExercise, repScheme: value })
-                    }
+                    value={repSchemeTokenFromStored(editingExercise.repScheme)}
+                    onValueChange={(token) => {
+                      const storedLabel = repSchemeStoredFromToken(token);
+                      setEditingExercise({ ...editingExercise, repScheme: storedLabel });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="RPT">RPT (Reverse Pyramid)</SelectItem>
-                      <SelectItem value="Kino Reps">Kino Reps</SelectItem>
-                      <SelectItem value="Rest-Pause">Rest-Pause</SelectItem>
-                      <SelectItem value="Straight Sets">Straight Sets</SelectItem>
+                      {REP_SCHEME_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.token} value={opt.token}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1180,7 +1253,9 @@ function ExercisesPanel() {
               </div>
 
               <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">Programme membership:</span>{" "}
+                <span className="font-semibold text-foreground">
+                  Programme membership:
+                </span>{" "}
                 This is controlled in the Programme editor. This page edits the exercise
                 details only.
               </div>
