@@ -1,15 +1,15 @@
-// frontend/src/index.js
 import React from "react";
 import ReactDOM from "react-dom/client";
-
 import "./index.css";
 import "./theme.css";
 import App from "./App";
 
 import { initStorage } from "./utils/storage";
-import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
 
 initStorage();
+
+// PWA service worker
+import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
@@ -18,5 +18,5 @@ root.render(
   </React.StrictMode>
 );
 
-// Back to normal PWA behaviour
+// Register service worker (offline + installable)
 serviceWorkerRegistration.register();
