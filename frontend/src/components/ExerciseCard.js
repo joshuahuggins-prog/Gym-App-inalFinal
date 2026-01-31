@@ -1,6 +1,15 @@
 // src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Timer, Video, Shuffle, Plus, Minus, Check } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Timer,
+  Video,
+  Shuffle,
+  Plus,
+  Minus,
+  Check,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -67,6 +76,7 @@ const fmt1 = (n) => {
 
 /**
  * Find best (MAX) signed weight for this exercise key from ALL history.
+ * (So for assisted negatives, "best" becomes closest-to-zero / highest value.)
  */
 const bestSignedFromHistory = (exerciseKey) => {
   const workouts = getWorkouts?.() || [];
@@ -89,7 +99,7 @@ const bestSignedFromHistory = (exerciseKey) => {
 };
 
 /**
- * Derive a PR (weight x reps) from workout history instead of trusting personalRecords.
+ * Derive a PR (weight x reps) from workout history.
  */
 const bestSetFromHistory = (exerciseKey) => {
   const workouts = getWorkouts?.() || [];
@@ -132,7 +142,9 @@ const ExerciseCard = ({
   onOpenVideo,
 }) => {
   const desiredSetsCount = useMemo(() => {
-    const liveLen = Array.isArray(exercise?.setsData) ? exercise.setsData.length : 0;
+    const liveLen = Array.isArray(exercise?.setsData)
+      ? exercise.setsData.length
+      : 0;
     const fallback = Number(exercise?.sets ?? 3);
     const count = liveLen > 0 ? liveLen : fallback;
     return clampInt(count, 1, 40);
@@ -146,10 +158,14 @@ const ExerciseCard = ({
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(exercise?.userNotes || "");
   const [videoLink, setVideoLink] = useState("");
-  const [sets, setSets] = useState(() => normalizeSets(exercise?.setsData, desiredSetsCount));
+  const [sets, setSets] = useState(() =>
+    normalizeSets(exercise?.setsData, desiredSetsCount)
+  );
 
   const [mode, setMode] = useState(() =>
-    (exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted"
+    (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
+      ? "assisted"
+      : "weighted"
   );
 
   const userChoseModeRef = useRef(false);
@@ -162,12 +178,6 @@ const ExerciseCard = ({
 
   // ✅ PR from history
   const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
-
-  // Last workout weights (signed)
-  const lastTimeSuggestions = useMemo(() => {
-    const arr = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
-    return arr.map((s) => toNumOrNull(s?.weight));
-  }, [lastWorkoutData]);
 
   // Current-entered best (signed max)
   const bestFromCurrentSets = useMemo(() => {
@@ -206,7 +216,11 @@ const ExerciseCard = ({
       lastExerciseIdRef.current = currentId;
       userChoseModeRef.current = false;
 
-      setMode((exercise?.setsData || []).some((s) => Number(s.weight) < 0) ? "assisted" : "weighted");
+      setMode(
+        (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
+          ? "assisted"
+          : "weighted"
+      );
     }
   }, [exercise?.id, exercise?.setsData]);
 
@@ -223,7 +237,9 @@ const ExerciseCard = ({
   };
 
   const handleHeaderToggle = (e) => {
-    const interactive = e.target.closest("button, a, input, textarea, select, [data-no-toggle]");
+    const interactive = e.target.closest(
+      "button, a, input, textarea, select, [data-no-toggle]"
+    );
     if (interactive) return;
     setExpanded((v) => !v);
   };
@@ -244,7 +260,10 @@ const ExerciseCard = ({
     pushUp(converted);
   };
 
-  const completedCount = useMemo(() => sets.filter((s) => s.completed).length, [sets]);
+  const completedCount = useMemo(
+    () => sets.filter((s) => s.completed).length,
+    [sets]
+  );
 
   const isExerciseComplete = useMemo(
     () => sets.length > 0 && sets.every((s) => !!s.completed),
@@ -265,7 +284,9 @@ const ExerciseCard = ({
     const alts = id ? EXERCISE_ALTERNATIVES?.[id] : null;
 
     if (!alts || !alts.length) {
-      toast.message("Alternatives", { description: "No alternatives saved for this exercise." });
+      toast.message("Alternatives", {
+        description: "No alternatives saved for this exercise.",
+      });
       return;
     }
 
@@ -273,7 +294,9 @@ const ExerciseCard = ({
       description: (
         <div className="mt-1 space-y-1">
           {alts.slice(0, 8).map((a, i) => (
-            <div key={i} className="text-sm">• {a}</div>
+            <div key={i} className="text-sm">
+              • {a}
+            </div>
           ))}
           {alts.length > 8 && (
             <div className="text-xs text-muted-foreground mt-1">
@@ -300,14 +323,11 @@ const ExerciseCard = ({
   // ==========================================
   // ✅ Live settings sync + suggested weights
   // ==========================================
-  // These are re-read whenever Settings page writes to localStorage
   const [settingsVersion, setSettingsVersion] = useState(0);
 
   useEffect(() => {
     const handler = () => setSettingsVersion((v) => v + 1);
     window.addEventListener("storage", handler);
-
-    // same-tab changes (your Settings page updates localStorage in the same tab)
     window.addEventListener("gymapp:settingsChanged", handler);
     window.addEventListener("gymapp:progressionChanged", handler);
 
@@ -319,13 +339,11 @@ const ExerciseCard = ({
   }, []);
 
   const progressionSettings = useMemo(
-    () => (getProgressionSettings?.() || {}),
+    () => getProgressionSettings?.() || {},
     [settingsVersion]
   );
-  const appSettings = useMemo(
-    () => (getSettings?.() || {}),
-    [settingsVersion]
-  );
+
+  const appSettings = useMemo(() => getSettings?.() || {}, [settingsVersion]);
 
   const globalIncrement = useMemo(() => {
     const unit = (appSettings?.weightUnit || "kg").toLowerCase();
@@ -336,8 +354,18 @@ const ExerciseCard = ({
     return Number.isFinite(inc) ? inc : 0;
   }, [appSettings?.weightUnit, progressionSettings]);
 
+  // Clamp helpers based on mode
+  const clampToMode = (value, currentMode) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return value;
+    if (currentMode === "weighted") return Math.max(0, n);
+    // assisted: never suggest > 0
+    return Math.min(0, n);
+  };
+
   const suggestedWeights = useMemo(() => {
     const count = desiredSetsCount;
+
     const schemeRaw = String(exercise?.repScheme || "").trim();
     const scheme = schemeRaw.toLowerCase();
     const isRPT = scheme === "rpt";
@@ -345,10 +373,13 @@ const ExerciseCard = ({
 
     const out = new Array(count).fill(null);
 
-    const lastSets = Array.isArray(lastWorkoutData?.sets) ? lastWorkoutData.sets : [];
+    const lastSets = Array.isArray(lastWorkoutData?.sets)
+      ? lastWorkoutData.sets
+      : [];
     const lastWeights = lastSets.map((s) => toNumOrNull(s?.weight));
     const lastReps = lastSets.map((s) => toNumOrNull(s?.reps));
 
+    // For kino/pause we want the "heaviest" (signed max) from last session
     const heaviestIndexLast = (() => {
       let best = -Infinity;
       let idx = -1;
@@ -363,10 +394,14 @@ const ExerciseCard = ({
       return idx;
     })();
 
+    // Base selection
     let base = null;
 
     if (isKinoOrPause) {
-      if (heaviestIndexLast >= 0 && Number.isFinite(lastWeights[heaviestIndexLast])) {
+      if (
+        heaviestIndexLast >= 0 &&
+        Number.isFinite(lastWeights[heaviestIndexLast])
+      ) {
         base = lastWeights[heaviestIndexLast];
       } else if (Number.isFinite(overallBestSigned)) {
         base = overallBestSigned;
@@ -377,8 +412,13 @@ const ExerciseCard = ({
       else if (Number.isFinite(overallBestSigned)) base = overallBestSigned;
     }
 
+    // Mode-aware clamping of base (prevents base flipping into the wrong sign)
+    if (Number.isFinite(base)) base = clampToMode(base, mode);
+
+    // Decide if we should bump base (progression)
     const shouldBumpBase = (() => {
-      if (!Number.isFinite(base) || !Number.isFinite(globalIncrement) || globalIncrement === 0) return false;
+      if (!Number.isFinite(base)) return false;
+      if (!Number.isFinite(globalIncrement) || globalIncrement === 0) return false;
 
       if (isRPT) {
         const r = lastReps?.[0];
@@ -396,42 +436,80 @@ const ExerciseCard = ({
       return false;
     })();
 
-    if (shouldBumpBase) base = base + globalIncrement;
+    if (shouldBumpBase) {
+      // Weighted: base + inc
+      // Assisted: base + inc moves toward 0 (less assistance), but never above 0
+      base = clampToMode(base + globalIncrement, mode);
+    }
 
+    // If still no base, fall back to last weights (clamped to mode)
     if (!Number.isFinite(base)) {
       for (let i = 0; i < count; i++) {
-        if (Number.isFinite(lastWeights[i])) out[i] = round1(lastWeights[i]);
+        if (Number.isFinite(lastWeights[i])) {
+          out[i] = round1(clampToMode(lastWeights[i], mode));
+        }
       }
       return out;
     }
 
+    // =========================
+    // RPT logic (mode-safe)
+    // =========================
     if (isRPT) {
       const p2 = Number(progressionSettings?.rptSet2Percentage ?? 90);
       const p3 = Number(progressionSettings?.rptSet3Percentage ?? 80);
 
-      out[0] = round1(base);
-      if (count >= 2) out[1] = round1(Number.isFinite(p2) ? (base * p2) / 100 : base);
-      if (count >= 3) out[2] = round1(Number.isFinite(p3) ? (base * p3) / 100 : base);
+      const w1 = base;
+      const w2 = Number.isFinite(p2) ? (base * p2) / 100 : base;
+      const w3 = Number.isFinite(p3) ? (base * p3) / 100 : base;
+
+      out[0] = round1(clampToMode(w1, mode));
+      if (count >= 2) out[1] = round1(clampToMode(w2, mode));
+      if (count >= 3) out[2] = round1(clampToMode(w3, mode));
 
       for (let i = 3; i < count; i++) {
-        out[i] = round1(Number.isFinite(lastWeights[i]) ? lastWeights[i] : out[i - 1]);
+        const fallback = Number.isFinite(lastWeights[i]) ? lastWeights[i] : out[i - 1];
+        out[i] = round1(clampToMode(fallback, mode));
       }
       return out;
     }
 
+    // =========================
+    // Kino/Pause logic (FIXED)
+    // =========================
     if (isKinoOrPause) {
+      // If no increment, just repeat base (mode-safe)
       if (!Number.isFinite(globalIncrement) || globalIncrement === 0) {
-        for (let i = 0; i < count; i++) out[i] = round1(base);
+        for (let i = 0; i < count; i++) out[i] = round1(clampToMode(base, mode));
         return out;
       }
 
-      const start = base - globalIncrement * (count - 1);
-      for (let i = 0; i < count; i++) out[i] = round1(start + globalIncrement * i);
+      // Weighted: ramp up from a start that never goes below 0
+      // Assisted: ramp toward 0 (less assistance) and never suggest > 0
+      if (mode === "weighted") {
+        const start = Math.max(0, base - globalIncrement * (count - 1));
+        for (let i = 0; i < count; i++) {
+          out[i] = round1(clampToMode(start + globalIncrement * i, mode));
+        }
+        return out;
+      }
+
+      // assisted
+      // Example base=-5, inc=2.5, count=3 => -5, -2.5, 0
+      // Example base=0 => 0,0,0 (never suggests negatives)
+      const start = Math.min(0, base); // ensure not positive
+      for (let i = 0; i < count; i++) {
+        out[i] = round1(clampToMode(start + globalIncrement * i, mode));
+      }
       return out;
     }
 
+    // =========================
+    // Default scheme: use last weights or base (mode-safe)
+    // =========================
     for (let i = 0; i < count; i++) {
-      out[i] = round1(Number.isFinite(lastWeights[i]) ? lastWeights[i] : base);
+      const v = Number.isFinite(lastWeights[i]) ? lastWeights[i] : base;
+      out[i] = round1(clampToMode(v, mode));
     }
     return out;
   }, [
@@ -442,6 +520,7 @@ const ExerciseCard = ({
     overallBestSigned,
     globalIncrement,
     progressionSettings,
+    mode,
   ]);
 
   const suggestedWeightForSet = (setIndex) => {
@@ -454,7 +533,9 @@ const ExerciseCard = ({
     <div
       className={[
         "relative overflow-hidden rounded-xl border",
-        isExerciseComplete ? "bg-primary/10 border-primary/40" : "bg-card border-border",
+        isExerciseComplete
+          ? "bg-primary/10 border-primary/40"
+          : "bg-card border-border",
       ].join(" ")}
     >
       {isExerciseComplete && (
@@ -478,7 +559,9 @@ const ExerciseCard = ({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold truncate text-foreground">{exercise?.name || "Exercise"}</h3>
+            <h3 className="font-bold truncate text-foreground">
+              {exercise?.name || "Exercise"}
+            </h3>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
@@ -498,11 +581,16 @@ const ExerciseCard = ({
               )}
 
               {isExerciseComplete && (
-                <Badge className="bg-primary/20 text-primary border-primary/40">Completed</Badge>
+                <Badge className="bg-primary/20 text-primary border-primary/40">
+                  Completed
+                </Badge>
               )}
             </div>
 
-            <div className="mt-2 inline-flex border border-border rounded-md overflow-hidden" data-no-toggle>
+            <div
+              className="mt-2 inline-flex border border-border rounded-md overflow-hidden"
+              data-no-toggle
+            >
               <button
                 type="button"
                 data-no-toggle
@@ -555,10 +643,20 @@ const ExerciseCard = ({
               data-no-toggle
               className={hasVideo ? "hover:bg-muted/40" : "text-muted-foreground"}
             >
-              <Video className={hasVideo ? "w-4 h-4 text-[hsl(var(--accent-strong))]" : "w-4 h-4"} />
+              <Video
+                className={
+                  hasVideo
+                    ? "w-4 h-4 text-[hsl(var(--accent-strong))]"
+                    : "w-4 h-4"
+                }
+              />
             </Button>
 
-            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            {expanded ? (
+              <ChevronUp className="w-5 h-5" />
+            ) : (
+              <ChevronDown className="w-5 h-5" />
+            )}
           </div>
         </div>
       </div>
@@ -638,7 +736,9 @@ const ExerciseCard = ({
                   type="button"
                   size="sm"
                   variant={s.completed ? "default" : "outline"}
-                  className={s.completed ? "shadow-sm" : "bg-background hover:bg-muted/40"}
+                  className={
+                    s.completed ? "shadow-sm" : "bg-background hover:bg-muted/40"
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     const next = [...sets];
@@ -663,8 +763,12 @@ const ExerciseCard = ({
 
           {showExerciseInfoNotes && (
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg border border-border">
-              <div className="text-[11px] font-semibold text-foreground mb-1">Exercise notes</div>
-              <div className="whitespace-pre-wrap">{String(exercise.notes).trim()}</div>
+              <div className="text-[11px] font-semibold text-foreground mb-1">
+                Exercise notes
+              </div>
+              <div className="whitespace-pre-wrap">
+                {String(exercise.notes).trim()}
+              </div>
             </div>
           )}
 
