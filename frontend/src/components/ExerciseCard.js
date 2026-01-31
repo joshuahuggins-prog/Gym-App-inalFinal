@@ -75,31 +75,7 @@ const fmt1 = (n) => {
 };
 
 /**
- * Find best (MAX) signed weight for this exercise key from ALL history.
- * (So for assisted negatives, "best" becomes closest-to-zero / highest value.)
- */
-const bestSignedFromHistory = (exerciseKey) => {
-  const workouts = getWorkouts?.() || [];
-  let best = -Infinity;
-
-  workouts.forEach((w) => {
-    (w?.exercises || []).forEach((ex) => {
-      const key = normKey(ex?.id || ex?.name);
-      if (!key || key !== exerciseKey) return;
-
-      (ex?.sets || []).forEach((s) => {
-        const ww = Number(s?.weight);
-        if (!Number.isFinite(ww)) return;
-        if (ww > best) best = ww;
-      });
-    });
-  });
-
-  return best === -Infinity ? null : best;
-};
-
-/**
- * Derive a PR (weight x reps) from workout history.
+ * PR from workout history: best weight, tie-break by reps
  */
 const bestSetFromHistory = (exerciseKey) => {
   const workouts = getWorkouts?.() || [];
@@ -129,6 +105,76 @@ const bestSetFromHistory = (exerciseKey) => {
 
   if (bestW === -Infinity) return null;
   return { weight: bestW, reps: bestR, date: bestDate };
+};
+
+/**
+ * Get multiple "bests" from ALL history for this exercise:
+ * - maxWeighted: max weight >= 0 (signed)
+ * - bestAssist: most negative weight < 0
+ * - maxCompleteWeighted: max weight >= 0 where set.completed === true
+ * - maxIncompleteWeighted: max weight >= 0 where set.completed !== true
+ * - bestCompleteAssist: most negative weight < 0 where completed === true
+ * - bestIncompleteAssist: most negative weight < 0 where completed !== true
+ */
+const getHistoryBests = (exerciseKey) => {
+  const workouts = getWorkouts?.() || [];
+
+  let maxWeighted = -Infinity;
+  let bestAssist = Infinity; // most negative => smallest number
+
+  let maxCompleteWeighted = -Infinity;
+  let maxIncompleteWeighted = -Infinity;
+
+  let bestCompleteAssist = Infinity;
+  let bestIncompleteAssist = Infinity;
+
+  workouts.forEach((w) => {
+    (w?.exercises || []).forEach((ex) => {
+      const key = normKey(ex?.id || ex?.name);
+      if (!key || key !== exerciseKey) return;
+
+      (ex?.sets || []).forEach((s) => {
+        const ww = toNumOrNull(s?.weight);
+        if (!Number.isFinite(ww)) return;
+
+        const done = !!s?.completed;
+
+        if (ww >= 0) {
+          if (ww > maxWeighted) maxWeighted = ww;
+
+          if (done) {
+            if (ww > maxCompleteWeighted) maxCompleteWeighted = ww;
+          } else {
+            if (ww > maxIncompleteWeighted) maxIncompleteWeighted = ww;
+          }
+        } else {
+          // assisted (negative): most negative is "best assist"
+          if (ww < bestAssist) bestAssist = ww;
+
+          if (done) {
+            if (ww < bestCompleteAssist) bestCompleteAssist = ww;
+          } else {
+            if (ww < bestIncompleteAssist) bestIncompleteAssist = ww;
+          }
+        }
+      });
+    });
+  });
+
+  return {
+    maxWeighted: maxWeighted === -Infinity ? null : maxWeighted,
+    bestAssist: bestAssist === Infinity ? null : bestAssist,
+
+    maxCompleteWeighted:
+      maxCompleteWeighted === -Infinity ? null : maxCompleteWeighted,
+    maxIncompleteWeighted:
+      maxIncompleteWeighted === -Infinity ? null : maxIncompleteWeighted,
+
+    bestCompleteAssist:
+      bestCompleteAssist === Infinity ? null : bestCompleteAssist,
+    bestIncompleteAssist:
+      bestIncompleteAssist === Infinity ? null : bestIncompleteAssist,
+  };
 };
 
 const ExerciseCard = ({
@@ -179,6 +225,12 @@ const ExerciseCard = ({
   // ✅ PR from history
   const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
 
+  // ✅ History bests (weighted + assisted + complete/incomplete)
+  const historyBests = useMemo(
+    () => getHistoryBests(exerciseKey),
+    [exerciseKey]
+  );
+
   // Current-entered best (signed max)
   const bestFromCurrentSets = useMemo(() => {
     let best = -Infinity;
@@ -189,16 +241,6 @@ const ExerciseCard = ({
     });
     return best === -Infinity ? null : best;
   }, [sets]);
-
-  // ✅ Source of truth: history best, then current best
-  const overallBestSigned = useMemo(() => {
-    const fromHistory = bestSignedFromHistory(exerciseKey);
-    if (Number.isFinite(fromHistory)) return fromHistory;
-
-    if (Number.isFinite(bestFromCurrentSets)) return bestFromCurrentSets;
-
-    return null;
-  }, [exerciseKey, bestFromCurrentSets]);
 
   // Hydrate video link + sets/notes
   useEffect(() => {
@@ -270,11 +312,54 @@ const ExerciseCard = ({
     [sets]
   );
 
-  const maxLabel = useMemo(() => {
-    if (!Number.isFinite(overallBestSigned)) return null;
-    const label = overallBestSigned < 0 ? "Best assist" : "Max";
-    return `${label}: ${fmt1(overallBestSigned)}`;
-  }, [overallBestSigned]);
+  // ==========================
+  // Labels for history stats
+  // ==========================
+  const topLineLabel = useMemo(() => {
+    // show BOTH if they exist (useful because you can flip modes)
+    const parts = [];
+
+    if (Number.isFinite(historyBests?.maxWeighted)) {
+      parts.push(`Max: ${fmt1(historyBests.maxWeighted)}`);
+    }
+
+    // ✅ Assisted "best" = MOST negative
+    if (Number.isFinite(historyBests?.bestAssist)) {
+      parts.push(`Best assist: ${fmt1(historyBests.bestAssist)}`);
+    }
+
+    if (parts.length === 0) return null;
+    return parts.join(" • ");
+  }, [historyBests]);
+
+  const completeIncompleteLabel = useMemo(() => {
+    // In weighted mode: show max complete/incomplete (positive)
+    // In assisted mode: show assist complete/incomplete (most negative)
+    if (mode === "weighted") {
+      const a = Number.isFinite(historyBests?.maxCompleteWeighted)
+        ? `Max complete: ${fmt1(historyBests.maxCompleteWeighted)}`
+        : null;
+
+      const b = Number.isFinite(historyBests?.maxIncompleteWeighted)
+        ? `Max incomplete: ${fmt1(historyBests.maxIncompleteWeighted)}`
+        : null;
+
+      if (!a && !b) return null;
+      return [a, b].filter(Boolean).join(" • ");
+    }
+
+    // assisted
+    const a = Number.isFinite(historyBests?.bestCompleteAssist)
+      ? `Assist complete: ${fmt1(historyBests.bestCompleteAssist)}`
+      : null;
+
+    const b = Number.isFinite(historyBests?.bestIncompleteAssist)
+      ? `Assist incomplete: ${fmt1(historyBests.bestIncompleteAssist)}`
+      : null;
+
+    if (!a && !b) return null;
+    return [a, b].filter(Boolean).join(" • ");
+  }, [historyBests, mode]);
 
   const showExerciseInfoNotes =
     exercise?.notes && String(exercise.notes).trim().length > 0;
@@ -354,18 +439,16 @@ const ExerciseCard = ({
     return Number.isFinite(inc) ? inc : 0;
   }, [appSettings?.weightUnit, progressionSettings]);
 
-  // Clamp helpers based on mode
+  // Clamp helpers based on mode (prevents silly suggestions like 0 -> -5 in weighted mode)
   const clampToMode = (value, currentMode) => {
     const n = Number(value);
     if (!Number.isFinite(n)) return value;
     if (currentMode === "weighted") return Math.max(0, n);
-    // assisted: never suggest > 0
-    return Math.min(0, n);
+    return Math.min(0, n); // assisted never > 0
   };
 
   const suggestedWeights = useMemo(() => {
     const count = desiredSetsCount;
-
     const schemeRaw = String(exercise?.repScheme || "").trim();
     const scheme = schemeRaw.toLowerCase();
     const isRPT = scheme === "rpt";
@@ -379,7 +462,7 @@ const ExerciseCard = ({
     const lastWeights = lastSets.map((s) => toNumOrNull(s?.weight));
     const lastReps = lastSets.map((s) => toNumOrNull(s?.reps));
 
-    // For kino/pause we want the "heaviest" (signed max) from last session
+    // Kino/Pause: choose the "heaviest" (signed max) from last session
     const heaviestIndexLast = (() => {
       let best = -Infinity;
       let idx = -1;
@@ -403,19 +486,17 @@ const ExerciseCard = ({
         Number.isFinite(lastWeights[heaviestIndexLast])
       ) {
         base = lastWeights[heaviestIndexLast];
-      } else if (Number.isFinite(overallBestSigned)) {
-        base = overallBestSigned;
+      } else if (Number.isFinite(bestFromCurrentSets)) {
+        base = bestFromCurrentSets;
       }
     } else {
       const first = lastWeights?.[0];
       if (Number.isFinite(first)) base = first;
-      else if (Number.isFinite(overallBestSigned)) base = overallBestSigned;
+      else if (Number.isFinite(bestFromCurrentSets)) base = bestFromCurrentSets;
     }
 
-    // Mode-aware clamping of base (prevents base flipping into the wrong sign)
     if (Number.isFinite(base)) base = clampToMode(base, mode);
 
-    // Decide if we should bump base (progression)
     const shouldBumpBase = (() => {
       if (!Number.isFinite(base)) return false;
       if (!Number.isFinite(globalIncrement) || globalIncrement === 0) return false;
@@ -442,7 +523,6 @@ const ExerciseCard = ({
       base = clampToMode(base + globalIncrement, mode);
     }
 
-    // If still no base, fall back to last weights (clamped to mode)
     if (!Number.isFinite(base)) {
       for (let i = 0; i < count; i++) {
         if (Number.isFinite(lastWeights[i])) {
@@ -452,9 +532,7 @@ const ExerciseCard = ({
       return out;
     }
 
-    // =========================
-    // RPT logic (mode-safe)
-    // =========================
+    // RPT logic
     if (isRPT) {
       const p2 = Number(progressionSettings?.rptSet2Percentage ?? 90);
       const p3 = Number(progressionSettings?.rptSet3Percentage ?? 80);
@@ -468,24 +546,21 @@ const ExerciseCard = ({
       if (count >= 3) out[2] = round1(clampToMode(w3, mode));
 
       for (let i = 3; i < count; i++) {
-        const fallback = Number.isFinite(lastWeights[i]) ? lastWeights[i] : out[i - 1];
+        const fallback = Number.isFinite(lastWeights[i])
+          ? lastWeights[i]
+          : out[i - 1];
         out[i] = round1(clampToMode(fallback, mode));
       }
       return out;
     }
 
-    // =========================
-    // Kino/Pause logic (FIXED)
-    // =========================
+    // Kino/Pause logic (mode-safe)
     if (isKinoOrPause) {
-      // If no increment, just repeat base (mode-safe)
       if (!Number.isFinite(globalIncrement) || globalIncrement === 0) {
         for (let i = 0; i < count; i++) out[i] = round1(clampToMode(base, mode));
         return out;
       }
 
-      // Weighted: ramp up from a start that never goes below 0
-      // Assisted: ramp toward 0 (less assistance) and never suggest > 0
       if (mode === "weighted") {
         const start = Math.max(0, base - globalIncrement * (count - 1));
         for (let i = 0; i < count; i++) {
@@ -494,19 +569,15 @@ const ExerciseCard = ({
         return out;
       }
 
-      // assisted
-      // Example base=-5, inc=2.5, count=3 => -5, -2.5, 0
-      // Example base=0 => 0,0,0 (never suggests negatives)
-      const start = Math.min(0, base); // ensure not positive
+      // assisted: ramp toward 0, never > 0
+      const start = Math.min(0, base);
       for (let i = 0; i < count; i++) {
         out[i] = round1(clampToMode(start + globalIncrement * i, mode));
       }
       return out;
     }
 
-    // =========================
-    // Default scheme: use last weights or base (mode-safe)
-    // =========================
+    // default scheme
     for (let i = 0; i < count; i++) {
       const v = Number.isFinite(lastWeights[i]) ? lastWeights[i] : base;
       out[i] = round1(clampToMode(v, mode));
@@ -517,7 +588,7 @@ const ExerciseCard = ({
     exercise?.repScheme,
     goalReps,
     lastWorkoutData,
-    overallBestSigned,
+    bestFromCurrentSets,
     globalIncrement,
     progressionSettings,
     mode,
@@ -664,17 +735,17 @@ const ExerciseCard = ({
       {/* Body */}
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
-          {maxLabel && (
+          {/* ✅ History best line */}
+          {topLineLabel && (
             <div className="text-xs text-muted-foreground">
-              <span
-                className={
-                  Number(overallBestSigned) < 0
-                    ? "text-[hsl(var(--accent-strong))] font-semibold"
-                    : "text-foreground font-semibold"
-                }
-              >
-                {maxLabel}
-              </span>
+              <span className="text-foreground font-semibold">{topLineLabel}</span>
+            </div>
+          )}
+
+          {/* ✅ Complete vs Incomplete max line (mode-aware) */}
+          {completeIncompleteLabel && (
+            <div className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground">{completeIncompleteLabel}</span>
             </div>
           )}
 
