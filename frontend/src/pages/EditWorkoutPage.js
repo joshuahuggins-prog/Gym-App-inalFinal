@@ -1,6 +1,6 @@
 // src/pages/EditWorkoutPage.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Save, AlertTriangle, Plus } from "lucide-react";
+import { X, Save, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -115,7 +115,9 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
   const handleNotesChange = (exercise, notes) => {
     setRows((prev) =>
-      prev.map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
+      prev.map((ex) =>
+        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
+      )
     );
   };
 
@@ -129,8 +131,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
         const currentSetsData = Array.isArray(ex.setsData) ? ex.setsData : [];
 
-        // If setsData already exists, add onto it.
-        // If not, create baseline from ex.sets (or fallback 3) then add.
         const baseCount =
           currentSetsData.length > 0
             ? currentSetsData.length
@@ -141,7 +141,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             ? currentSetsData
             : buildExerciseDefaultSetsData(baseCount);
 
-        // cap
         if (base.length >= 20) {
           toast.message("Max sets reached", {
             description: "You can add up to 20 sets per exercise.",
@@ -152,7 +151,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
         const nextSetsData = [...base, makeEmptySet()];
         return {
           ...ex,
-          sets: nextSetsData.length, // keep the displayed count in sync
+          sets: nextSetsData.length,
           setsData: nextSetsData,
         };
       })
@@ -164,8 +163,36 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     });
   };
 
+  // ✅ NEW: Remove an exercise from this saved workout entry (history)
+  const handleRemoveExerciseFromWorkout = (exercise) => {
+    if (!exercise) return;
+
+    const label = exercise.name || exercise.id || "this exercise";
+    const sure = window.confirm(
+      `Remove "${label}" from this workout entry?\n\nThis only affects this saved history item.`
+    );
+    if (!sure) return;
+
+    setRows((prev) => {
+      const next = (prev || []).filter((r) => r !== exercise && r.id !== exercise.id);
+      return next;
+    });
+
+    toast.success("Exercise removed", {
+      description: `"${label}" removed from this workout.`,
+      duration: 1800,
+    });
+  };
+
   const handleSave = () => {
     if (!originalWorkout) return;
+
+    if (!rows || rows.length === 0) {
+      toast.error("Workout needs at least 1 exercise", {
+        description: "You removed all exercises. Add one before saving.",
+      });
+      return;
+    }
 
     const nextExercises = serializeWorkoutExercisesFromRows(rows);
 
@@ -198,9 +225,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     const list = getExercises() || [];
     return list
       .slice()
-      .sort((a, b) =>
-        String(a.name || "").localeCompare(String(b.name || ""))
-      );
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
   }, [showAddDialog]);
 
   const addCandidates = useMemo(() => {
@@ -332,23 +357,43 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
       {/* Body */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {rows.map((exercise, idx) => (
-          <div
-            key={exercise.id || `${exercise.name}-${idx}`}
-            className="rounded-2xl border border-border bg-card/40"
-          >
-            <ExerciseCard
-              exercise={exercise}
-              lastWorkoutData={exercise.lastWorkoutData}
-              onSetComplete={() => {}}
-              onWeightChange={handleWeightChange}
-              onNotesChange={handleNotesChange}
-              onAddSet={handleAddSetToExercise} // ✅ NEW: makes + Set work
-              // no onRestTimer in edit mode
-              isFirst={idx === 0}
-            />
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card/40 p-4">
+            <div className="text-sm text-muted-foreground">
+              No exercises left in this workout entry.
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Use the + button to add an exercise, then save.
+            </div>
           </div>
-        ))}
+        ) : (
+          rows.map((exercise, idx) => (
+            <div
+              key={exercise.id || `${exercise.name}-${idx}`}
+              className="rounded-2xl border border-border bg-card/40 relative"
+            >
+              {/* ✅ Remove button (top-right of card) */}
+              <button
+                type="button"
+                onClick={() => handleRemoveExerciseFromWorkout(exercise)}
+                className="absolute top-3 right-3 z-10 inline-flex items-center justify-center rounded-lg border border-border bg-background/80 backdrop-blur px-2 py-2 hover:bg-muted/60 transition"
+                title="Remove exercise from this workout"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+
+              <ExerciseCard
+                exercise={exercise}
+                lastWorkoutData={exercise.lastWorkoutData}
+                onSetComplete={() => {}}
+                onWeightChange={handleWeightChange}
+                onNotesChange={handleNotesChange}
+                onAddSet={handleAddSetToExercise}
+                isFirst={idx === 0}
+              />
+            </div>
+          ))
+        )}
       </div>
 
       {/* Add Exercise Dialog */}
@@ -384,7 +429,9 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
                     onClick={() => handleAddExerciseToWorkout(ex)}
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
-                    <div className="font-semibold text-foreground">{ex.name}</div>
+                    <div className="font-semibold text-foreground">
+                      {ex.name}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
                     </div>
