@@ -1,12 +1,13 @@
 {
-  "name": "Gym Strength Programme",
-  "short_name": "Gym App",
+  "name": "GymItUp",
+  "short_name": "GymItUp",
   "start_url": "/Gym-App-inalFinal/",
   "scope": "/Gym-App-inalFinal/",
   "display": "standalone",
   "background_color": "#111624",
   "theme_color": "#111624",
   "orientation": "portrait",
+  "description": "Offline gym workout tracker for logging sets, reps, and progression.",
   "icons": [
     {
       "src": "/Gym-App-inalFinal/icons/icon-192-v3.png",
