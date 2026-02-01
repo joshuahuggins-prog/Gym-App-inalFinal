@@ -1,5 +1,6 @@
 // src/pages/SettingsPage.js
 import React, { useEffect, useMemo, useState } from "react";
+import AppHeader from "../components/AppHeader";
 import {
   AlertTriangle,
   ListOrdered,
@@ -51,6 +52,8 @@ import {
 
 import pkg from "../../package.json";
 
+const cx = (...c) => c.filter(Boolean).join(" ");
+
 const numberOrFallback = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -87,7 +90,6 @@ const applyVars = (vars) => {
 };
 
 const clearCustomVars = () => {
-  // Remove ONLY the vars that a custom theme sets (so we fall back to CSS again)
   const keys = [
     "--background",
     "--foreground",
@@ -133,13 +135,10 @@ const clearCustomVars = () => {
 };
 
 const isDarkModeNow = () => {
-  // Your app likely toggles this on <html> via SettingsContext
   return document.documentElement.classList.contains("dark");
 };
 
 const normalizeThemeToDataset = (themeKey) => {
-  // Your CSS defines: dark | green | yellow | greyRed | custom
-  // Your UI historically used: blue | green | yellow | red
   if (!themeKey) return "dark";
   if (themeKey === "blue") return "dark";
   if (themeKey === "red") return "greyRed";
@@ -213,7 +212,6 @@ export default function SettingsPage({ onCreateTheme }) {
   // - user selects a custom theme again
   useEffect(() => {
     if (!isCustomValue(colorTheme)) {
-      // Not custom: clear any custom vars and rely on CSS theme selectors
       clearCustomVars();
       const ds = normalizeThemeToDataset(colorTheme);
       document.documentElement.dataset.theme = ds;
@@ -398,7 +396,6 @@ export default function SettingsPage({ onCreateTheme }) {
     saveCustomThemes(next);
     setCustomThemes(next);
 
-    // If currently selected, bounce back to blue (dark)
     if (isCustomValue(colorTheme) && customIdFromValue(colorTheme) === String(id)) {
       clearCustomVars();
       document.documentElement.dataset.theme = "dark";
@@ -413,384 +410,368 @@ export default function SettingsPage({ onCreateTheme }) {
   if (!progressionSettings) return null;
 
   const themeSelectValue = colorTheme || "blue";
+  const versionText = `Version ${pkg?.version || "unknown"}`;
 
   return (
-    <div className="space-y-8 p-4 max-w-xl mx-auto">
-      {/* ===== Header ===== */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <SettingsIcon className="h-6 w-6" />
-          <h1 className="text-xl font-bold">Settings</h1>
+    <AppHeader
+      title="Settings"
+      subtitle={versionText}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
+      actions={
+        <div className="w-full flex items-center justify-end">
+          <Badge className="bg-white/15 text-white border border-white/25">
+            {colorMode === "dark" ? "Dark" : "Light"}
+          </Badge>
         </div>
+      }
+    >
+      <div className="space-y-8 p-4 max-w-xl mx-auto pb-20">
+        {/* ===== Progress metric ===== */}
+        <section className="space-y-2">
+          <h2 className="font-semibold flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Progress metric
+          </h2>
 
-        <div className="text-xs text-muted-foreground">
-          Version {pkg?.version || "unknown"}
-        </div>
-      </div>
-
-      {/* ===== Progress metric ===== */}
-      <section className="space-y-2">
-        <h2 className="font-semibold flex items-center gap-2">
-          <TrendingUp className="h-4 w-4" />
-          Progress metric
-        </h2>
-
-        <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="font-medium">Chart display</div>
-              <div className="text-xs text-muted-foreground">
-                Choose what Progress charts show.
+          <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="font-medium">Chart display</div>
+                <div className="text-xs text-muted-foreground">
+                  Choose what Progress charts show.
+                </div>
               </div>
+
+              <Badge className="bg-primary/15 text-primary border border-primary/30">
+                {progressMetric === "e1rm" ? "E1RM" : "Max"}
+              </Badge>
             </div>
 
-            <Badge className="bg-primary/15 text-primary border border-primary/30">
-              {progressMetric === "e1rm" ? "E1RM" : "Max"}
-            </Badge>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={progressMetric === "max" ? "default" : "secondary"}
-              onClick={() => setProgressMetric("max")}
-            >
-              Max weight
-            </Button>
-            <Button
-              variant={progressMetric === "e1rm" ? "default" : "secondary"}
-              onClick={() => setProgressMetric("e1rm")}
-            >
-              E1RM (estimated 1RM)
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== Units ===== */}
-      <section className="space-y-2">
-        <h2 className="font-semibold flex items-center gap-2">
-          <TrendingUp className="h-4 w-4" />
-          Units
-        </h2>
-        <Button onClick={toggleWeightUnit}>
-          Switch to {weightUnit === "kg" ? "lbs" : "kg"}
-        </Button>
-      </section>
-
-      {/* ===== Appearance ===== */}
-      <section className="space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <Palette className="h-4 w-4" />
-          Appearance
-        </h2>
-
-        <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                {colorMode === "dark" ? (
-                  <Moon className="h-4 w-4" />
-                ) : (
-                  <Sun className="h-4 w-4" />
-                )}
-                <div className="font-medium">Dark mode</div>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Toggle between light and dark UI.
-              </div>
-            </div>
-
-            <Switch
-              checked={colorMode === "dark"}
-              onCheckedChange={(checked) => setColorMode(checked ? "dark" : "light")}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label className="text-sm">Colour theme</Label>
-
+            <div className="flex flex-wrap gap-2">
               <Button
-                variant="secondary"
-                className="gap-2"
-                onClick={() => {
-                  if (typeof onCreateTheme === "function") {
-                    onCreateTheme();
-                    return;
-                  }
-                  toast("Hook not wired yet: pass onCreateTheme from App.js");
-                }}
+                variant={progressMetric === "max" ? "default" : "secondary"}
+                onClick={() => setProgressMetric("max")}
               >
-                <Plus className="h-4 w-4" />
-                Create theme
+                Max weight
+              </Button>
+              <Button
+                variant={progressMetric === "e1rm" ? "default" : "secondary"}
+                onClick={() => setProgressMetric("e1rm")}
+              >
+                E1RM (estimated 1RM)
               </Button>
             </div>
+          </div>
+        </section>
 
-            <Select
-              value={themeSelectValue}
-              onValueChange={(v) => {
-                setColorTheme(v);
+        {/* ===== Units ===== */}
+        <section className="space-y-2">
+          <h2 className="font-semibold flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Units
+          </h2>
+          <Button onClick={toggleWeightUnit}>
+            Switch to {weightUnit === "kg" ? "lbs" : "kg"}
+          </Button>
+        </section>
 
-                // Apply dataset theme immediately for non-custom (custom is handled in effect)
-                if (!isCustomValue(v)) {
-                  clearCustomVars();
-                  document.documentElement.dataset.theme = normalizeThemeToDataset(v);
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choose a theme" />
-              </SelectTrigger>
+        {/* ===== Appearance ===== */}
+        <section className="space-y-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Appearance
+          </h2>
 
-              <SelectContent>
-                {/* Built-ins (kept as your original names) */}
-                <SelectItem value="blue">Blue</SelectItem>
-                <SelectItem value="yellow">Yellow</SelectItem>
-                <SelectItem value="green">Green</SelectItem>
-                <SelectItem value="red">Red</SelectItem>
-
-                {/* Custom */}
-                {customThemes.length > 0 && (
-                  <>
-                    <div className="px-2 py-1 text-xs text-muted-foreground">
-                      Custom themes
-                    </div>
-                    {customThemes.map((t) => (
-                      <SelectItem key={t.id} value={`custom:${t.id}`}>
-                        {t.name || "Unnamed theme"}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-
-            <div className="text-xs text-muted-foreground">
-              Built-in themes use <code>theme.css</code>. Custom themes are stored on this device.
-            </div>
-
-            {customThemes.length > 0 && (
-              <div className="rounded-lg border border-border bg-background/40 p-3">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <div className="text-sm font-medium">Manage custom themes</div>
-                  <Button
-                    variant="outline"
-                    onClick={refreshCustomThemes}
-                    className="h-8 px-3"
-                  >
-                    Refresh
-                  </Button>
+          <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  {colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                  <div className="font-medium">Dark mode</div>
                 </div>
-
-                <div className="space-y-2">
-                  {customThemes.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/40 px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {t.name || "Unnamed theme"}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground truncate">
-                          {t.accentHex || ""} {t.baseHex ? `• ${t.baseHex}` : ""}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          className="h-8 px-3"
-                          onClick={() => setColorTheme(`custom:${t.id}`)}
-                        >
-                          Use
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-8 px-3"
-                          onClick={() => deleteCustomTheme(t.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-xs text-muted-foreground">
+                  Toggle between light and dark UI.
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      </section>
 
-      {/* ===== Progression Settings ===== */}
-      <section className="space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <Save className="h-4 w-4" />
-          Progression
-        </h2>
+              <Switch
+                checked={colorMode === "dark"}
+                onCheckedChange={(checked) => setColorMode(checked ? "dark" : "light")}
+              />
+            </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">Global increment (kg)</div>
-            <Input
-              type="number"
-              inputMode="decimal"
-              value={progressionSettings.globalIncrementKg ?? ""}
-              onChange={(e) =>
-                setProgressionSettings((prev) => ({
-                  ...prev,
-                  globalIncrementKg: e.target.value,
-                }))
-              }
-              placeholder="2.5"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">Global increment (lbs)</div>
-            <Input
-              type="number"
-              inputMode="decimal"
-              value={progressionSettings.globalIncrementLbs ?? ""}
-              onChange={(e) =>
-                setProgressionSettings((prev) => ({
-                  ...prev,
-                  globalIncrementLbs: e.target.value,
-                }))
-              }
-              placeholder="5"
-            />
-          </div>
-        </div>
-
-        <Button onClick={handleSaveProgression}>Save progression</Button>
-      </section>
-
-      {/* ===== Workout Pattern ===== */}
-      <section className="space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <ListOrdered className="h-4 w-4" />
-          Workout pattern
-        </h2>
-
-        <div className="text-xs text-muted-foreground">
-          Allowed: {usableProgrammeTypes.join(", ")} (e.g. A,B,A,B)
-        </div>
-
-        <Input
-          value={workoutPattern}
-          onChange={(e) => setWorkoutPatternState(e.target.value)}
-          placeholder="e.g. A,B,A,B"
-          autoCapitalize="characters"
-        />
-
-        <Button onClick={handleSavePattern}>Save pattern</Button>
-      </section>
-
-      {/* ===== Reset App ===== */}
-      <section className="rounded-xl border border-border p-4 space-y-3 bg-card/30">
-        <button
-          type="button"
-          className="w-full flex items-center justify-between text-left"
-          onClick={() => setResetOpen((v) => !v)}
-        >
-          <div className="flex items-center gap-2">
-            <RotateCcw className="h-5 w-5" />
-            <h2 className="font-semibold">Reset app</h2>
-          </div>
-          {resetOpen ? (
-            <ChevronUp className="h-5 w-5" />
-          ) : (
-            <ChevronDown className="h-5 w-5" />
-          )}
-        </button>
-
-        <p className="text-sm text-muted-foreground">
-          Restore parts of the app back to the default version from the app code.
-        </p>
-
-        {resetOpen && (
-          <div className="space-y-3">
             <div className="space-y-2">
-              <Label className="text-sm">Choose reset type</Label>
-              <Select value={resetMode} onValueChange={handlePickResetMode}>
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-sm">Colour theme</Label>
+
+                <Button
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={() => {
+                    if (typeof onCreateTheme === "function") {
+                      onCreateTheme();
+                      return;
+                    }
+                    toast("Hook not wired yet: pass onCreateTheme from App.js");
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create theme
+                </Button>
+              </div>
+
+              <Select
+                value={themeSelectValue}
+                onValueChange={(v) => {
+                  setColorTheme(v);
+                  if (!isCustomValue(v)) {
+                    clearCustomVars();
+                    document.documentElement.dataset.theme = normalizeThemeToDataset(v);
+                  }
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pick one..." />
+                  <SelectValue placeholder="Choose a theme" />
                 </SelectTrigger>
+
                 <SelectContent>
-                  <SelectItem value="settings">Settings reset (defaults)</SelectItem>
-                  <SelectItem value="programmes">Programme reset (defaults)</SelectItem>
-                  <SelectItem value="exercises">Exercise reset (defaults)</SelectItem>
-                  <SelectItem value="full">Full app reset (blank)</SelectItem>
+                  <SelectItem value="blue">Blue</SelectItem>
+                  <SelectItem value="yellow">Yellow</SelectItem>
+                  <SelectItem value="green">Green</SelectItem>
+                  <SelectItem value="red">Red</SelectItem>
+
+                  {customThemes.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-xs text-muted-foreground">
+                        Custom themes
+                      </div>
+                      {customThemes.map((t) => (
+                        <SelectItem key={t.id} value={`custom:${t.id}`}>
+                          {t.name || "Unnamed theme"}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
 
-              {resetMode === "full" && (
-                <div className="text-xs text-muted-foreground">
-                  Full reset clears history and restores a fresh default app.
+              <div className="text-xs text-muted-foreground">
+                Built-in themes use <code>theme.css</code>. Custom themes are stored on this device.
+              </div>
+
+              {customThemes.length > 0 && (
+                <div className="rounded-lg border border-border bg-background/40 p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="text-sm font-medium">Manage custom themes</div>
+                    <Button variant="outline" onClick={refreshCustomThemes} className="h-8 px-3">
+                      Refresh
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {customThemes.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/40 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {t.name || "Unnamed theme"}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {t.accentHex || ""} {t.baseHex ? `• ${t.baseHex}` : ""}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            className="h-8 px-3"
+                            onClick={() => setColorTheme(`custom:${t.id}`)}
+                          >
+                            Use
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="h-8 px-3"
+                            onClick={() => deleteCustomTheme(t.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-
-            {resetMode && (
-              <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
-                <div className="text-sm font-medium">{resetLabel}</div>
-
-                <div className="text-xs text-muted-foreground">
-                  Solve to confirm:{" "}
-                  <span className="font-semibold text-foreground">
-                    {challenge.text}
-                  </span>
-                </div>
-
-                <div className="flex gap-2 items-center">
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    value={answer}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    placeholder="Answer"
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setChallenge(makeChallenge());
-                      setAnswer("");
-                    }}
-                  >
-                    New
-                  </Button>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={runSelectedReset}>Reset</Button>
-                  <Button variant="outline" onClick={closeResetBox}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
-        )}
-      </section>
+        </section>
 
-      {/* ===== Update app data (keep data) ===== */}
-      <section className="rounded-xl border border-yellow-500/40 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-yellow-500">
-          <AlertTriangle className="h-5 w-5" />
-          <h2 className="font-semibold">Update app data (keep data)</h2>
-        </div>
+        {/* ===== Progression Settings ===== */}
+        <section className="space-y-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Save className="h-4 w-4" />
+            Progression
+          </h2>
 
-        <p className="text-sm opacity-80">
-          Rebuilds local app data after an update by backing up, rebuilding storage,
-          then restoring your backup. This normally keeps your history. We recommend
-          exporting a manual backup first.
-        </p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Global increment (kg)</div>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={progressionSettings.globalIncrementKg ?? ""}
+                onChange={(e) =>
+                  setProgressionSettings((prev) => ({
+                    ...prev,
+                    globalIncrementKg: e.target.value,
+                  }))
+                }
+                placeholder="2.5"
+              />
+            </div>
 
-        <Button variant="secondary" onClick={handleForceUpdate}>
-          Update app data (keep data)
-        </Button>
-      </section>
-    </div>
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Global increment (lbs)</div>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={progressionSettings.globalIncrementLbs ?? ""}
+                onChange={(e) =>
+                  setProgressionSettings((prev) => ({
+                    ...prev,
+                    globalIncrementLbs: e.target.value,
+                  }))
+                }
+                placeholder="5"
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleSaveProgression}>Save progression</Button>
+        </section>
+
+        {/* ===== Workout Pattern ===== */}
+        <section className="space-y-3">
+          <h2 className="font-semibold flex items-center gap-2">
+            <ListOrdered className="h-4 w-4" />
+            Workout pattern
+          </h2>
+
+          <div className="text-xs text-muted-foreground">
+            Allowed: {usableProgrammeTypes.join(", ")} (e.g. A,B,A,B)
+          </div>
+
+          <Input
+            value={workoutPattern}
+            onChange={(e) => setWorkoutPatternState(e.target.value)}
+            placeholder="e.g. A,B,A,B"
+            autoCapitalize="characters"
+          />
+
+          <Button onClick={handleSavePattern}>Save pattern</Button>
+        </section>
+
+        {/* ===== Reset App ===== */}
+        <section className="rounded-xl border border-border p-4 space-y-3 bg-card/30">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between text-left"
+            onClick={() => setResetOpen((v) => !v)}
+          >
+            <div className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              <h2 className="font-semibold">Reset app</h2>
+            </div>
+            {resetOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+          </button>
+
+          <p className="text-sm text-muted-foreground">
+            Restore parts of the app back to the default version from the app code.
+          </p>
+
+          {resetOpen && (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label className="text-sm">Choose reset type</Label>
+                <Select value={resetMode} onValueChange={handlePickResetMode}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pick one..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="settings">Settings reset (defaults)</SelectItem>
+                    <SelectItem value="programmes">Programme reset (defaults)</SelectItem>
+                    <SelectItem value="exercises">Exercise reset (defaults)</SelectItem>
+                    <SelectItem value="full">Full app reset (blank)</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {resetMode === "full" && (
+                  <div className="text-xs text-muted-foreground">
+                    Full reset clears history and restores a fresh default app.
+                  </div>
+                )}
+              </div>
+
+              {resetMode ? (
+                <div className="rounded-lg border border-border bg-background/40 p-3 space-y-3">
+                  <div className="text-sm font-medium">{resetLabel}</div>
+
+                  <div className="text-xs text-muted-foreground">
+                    Solve to confirm:{" "}
+                    <span className="font-semibold text-foreground">{challenge.text}</span>
+                  </div>
+
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder="Answer"
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setChallenge(makeChallenge());
+                        setAnswer("");
+                      }}
+                    >
+                      New
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={runSelectedReset}>Reset</Button>
+                    <Button variant="outline" onClick={closeResetBox}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
+
+        {/* ===== Update app data (keep data) ===== */}
+        <section className="rounded-xl border border-yellow-500/40 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-yellow-500">
+            <AlertTriangle className="h-5 w-5" />
+            <h2 className="font-semibold">Update app data (keep data)</h2>
+          </div>
+
+          <p className="text-sm opacity-80">
+            Rebuilds local app data after an update by backing up, rebuilding storage,
+            then restoring your backup. This normally keeps your history. We recommend
+            exporting a manual backup first.
+          </p>
+
+          <Button variant="secondary" onClick={handleForceUpdate}>
+            Update app data (keep data)
+          </Button>
+        </section>
+      </div>
+    </AppHeader>
   );
 }
