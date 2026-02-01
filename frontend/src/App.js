@@ -77,36 +77,12 @@ const App = () => {
   const navItems = useMemo(
     () => [
       { key: PAGES.HOME, label: "Today", icon: <Home className="w-5 h-5" /> },
-      {
-        key: PAGES.HISTORY,
-        label: "History",
-        icon: <History className="w-5 h-5" />,
-      },
-      {
-        key: PAGES.PROGRESS,
-        label: "Progress",
-        icon: <TrendingUp className="w-5 h-5" />,
-      },
-      {
-        key: PAGES.PROGRAMMES,
-        label: "Programmes",
-        icon: <FileText className="w-5 h-5" />,
-      },
-      {
-        key: PAGES.EXERCISES,
-        label: "Exercises",
-        icon: <Dumbbell className="w-5 h-5" />,
-      },
-      {
-        key: PAGES.SETTINGS,
-        label: "Settings",
-        icon: <Settings className="w-5 h-5" />,
-      },
-      {
-        key: PAGES.IMPORT_EXPORT,
-        label: "Data",
-        icon: <Download className="w-5 h-5" />,
-      },
+      { key: PAGES.HISTORY, label: "History", icon: <History className="w-5 h-5" /> },
+      { key: PAGES.PROGRESS, label: "Progress", icon: <TrendingUp className="w-5 h-5" /> },
+      { key: PAGES.PROGRAMMES, label: "Programmes", icon: <FileText className="w-5 h-5" /> },
+      { key: PAGES.EXERCISES, label: "Exercises", icon: <Dumbbell className="w-5 h-5" /> },
+      { key: PAGES.SETTINGS, label: "Settings", icon: <Settings className="w-5 h-5" /> },
+      { key: PAGES.IMPORT_EXPORT, label: "Data", icon: <Download className="w-5 h-5" /> },
     ],
     []
   );
@@ -125,7 +101,10 @@ const App = () => {
           return <HistoryPage onEditWorkout={openEditWorkout} />;
         }
         return (
-          <EditWorkoutPage workoutId={editingWorkoutId} onClose={closeEditWorkout} />
+          <EditWorkoutPage
+            workoutId={editingWorkoutId}
+            onClose={closeEditWorkout}
+          />
         );
 
       case PAGES.PROGRESS:
@@ -138,9 +117,8 @@ const App = () => {
         return <ExercisesPage />;
 
       case PAGES.SETTINGS:
-        // We’ll add the button later — but wiring is ready.
-        // You can pass `onCreateTheme={openThemeCreator}` whenever you’re ready.
-        return <SettingsPage />;
+        // ✅ Pass prop so Settings can open ThemeCreator
+        return <SettingsPage onCreateTheme={openThemeCreator} />;
 
       case PAGES.THEME_CREATOR:
         return <ThemeCreatorPage onBack={closeThemeCreator} />;
