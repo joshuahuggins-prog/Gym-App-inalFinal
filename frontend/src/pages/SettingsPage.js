@@ -12,6 +12,8 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCcw,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "../components/ui/button";
@@ -54,7 +56,105 @@ const numberOrFallback = (value, fallback) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+// =====================
+// Custom Themes storage
+// =====================
+const CUSTOM_THEMES_KEY = "gym_custom_themes";
+
+const getCustomThemes = () => {
+  try {
+    const raw = localStorage.getItem(CUSTOM_THEMES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveCustomThemes = (themes) => {
+  try {
+    localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(themes));
+  } catch {
+    // ignore
+  }
+};
+
+const applyVars = (vars) => {
+  const root = document.documentElement;
+  Object.entries(vars || {}).forEach(([k, v]) => {
+    root.style.setProperty(k, v);
+  });
+};
+
+const clearCustomVars = () => {
+  // Remove ONLY the vars that a custom theme sets (so we fall back to CSS again)
+  const keys = [
+    "--background",
+    "--foreground",
+    "--card",
+    "--card-foreground",
+    "--popover",
+    "--popover-foreground",
+    "--primary",
+    "--primary-foreground",
+    "--primary-glow",
+    "--gold",
+    "--gold-foreground",
+    "--secondary",
+    "--secondary-foreground",
+    "--muted",
+    "--muted-foreground",
+    "--accent",
+    "--accent-foreground",
+    "--accent-strong",
+    "--accent-strong-foreground",
+    "--destructive",
+    "--destructive-foreground",
+    "--border",
+    "--input",
+    "--ring",
+    "--success",
+    "--success-foreground",
+    "--chart-1",
+    "--chart-2",
+    "--chart-3",
+    "--chart-4",
+    "--chart-5",
+    "--gradient-primary",
+    "--gradient-gold",
+    "--gradient-hero",
+    "--shadow-elegant",
+    "--shadow-glow",
+    "--shadow-gold",
+  ];
+
+  const root = document.documentElement;
+  keys.forEach((k) => root.style.removeProperty(k));
+};
+
+const isDarkModeNow = () => {
+  // Your app likely toggles this on <html> via SettingsContext
+  return document.documentElement.classList.contains("dark");
+};
+
+const normalizeThemeToDataset = (themeKey) => {
+  // Your CSS defines: dark | green | yellow | greyRed | custom
+  // Your UI historically used: blue | green | yellow | red
+  if (!themeKey) return "dark";
+  if (themeKey === "blue") return "dark";
+  if (themeKey === "red") return "greyRed";
+  if (themeKey === "greyRed") return "greyRed";
+  if (themeKey === "green") return "green";
+  if (themeKey === "yellow") return "yellow";
+  return themeKey;
+};
+
+const isCustomValue = (v) => typeof v === "string" && v.startsWith("custom:");
+const customIdFromValue = (v) => (isCustomValue(v) ? v.slice("custom:".length) : "");
+
+// =====================
 // Math challenge generator
+// =====================
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 const makeChallenge = () => {
@@ -79,7 +179,7 @@ const makeChallenge = () => {
   return { text: `${a} ${op} ${b}`, result };
 };
 
-export default function SettingsPage() {
+export default function SettingsPage({ onCreateTheme }) {
   const {
     weightUnit,
     toggleWeightUnit,
@@ -94,15 +194,46 @@ export default function SettingsPage() {
   const [progressionSettings, setProgressionSettings] = useState(null);
   const [workoutPattern, setWorkoutPatternState] = useState("");
 
+  // Custom themes list (local)
+  const [customThemes, setCustomThemes] = useState(() => getCustomThemes());
+
   const usableProgrammeTypes = useMemo(() => {
     return getUsableProgrammes().map((p) => String(p.type).toUpperCase());
   }, []);
 
-  // ✅ Hydrate from storage on mount (no eslint rule needed)
+  // ✅ Hydrate from storage on mount
   useEffect(() => {
     setProgressionSettings(getProgressionSettings());
     setWorkoutPatternState(getWorkoutPattern());
+    setCustomThemes(getCustomThemes());
   }, []);
+
+  // Keep custom theme applied when:
+  // - user switches light/dark
+  // - user selects a custom theme again
+  useEffect(() => {
+    if (!isCustomValue(colorTheme)) {
+      // Not custom: clear any custom vars and rely on CSS theme selectors
+      clearCustomVars();
+      const ds = normalizeThemeToDataset(colorTheme);
+      document.documentElement.dataset.theme = ds;
+      return;
+    }
+
+    const id = customIdFromValue(colorTheme);
+    const themes = getCustomThemes();
+    const t = themes.find((x) => String(x?.id) === String(id));
+    if (!t?.vars) {
+      toast.error("Custom theme not found (it may have been deleted).");
+      clearCustomVars();
+      document.documentElement.dataset.theme = "dark";
+      setColorTheme("blue");
+      return;
+    }
+
+    document.documentElement.dataset.theme = "custom";
+    applyVars(isDarkModeNow() ? t.vars.dark : t.vars.light);
+  }, [colorTheme, colorMode, setColorTheme]);
 
   const handleSaveProgression = () => {
     if (!progressionSettings) return;
@@ -251,7 +382,37 @@ export default function SettingsPage() {
     }
   };
 
+  // ==========================
+  // Custom theme actions
+  // ==========================
+  const refreshCustomThemes = () => {
+    setCustomThemes(getCustomThemes());
+  };
+
+  const deleteCustomTheme = (id) => {
+    const t = customThemes.find((x) => String(x?.id) === String(id));
+    const ok = window.confirm(`Delete custom theme "${t?.name || "Unnamed"}"?`);
+    if (!ok) return;
+
+    const next = customThemes.filter((x) => String(x?.id) !== String(id));
+    saveCustomThemes(next);
+    setCustomThemes(next);
+
+    // If currently selected, bounce back to blue (dark)
+    if (isCustomValue(colorTheme) && customIdFromValue(colorTheme) === String(id)) {
+      clearCustomVars();
+      document.documentElement.dataset.theme = "dark";
+      setColorTheme("blue");
+      toast.success("Theme deleted. Switched back to Blue.");
+      return;
+    }
+
+    toast.success("Theme deleted.");
+  };
+
   if (!progressionSettings) return null;
+
+  const themeSelectValue = colorTheme || "blue";
 
   return (
     <div className="space-y-8 p-4 max-w-xl mx-auto">
@@ -327,7 +488,11 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                {colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                {colorMode === "dark" ? (
+                  <Moon className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
                 <div className="font-medium">Dark mode</div>
               </div>
               <div className="text-xs text-muted-foreground">
@@ -342,22 +507,117 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm">Colour theme</Label>
-            <Select value={colorTheme || "blue"} onValueChange={(v) => setColorTheme(v)}>
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-sm">Colour theme</Label>
+
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={() => {
+                  if (typeof onCreateTheme === "function") {
+                    onCreateTheme();
+                    return;
+                  }
+                  toast("Hook not wired yet: pass onCreateTheme from App.js");
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                Create theme
+              </Button>
+            </div>
+
+            <Select
+              value={themeSelectValue}
+              onValueChange={(v) => {
+                setColorTheme(v);
+
+                // Apply dataset theme immediately for non-custom (custom is handled in effect)
+                if (!isCustomValue(v)) {
+                  clearCustomVars();
+                  document.documentElement.dataset.theme = normalizeThemeToDataset(v);
+                }
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Choose a theme" />
               </SelectTrigger>
+
               <SelectContent>
+                {/* Built-ins (kept as your original names) */}
                 <SelectItem value="blue">Blue</SelectItem>
                 <SelectItem value="yellow">Yellow</SelectItem>
                 <SelectItem value="green">Green</SelectItem>
                 <SelectItem value="red">Red</SelectItem>
+
+                {/* Custom */}
+                {customThemes.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs text-muted-foreground">
+                      Custom themes
+                    </div>
+                    {customThemes.map((t) => (
+                      <SelectItem key={t.id} value={`custom:${t.id}`}>
+                        {t.name || "Unnamed theme"}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
 
             <div className="text-xs text-muted-foreground">
-              The background, cards and accents tint to match your chosen colour.
+              Built-in themes use <code>theme.css</code>. Custom themes are stored on this device.
             </div>
+
+            {customThemes.length > 0 && (
+              <div className="rounded-lg border border-border bg-background/40 p-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="text-sm font-medium">Manage custom themes</div>
+                  <Button
+                    variant="outline"
+                    onClick={refreshCustomThemes}
+                    className="h-8 px-3"
+                  >
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {customThemes.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/40 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {t.name || "Unnamed theme"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {t.accentHex || ""} {t.baseHex ? `• ${t.baseHex}` : ""}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          className="h-8 px-3"
+                          onClick={() => setColorTheme(`custom:${t.id}`)}
+                        >
+                          Use
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-8 px-3"
+                          onClick={() => deleteCustomTheme(t.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -427,7 +687,7 @@ export default function SettingsPage() {
         <Button onClick={handleSavePattern}>Save pattern</Button>
       </section>
 
-      {/* ===== Reset App (NEW) ===== */}
+      {/* ===== Reset App ===== */}
       <section className="rounded-xl border border-border p-4 space-y-3 bg-card/30">
         <button
           type="button"
@@ -438,7 +698,11 @@ export default function SettingsPage() {
             <RotateCcw className="h-5 w-5" />
             <h2 className="font-semibold">Reset app</h2>
           </div>
-          {resetOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+          {resetOpen ? (
+            <ChevronUp className="h-5 w-5" />
+          ) : (
+            <ChevronDown className="h-5 w-5" />
+          )}
         </button>
 
         <p className="text-sm text-muted-foreground">
@@ -474,7 +738,9 @@ export default function SettingsPage() {
 
                 <div className="text-xs text-muted-foreground">
                   Solve to confirm:{" "}
-                  <span className="font-semibold text-foreground">{challenge.text}</span>
+                  <span className="font-semibold text-foreground">
+                    {challenge.text}
+                  </span>
                 </div>
 
                 <div className="flex gap-2 items-center">
@@ -516,8 +782,9 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-sm opacity-80">
-          Rebuilds local app data after an update by backing up, rebuilding storage, then restoring
-          your backup. This normally keeps your history. We recommend exporting a manual backup first.
+          Rebuilds local app data after an update by backing up, rebuilding storage,
+          then restoring your backup. This normally keeps your history. We recommend
+          exporting a manual backup first.
         </p>
 
         <Button variant="secondary" onClick={handleForceUpdate}>
