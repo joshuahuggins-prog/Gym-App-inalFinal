@@ -1,5 +1,22 @@
 // src/pages/HomePage.js
 import AppHeader from "../components/AppHeader";
+
+export default function HomePage() {
+  return (
+    <AppHeader
+      title="Home"
+      subtitle="Today’s session"
+      rightIconSrc="/icons/icon-overlay-white-32.png"
+      actions={
+        <div className="flex gap-2">
+          {/* your existing top buttons go here */}
+        </div>
+      }
+    >
+      {/* your existing HomePage content goes here */}
+    </AppHeader>
+  );
+}
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, Flame, RotateCcw, ChevronDown, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
