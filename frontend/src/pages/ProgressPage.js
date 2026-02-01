@@ -1,5 +1,7 @@
+// src/pages/ProgressPage.js
 import React, { useEffect, useMemo, useState } from "react";
-import { TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
+import AppHeader from "../components/AppHeader";
+import { TrendingUp, AlertTriangle } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -18,7 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { getProgrammes, getWorkouts, getSettings, getExercises } from "../utils/storage";
+import {
+  getProgrammes,
+  getWorkouts,
+  getSettings,
+  getExercises,
+} from "../utils/storage";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -64,7 +71,11 @@ const shortMD = (d) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 const longDate = (d) =>
-  d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 
 /** Keep 1 point per day, taking MAX for that day */
 const compressByDayMax = (pts) => {
@@ -119,7 +130,7 @@ function CustomTooltip({ active, payload, label, unitLabel }) {
   if (!p) return null;
 
   const dt = p?.fullDate ? toDate(p.fullDate) : null;
-  const dateText = dt ? longDate(dt) : (label || "");
+  const dateText = dt ? longDate(dt) : label || "";
 
   const lines = [];
   if (p?.workoutType) lines.push(`Workout: ${p.workoutType}`);
@@ -156,11 +167,7 @@ export default function ProgressPage() {
   const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
 
   const [range, setRange] = useState("all");
-
-  // ✅ This key forces recompute when storage changes
   const [reloadKey, setReloadKey] = useState(0);
-
-  // ✅ Keep the “old UI” idea: select an exercise, show ONE chart
   const [selectedExerciseKey, setSelectedExerciseKey] = useState("");
 
   // --- Auto refresh so edits in History show up here ---
@@ -168,7 +175,6 @@ export default function ProgressPage() {
     const bump = () => setReloadKey((k) => k + 1);
 
     const onStorage = (e) => {
-      // other tabs OR same tab if your app writes localStorage and triggers storage in some browsers
       if (!e?.key || e.key === "workouts") bump();
     };
 
@@ -181,7 +187,6 @@ export default function ProgressPage() {
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVis);
 
-    // tiny fallback: when visible, check occasionally (covers “same-tab edits” reliably)
     let t = null;
     const start = () => {
       if (t) return;
@@ -204,7 +209,6 @@ export default function ProgressPage() {
   }, []);
 
   const computed = useMemo(() => {
-    // Pull fresh each time reloadKey bumps
     const programmes = getProgrammes() || [];
     const workoutsRaw = getWorkouts() || [];
     const exercisesList = (getExercises?.() || []).map((ex) => ({
@@ -220,8 +224,7 @@ export default function ProgressPage() {
       .filter((w) => (start ? w._dateObj >= start : true))
       .sort((a, b) => a._dateObj - b._dateObj);
 
-    // Build per-exercise time series from history (robust)
-    const seriesByKey = new Map(); // key -> pts[]
+    const seriesByKey = new Map();
 
     const addPoint = (key, x, y, meta) => {
       if (!key || !(x instanceof Date) || Number.isNaN(x.getTime())) return;
@@ -234,12 +237,7 @@ export default function ProgressPage() {
       const x = w._dateObj;
 
       const workoutType =
-        w?.type ||
-        w?.programmeType ||
-        w?.programme ||
-        w?.name ||
-        w?.title ||
-        "";
+        w?.type || w?.programmeType || w?.programme || w?.name || w?.title || "";
 
       (w.exercises || []).forEach((ex) => {
         const name = ex?.name || ex?.id || "Exercise";
@@ -271,9 +269,10 @@ export default function ProgressPage() {
     });
 
     const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compressByDayMax(pts)));
+    seriesByKey.forEach((pts, key) =>
+      compressedByKey.set(key, compressByDayMax(pts))
+    );
 
-    // Cards (most progress / needs attention) based on programme exercises
     const programmeCards = programmes.map((p) => {
       const type = String(p?.type || "").toUpperCase();
       const programmeKey = normKey(type || p?.name || p?.title || "programme");
@@ -287,7 +286,7 @@ export default function ProgressPage() {
 
         const first = pts.length ? pts[0].y : null;
         const latest = pts.length ? pts[pts.length - 1].y : null;
-        const delta = first != null && latest != null ? latest - first : null;
+        const delta = first != null && latest !=null ? latest - first : null;
 
         return { key, name: name || "Exercise", first, latest, delta, points: pts };
       });
@@ -310,7 +309,6 @@ export default function ProgressPage() {
     const mostProgress = withDelta.slice(0, 2);
     const needsAttention = [...withDelta].reverse().slice(0, 2);
 
-    // Exercise dropdown options: prefer your master list, fallback to anything in history
     const keysFromHistory = Array.from(compressedByKey.keys());
     const optionsMap = new Map();
     exercisesList.forEach((ex) => optionsMap.set(normKey(ex.id), ex.name));
@@ -331,18 +329,17 @@ export default function ProgressPage() {
     };
   }, [range, progressMetric, reloadKey]);
 
-  // pick a default selection (first with data) if none chosen yet
   useEffect(() => {
     if (selectedExerciseKey) return;
     const firstWithData =
-      computed.exerciseOptions.find((o) => (computed.compressedByKey.get(o.key) || []).length >= 2) ||
-      computed.exerciseOptions[0];
+      computed.exerciseOptions.find(
+        (o) => (computed.compressedByKey.get(o.key) || []).length >= 2
+      ) || computed.exerciseOptions[0];
     if (firstWithData?.key) setSelectedExerciseKey(firstWithData.key);
   }, [computed.exerciseOptions, computed.compressedByKey, selectedExerciseKey]);
 
   const selectedPoints = useMemo(() => {
     const pts = computed.compressedByKey.get(selectedExerciseKey) || [];
-    // Turn into recharts-friendly rows
     return pts.map((p) => ({
       date: shortMD(p.x),
       weight: p.y,
@@ -358,7 +355,9 @@ export default function ProgressPage() {
   }, [selectedPoints]);
 
   const firstVal = selectedPoints.length ? selectedPoints[0].weight : null;
-  const lastVal = selectedPoints.length ? selectedPoints[selectedPoints.length - 1].weight : null;
+  const lastVal = selectedPoints.length
+    ? selectedPoints[selectedPoints.length - 1].weight
+    : null;
 
   const change = firstVal != null && lastVal != null ? lastVal - firstVal : null;
   const percent =
@@ -378,43 +377,32 @@ export default function ProgressPage() {
     selectedExerciseKey.replace(/_/g, " ");
 
   return (
-    <div className="p-0">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 bg-card">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-primary">Progress</h1>
-            <div className="mt-1 text-sm text-muted-foreground">
-              Metric: <span className="font-medium text-foreground">{metricLabel}</span>
-              <span className="mx-2 opacity-50">•</span>
-              Unit: <span className="font-medium text-foreground">{weightUnit}</span>
-            </div>
-            <div className="mt-2">
-              <Badge className="bg-primary/15 text-primary border border-primary/30">
-                {metricLabel}
-              </Badge>
-            </div>
+    <AppHeader
+      title="Progress"
+      subtitle={`Metric: ${metricLabel} • Unit: ${weightUnit}`}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="bg-primary/15 text-primary border border-primary/30">
+            {metricLabel}
+          </Badge>
+
+          <div className="flex flex-wrap gap-2">
+            {rangeButtons.map((r) => (
+              <Button
+                key={r.k}
+                size="sm"
+                variant={range === r.k ? "default" : "secondary"}
+                onClick={() => setRange(r.k)}
+              >
+                {r.label}
+              </Button>
+            ))}
           </div>
         </div>
-
-        {/* Range buttons */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {rangeButtons.map((r) => (
-            <Button
-              key={r.k}
-              size="sm"
-              variant={range === r.k ? "default" : "secondary"}
-              onClick={() => setRange(r.k)}
-            >
-              {r.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <div className="border-b border-border" />
-
-      <div className="p-4 space-y-3">
+      }
+    >
+      <div className="space-y-3">
         {/* Most progress */}
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -426,7 +414,9 @@ export default function ProgressPage() {
           </div>
 
           {computed.mostProgress.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
+            <p className="text-sm text-muted-foreground">
+              Not enough data in this range yet.
+            </p>
           ) : (
             <div className="space-y-2">
               {computed.mostProgress.map((e) => (
@@ -436,7 +426,9 @@ export default function ProgressPage() {
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {e.programme}
+                    </div>
                   </div>
                   <div className="text-sm font-semibold text-success whitespace-nowrap">
                     +{formatNumber(e.delta)} {weightUnit}
@@ -458,7 +450,9 @@ export default function ProgressPage() {
           </div>
 
           {computed.needsAttention.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
+            <p className="text-sm text-muted-foreground">
+              Not enough data in this range yet.
+            </p>
           ) : (
             <div className="space-y-2">
               {computed.needsAttention.map((e) => (
@@ -468,7 +462,9 @@ export default function ProgressPage() {
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {e.programme}
+                    </div>
                   </div>
                   <div className="text-sm font-semibold text-destructive whitespace-nowrap">
                     {formatNumber(e.delta)} {weightUnit}
@@ -479,14 +475,17 @@ export default function ProgressPage() {
           )}
         </div>
 
-        {/* ✅ Recharts chart container (your preferred look) */}
+        {/* Chart */}
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex-1 min-w-[220px]">
               <div className="text-sm font-medium text-muted-foreground mb-2">
                 Select Exercise
               </div>
-              <Select value={selectedExerciseKey} onValueChange={setSelectedExerciseKey}>
+              <Select
+                value={selectedExerciseKey}
+                onValueChange={setSelectedExerciseKey}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -522,13 +521,23 @@ export default function ProgressPage() {
           <div className="mt-4">
             {selectedPoints.length < 2 ? (
               <div className="text-sm text-muted-foreground py-10 text-center">
-                Not enough data points yet for <span className="font-medium text-foreground">{selectedLabel}</span>.
+                Not enough data points yet for{" "}
+                <span className="font-medium text-foreground">
+                  {selectedLabel}
+                </span>
+                .
               </div>
             ) : (
               <div className="h-[360px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={selectedPoints} margin={{ top: 12, right: 14, bottom: 18, left: 12 }}>
-                    <CartesianGrid strokeDasharray="3 6" stroke="hsl(var(--border))" />
+                  <LineChart
+                    data={selectedPoints}
+                    margin={{ top: 12, right: 14, bottom: 18, left: 12 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 6"
+                      stroke="hsl(var(--border))"
+                    />
                     <XAxis
                       dataKey="date"
                       stroke="hsl(var(--muted-foreground))"
@@ -578,18 +587,18 @@ export default function ProgressPage() {
               <span>
                 Latest:{" "}
                 <span className="text-foreground font-medium">
-                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)} {weightUnit}
+                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)}{" "}
+                  {weightUnit}
                 </span>
               </span>
             </div>
           )}
         </div>
 
-        {/* Small note so you know it’s live */}
         <div className="text-xs text-muted-foreground px-1">
-          This page auto-refreshes workout history (focus/visibility + background check) so edits in History update here.
+          This page auto-refreshes workout history so edits in History update here.
         </div>
       </div>
-    </div>
+    </AppHeader>
   );
 }
