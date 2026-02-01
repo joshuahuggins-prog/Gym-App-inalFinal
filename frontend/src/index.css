@@ -10,13 +10,6 @@
     - colour theme is set on the App wrapper with: data-theme="blue|yellow|green|red"
     - mode is set with Tailwind's dark class: class="dark"
     - all tokens are HSL (no hsl() wrapper here) so Tailwind can do: hsl(var(--token))
-
-    Added:
-    - Standard App Header tokens/classes:
-      * uses --primary for the header background
-      * white centered title/subtitle
-      * right icon slot
-      * optional actions row under header
   */
 
   /* ===== Default: BLUE (Light mode) ===== */
@@ -47,7 +40,7 @@
     --accent: 189 94% 40%;
     --accent-foreground: 210 40% 98%;
 
-    /* ✅ Strong accent (opposite of blue/cyan → orange-ish) */
+    /* ✅ Strong accent */
     --accent-strong: 25 92% 50%;
     --accent-strong-foreground: 222 47% 10%;
 
@@ -115,7 +108,6 @@
     --accent: 189 94% 50%;
     --accent-foreground: 222 38% 8%;
 
-    /* ✅ Strong accent (still orange-ish, tuned for dark mode) */
     --accent-strong: 25 92% 58%;
     --accent-strong-foreground: 222 38% 8%;
 
@@ -135,7 +127,6 @@
     --chart-4: 262 83% 58%;
     --chart-5: 0 84% 60%;
 
-    /* Header border should be a touch stronger in dark */
     --app-header-border: hsl(0 0% 0% / 0.25);
   }
 
@@ -152,7 +143,6 @@
     --accent: 45 93% 50%;
     --accent-foreground: 222 47% 10%;
 
-    /* ✅ Strong accent (opposite of yellow → blue) */
     --accent-strong: 215 75% 45%;
     --accent-strong-foreground: 0 0% 100%;
 
@@ -164,7 +154,6 @@
     --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.20);
   }
 
-  /* ✅ FIXED: YELLOW (Dark mode) */
   .dark[data-theme="yellow"] {
     --background: 45 30% 8%;
     --foreground: 210 40% 98%;
@@ -219,7 +208,6 @@
     --ring: 142 76% 34%;
   }
 
-  /* ✅ FIXED: GREEN (Dark mode) */
   .dark[data-theme="green"] {
     --background: 142 25% 8%;
     --foreground: 210 40% 98%;
@@ -298,15 +286,22 @@
     @apply border-border;
   }
 
+  /* ✅ Key fix: stop the browser/page from scrolling (removes right-side scrollbar) */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-  }
 
-  html, body, #root {
-    @apply h-full;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -343,13 +338,13 @@
   }
 
   .app-header-title {
-    font-size: 25px;         /* was 16px */
+    font-size: 25px;
     font-weight: 800;
     letter-spacing: 0.2px;
   }
 
   .app-header-subtitle {
-    font-size: 13px;         /* was 12px */
+    font-size: 13px;
     font-weight: 500;
     opacity: 0.9;
     margin-top: 3px;
@@ -378,24 +373,6 @@
   /* Page body padding helper when using sticky header + bottom nav */
   .page-content-with-header {
     padding: 12px 12px 84px;
-  }
-
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-muted;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-primary/50 rounded-full;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-primary/70;
   }
 
   /* Selection color */
@@ -429,14 +406,29 @@
     box-shadow: 0 0 20px hsl(45 93% 58% / 0.5);
   }
 
-  /* Hide scrollbar but keep functionality */
+  /* ✅ Hide scrollbar but keep functionality (stronger than display:none on Android) */
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-
   .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* ✅ Optional: themed scrollbar ONLY when you add this class */
+  .scrollbar-themed::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-themed::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  .scrollbar-themed::-webkit-scrollbar-thumb {
+    @apply bg-primary/50 rounded-full;
+  }
+  .scrollbar-themed::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/70;
   }
 
   /* Animations */
@@ -460,21 +452,10 @@
     50% { transform: translateY(-10px); }
   }
 
-  .animate-fadeIn {
-    animation: fadeIn 0.3s ease-out;
-  }
-
-  .animate-slideIn {
-    animation: slideIn 0.3s ease-out;
-  }
-
-  .animate-pulse-slow {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  .animate-bounce-slow {
-    animation: bounce 2s ease-in-out infinite;
-  }
+  .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+  .animate-slideIn { animation: slideIn 0.3s ease-out; }
+  .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  .animate-bounce-slow { animation: bounce 2s ease-in-out infinite; }
 }
 
 @layer base {
