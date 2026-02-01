@@ -1,4 +1,5 @@
 // src/pages/HomePage.js
+import AppHeader from "../components/AppHeader";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, Flame, RotateCcw, ChevronDown, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
