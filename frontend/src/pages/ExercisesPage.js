@@ -21,6 +21,9 @@ import {
 
 import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
 
+// ✅ Change this path to wherever your icon actually is
+import AppLogo from "../assets/app-logo.png";
+
 import {
   getExercises,
   saveExercise,
@@ -28,7 +31,7 @@ import {
   getProgrammes,
   getVideoLinks,
   updateVideoLink,
-  getDefaultVideoLinks, // must be exported from storage.js
+  getDefaultVideoLinks,
 } from "../utils/storage";
 
 import { toast } from "sonner";
@@ -38,7 +41,6 @@ const MAX_SETS = 8;
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
 const norm = (s) => String(s || "").trim().toLowerCase();
 
-// Math challenge generator (same rules as Settings reset)
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 const makeChallenge = () => {
@@ -53,7 +55,6 @@ const makeChallenge = () => {
     b = randInt(1, 12);
   }
 
-  // keep subtraction non-negative (nicer UX)
   if (op === "-" && b > a) [a, b] = [b, a];
 
   let result = 0;
@@ -72,11 +73,8 @@ export default function ExercisesPage() {
 
   const [editingExercise, setEditingExercise] = useState(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
-
-  // draft strings prevent "stuck" inputs when clearing/typing
   const [setsDraft, setSetsDraft] = useState("");
 
-  // Per-card reset UI state
   const [resetOpenId, setResetOpenId] = useState("");
   const [resetChallenge, setResetChallenge] = useState(() => makeChallenge());
   const [resetAnswer, setResetAnswer] = useState("");
@@ -93,12 +91,10 @@ export default function ExercisesPage() {
   const toastAndReload = (message) => {
     toast.success(message);
     setTimeout(() => {
-      // reload so everything re-hydrates from storage (matches your pattern)
       window.location.href = window.location.href;
     }, 650);
   };
 
-  // Build defaults map from app code (workoutData)
   const defaultExerciseMap = useMemo(() => {
     try {
       const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
@@ -129,9 +125,6 @@ export default function ExercisesPage() {
     }
   }, []);
 
-  /**
-   * programmeUsageMap: exerciseId -> array of programme objects that contain that id
-   */
   const programmeUsageMap = useMemo(() => {
     const map = new Map();
 
@@ -153,7 +146,7 @@ export default function ExercisesPage() {
     const goalReps = [8, 10, 12];
 
     setEditingExercise({
-      id: `exercise_${Date.now()}`, // user-created marker
+      id: `exercise_${Date.now()}`,
       name: "",
       sets,
       repScheme: "RPT",
@@ -179,7 +172,6 @@ export default function ExercisesPage() {
     let goalReps = Array.isArray(exercise.goalReps) ? [...exercise.goalReps] : [];
     if (goalReps.length === 0) goalReps = [8];
 
-    // Ensure goalReps length matches sets (pad/trim)
     if (goalReps.length < safeSets) {
       goalReps = [
         ...goalReps,
@@ -223,14 +215,12 @@ export default function ExercisesPage() {
 
     const { videoUrl, ...exerciseData } = editingExercise;
 
-    // Clean sets (1..MAX_SETS)
     const setsNum = Number(exerciseData.sets);
     const sets = Number.isFinite(setsNum)
       ? clampInt(setsNum, 1, MAX_SETS)
       : 3;
     exerciseData.sets = sets;
 
-    // Clean goalReps to match sets
     const rawGoalReps = Array.isArray(exerciseData.goalReps)
       ? exerciseData.goalReps
       : [];
@@ -252,12 +242,10 @@ export default function ExercisesPage() {
 
     exerciseData.goalReps = cleaned.length > 0 ? cleaned : [8];
 
-    // Rest time
     const restNum = Number(exerciseData.restTime);
     exerciseData.restTime =
       Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
-    // Save exercise details ONLY
     const ok = saveExercise(exerciseData);
 
     if (!ok) {
@@ -299,13 +287,11 @@ export default function ExercisesPage() {
     toast.success("Exercise deleted");
   };
 
-  // Identify user created exercises (reset disabled)
   const isUserCreatedExercise = (exercise) => {
     const id = String(exercise?.id || "");
     return id.startsWith("exercise_");
   };
 
-  // open/close reset UI per card
   const openResetFor = (exerciseId) => {
     setResetOpenId(exerciseId);
     setResetAnswer("");
@@ -318,7 +304,6 @@ export default function ExercisesPage() {
     setResetChallenge(makeChallenge());
   };
 
-  // reset one exercise back to app default (only if it's in workoutData defaults)
   const runExerciseReset = (exercise) => {
     const id = String(exercise?.id || "").trim();
     if (!id) return;
@@ -376,13 +361,14 @@ export default function ExercisesPage() {
   const filteredExercises = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
-    // Build set of IDs that are in the selected programme (if filtering)
     let allowedIds = null;
     if (filterProgramme !== "all") {
       const prog = (programmes || []).find(
         (p) => String(p?.type) === String(filterProgramme)
       );
-      const ids = new Set((prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean));
+      const ids = new Set(
+        (prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean)
+      );
       allowedIds = ids;
     }
 
@@ -391,7 +377,8 @@ export default function ExercisesPage() {
       const matchesSearch = !search || name.toLowerCase().includes(search);
 
       const id = norm(ex?.id);
-      const matchesProgramme = filterProgramme === "all" ? true : allowedIds?.has(id);
+      const matchesProgramme =
+        filterProgramme === "all" ? true : allowedIds?.has(id);
 
       return matchesSearch && matchesProgramme;
     });
@@ -399,12 +386,12 @@ export default function ExercisesPage() {
 
   return (
     <div className="bg-background text-foreground">
-      {/* ===== Sticky Header (SOLID PRIMARY like other pages) ===== */}
+      {/* ===== Sticky header stack ===== */}
       <div className="sticky top-0 z-30">
-        {/* Top app-bar */}
+        {/* Top teal bar: title + count + icon */}
         <div className="bg-primary text-primary-foreground border-b border-border">
           <div className="max-w-4xl mx-auto px-4 pt-[max(12px,env(safe-area-inset-top))] pb-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] uppercase tracking-wide opacity-80">
                   Library
@@ -417,20 +404,20 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
-              <Button
-                onClick={handleCreateExercise}
-                className="shrink-0 bg-primary-foreground/15 hover:bg-primary-foreground/25 text-primary-foreground border border-primary-foreground/20"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                New Exercise
-              </Button>
+              <div className="shrink-0 flex items-center gap-3">
+                <img
+                  src={AppLogo}
+                  alt="App"
+                  className="h-9 w-9 rounded-xl bg-primary-foreground/10 p-1 border border-primary-foreground/15"
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Filters row */}
-        <div className="border-b border-border bg-background/95 backdrop-blur">
-          <div className="max-w-4xl mx-auto px-4 py-3">
+        {/* Glass bar: search + filter + New Exercise button */}
+        <div className="border-b border-border bg-background/85 backdrop-blur">
+          <div className="max-w-4xl mx-auto px-4 py-3 space-y-2">
             <div className="flex gap-3">
               <div className="flex-1 relative min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -457,8 +444,18 @@ export default function ExercisesPage() {
               </Select>
             </div>
 
-            <div className="mt-2 text-xs text-muted-foreground">
-              Tip: To add/remove exercises from workouts, edit the programme (not here).
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs text-muted-foreground">
+                Tip: To add/remove exercises from workouts, edit the programme (not here).
+              </div>
+
+              <Button
+                onClick={handleCreateExercise}
+                className="shrink-0 gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                New Exercise
+              </Button>
             </div>
           </div>
         </div>
@@ -541,7 +538,6 @@ export default function ExercisesPage() {
 
           {editingExercise ? (
             <div className="space-y-4 py-4">
-              {/* Name */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Exercise Name *
@@ -555,7 +551,6 @@ export default function ExercisesPage() {
                 />
               </div>
 
-              {/* Sets & Rep Scheme */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-foreground block mb-2">
@@ -613,7 +608,6 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
-              {/* Rep boxes */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-foreground block">
                   Goal reps for each set (one box per set)
@@ -660,7 +654,6 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
-              {/* Rest Time */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Rest Time (seconds)
@@ -685,7 +678,6 @@ export default function ExercisesPage() {
                 />
               </div>
 
-              {/* Video URL */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Form Check Video URL
@@ -710,7 +702,6 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Notes / Instructions
@@ -725,11 +716,9 @@ export default function ExercisesPage() {
                 />
               </div>
 
-              {/* Usage hint */}
               <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">Programme membership:</span>{" "}
-                This is controlled in the Programme editor. This page edits the exercise
-                details only.
+                This is controlled in the Programme editor. This page edits the exercise details only.
               </div>
             </div>
           ) : null}
