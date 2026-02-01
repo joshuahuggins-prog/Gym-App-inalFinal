@@ -4,15 +4,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================
+   BASE + THEME TOKENS
+   ===================================================== */
 @layer base {
-  /* 
-    Theme system:
-    - colour theme is set on the App wrapper with: data-theme="blue|yellow|green|red"
-    - mode is set with Tailwind's dark class: class="dark"
-    - all tokens are HSL (no hsl() wrapper here) so Tailwind can do: hsl(var(--token))
-  */
-
-  /* ===== Default: BLUE (Light mode) ===== */
   :root {
     --background: 200 35% 96%;
     --foreground: 222 47% 10%;
@@ -23,13 +18,9 @@
     --popover: 200 30% 99%;
     --popover-foreground: 222 47% 10%;
 
-    /* Primary (blue/cyan) */
     --primary: 189 94% 40%;
     --primary-foreground: 210 40% 98%;
     --primary-glow: 189 94% 55%;
-
-    --gold: 45 93% 58%;
-    --gold-foreground: 222 47% 10%;
 
     --secondary: 200 18% 92%;
     --secondary-foreground: 222 47% 10%;
@@ -40,7 +31,6 @@
     --accent: 189 94% 40%;
     --accent-foreground: 210 40% 98%;
 
-    /* ✅ Strong accent */
     --accent-strong: 25 92% 50%;
     --accent-strong-foreground: 222 47% 10%;
 
@@ -54,34 +44,14 @@
     --success: 142 76% 38%;
     --success-foreground: 210 40% 98%;
 
-    /* Chart colors */
-    --chart-1: 189 94% 40%;
-    --chart-2: 45 93% 55%;
-    --chart-3: 142 76% 38%;
-    --chart-4: 262 83% 55%;
-    --chart-5: 0 84% 55%;
-
-    /* Custom Design Tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
-    --gradient-gold: linear-gradient(135deg, hsl(var(--gold)), hsl(35 90% 55%));
-    --gradient-hero: linear-gradient(180deg, hsl(var(--background)), hsl(var(--card)));
-
-    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.18);
-    --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.22);
-    --shadow-gold: 0 10px 30px -10px hsl(var(--gold) / 0.18);
-
-    --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-
     --radius: 0.75rem;
 
-    /* ===== App Header sizing ===== */
     --app-header-h: 56px;
     --app-header-actions-bg: hsl(var(--primary) / 0.92);
-    --app-header-border: hsl(0 0% 0% / 0.10);
+    --app-header-border: hsl(0 0% 0% / 0.1);
   }
 
-  /* ===== BLUE (Dark mode) ===== */
+  /* ===== Dark mode base ===== */
   .dark {
     --background: 222 38% 8%;
     --foreground: 210 40% 98%;
@@ -92,221 +62,48 @@
     --popover: 222 30% 12%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 189 94% 50%;
-    --primary-foreground: 222 38% 8%;
-    --primary-glow: 189 94% 65%;
-
-    --gold: 45 93% 58%;
-    --gold-foreground: 222 38% 8%;
-
     --secondary: 222 22% 18%;
     --secondary-foreground: 210 40% 98%;
 
     --muted: 222 22% 18%;
     --muted-foreground: 215 20% 65%;
 
-    --accent: 189 94% 50%;
-    --accent-foreground: 222 38% 8%;
-
-    --accent-strong: 25 92% 58%;
-    --accent-strong-foreground: 222 38% 8%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --primary: 189 94% 50%;
+    --primary-glow: 189 94% 65%;
+    --primary-foreground: 222 38% 8%;
 
     --border: 222 22% 20%;
     --input: 222 22% 20%;
     --ring: 189 94% 50%;
 
-    --success: 142 76% 45%;
-    --success-foreground: 210 40% 98%;
-
-    --chart-1: 189 94% 50%;
-    --chart-2: 45 93% 58%;
-    --chart-3: 142 76% 45%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 0 84% 60%;
-
     --app-header-border: hsl(0 0% 0% / 0.25);
   }
 
-  /* ===== YELLOW ===== */
-  [data-theme="yellow"] {
-    --background: 45 35% 96%;
-    --card: 45 30% 99%;
-    --popover: 45 30% 99%;
-
-    --primary: 45 93% 50%;
-    --primary-glow: 45 93% 62%;
-    --primary-foreground: 222 47% 10%;
-
-    --accent: 45 93% 50%;
-    --accent-foreground: 222 47% 10%;
-
-    --accent-strong: 215 75% 45%;
-    --accent-strong-foreground: 0 0% 100%;
-
-    --gold: 45 93% 58%;
-    --gold-foreground: 222 47% 10%;
-
-    --ring: 45 93% 50%;
-    --shadow-elegant: 0 10px 30px -10px hsl(var(--primary) / 0.16);
-    --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.20);
-  }
-
-  .dark[data-theme="yellow"] {
-    --background: 45 30% 8%;
-    --foreground: 210 40% 98%;
-
-    --card: 45 22% 12%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 45 22% 12%;
-    --popover-foreground: 210 40% 98%;
-
-    --secondary: 45 14% 18%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 45 14% 18%;
-    --muted-foreground: 215 20% 72%;
-
-    --primary: 45 93% 58%;
-    --primary-glow: 45 93% 70%;
-    --primary-foreground: 45 30% 8%;
-
-    --accent: 45 93% 58%;
-    --accent-foreground: 45 30% 8%;
-
-    --accent-strong: 215 80% 60%;
-    --accent-strong-foreground: 215 30% 10%;
-
-    --gold: 45 93% 58%;
-    --gold-foreground: 45 30% 8%;
-
-    --border: 45 14% 20%;
-    --input: 45 14% 20%;
-    --ring: 45 93% 58%;
-  }
-
-  /* ===== GREEN ===== */
-  [data-theme="green"] {
-    --background: 142 28% 96%;
-    --card: 142 22% 99%;
-    --popover: 142 22% 99%;
-
-    --primary: 142 76% 34%;
-    --primary-glow: 142 76% 48%;
-    --primary-foreground: 210 40% 98%;
-
-    --accent: 142 76% 34%;
-    --accent-foreground: 210 40% 98%;
-
-    --accent-strong: 322 60% 45%;
-    --accent-strong-foreground: 0 0% 100%;
-
-    --success: 142 76% 34%;
-    --ring: 142 76% 34%;
-  }
-
-  .dark[data-theme="green"] {
-    --background: 142 25% 8%;
-    --foreground: 210 40% 98%;
-
-    --card: 142 20% 12%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 142 20% 12%;
-    --popover-foreground: 210 40% 98%;
-
-    --secondary: 142 12% 18%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 142 12% 18%;
-    --muted-foreground: 215 20% 72%;
-
-    --primary: 142 76% 45%;
-    --primary-glow: 142 76% 58%;
-    --primary-foreground: 142 25% 8%;
-
-    --accent: 142 76% 45%;
-    --accent-foreground: 142 25% 8%;
-
-    --accent-strong: 322 70% 62%;
-    --accent-strong-foreground: 322 25% 10%;
-
-    --success: 142 76% 45%;
-
-    --border: 142 12% 20%;
-    --input: 142 12% 20%;
-    --ring: 142 76% 45%;
-  }
-
-  /* ===== RED ===== */
-  [data-theme="red"] {
-    --background: 0 30% 96%;
-    --card: 0 24% 99%;
-    --popover: 0 24% 99%;
-
-    --primary: 0 84% 50%;
-    --primary-glow: 0 84% 62%;
-    --primary-foreground: 210 40% 98%;
-
-    --accent: 0 84% 50%;
-    --accent-foreground: 210 40% 98%;
-
-    --accent-strong: 190 75% 40%;
-    --accent-strong-foreground: 0 0% 100%;
-
-    --destructive: 0 84% 55%;
-    --ring: 0 84% 50%;
-  }
-
-  .dark[data-theme="red"] {
-    --background: 0 28% 8%;
-    --card: 0 22% 12%;
-    --popover: 0 22% 12%;
-
-    --primary: 0 84% 60%;
-    --primary-glow: 0 84% 70%;
-    --primary-foreground: 0 28% 8%;
-
-    --accent: 0 84% 60%;
-    --accent-foreground: 0 28% 8%;
-
-    --accent-strong: 190 85% 55%;
-    --accent-strong-foreground: 190 30% 10%;
-
-    --destructive: 0 84% 60%;
-    --ring: 0 84% 60%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  /* ✅ Key fix: stop the browser/page from scrolling (removes right-side scrollbar) */
   html,
   body,
   #root {
     height: 100%;
-    overflow: hidden;
+    margin: 0;
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, sans-serif;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
 
-    overscroll-behavior: none;
-    -webkit-overflow-scrolling: touch;
+  * {
+    border-color: hsl(var(--border));
   }
 }
 
+/* =====================================================
+   APP HEADER
+   ===================================================== */
 @layer components {
-  /* ===== Standard App Header (re-usable) ===== */
   .app-header-wrap {
     position: sticky;
     top: 0;
@@ -317,19 +114,11 @@
     height: var(--app-header-h);
     background: hsl(var(--primary));
     color: white;
-
     display: grid;
     grid-template-columns: 44px 1fr 44px;
     align-items: center;
-
     padding: 0 12px;
     border-bottom: 1px solid var(--app-header-border);
-  }
-
-  /* Keeps title truly centered */
-  .app-header-spacer {
-    width: 44px;
-    height: 1px;
   }
 
   .app-header-center {
@@ -340,12 +129,10 @@
   .app-header-title {
     font-size: 25px;
     font-weight: 800;
-    letter-spacing: 0.2px;
   }
 
   .app-header-subtitle {
     font-size: 13px;
-    font-weight: 500;
     opacity: 0.9;
     margin-top: 3px;
   }
@@ -359,9 +146,7 @@
   .app-header-icon {
     width: 40px;
     height: 40px;
-    opacity: 0.98;
     pointer-events: none;
-    user-select: none;
   }
 
   .app-header-actions {
@@ -370,122 +155,41 @@
     border-bottom: 1px solid var(--app-header-border);
   }
 
-  /* Page body padding helper when using sticky header + bottom nav */
   .page-content-with-header {
     padding: 12px 12px 84px;
   }
-
-  /* Selection color */
-  ::selection {
-    @apply bg-primary/30 text-foreground;
-  }
 }
 
+/* =====================================================
+   🔥 SCROLLBAR: COMPLETELY HIDDEN (but scroll still works)
+   ===================================================== */
+html,
+body,
+#root {
+  -ms-overflow-style: none; /* IE / Edge legacy */
+  scrollbar-width: none; /* Firefox */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar {
+  display: none; /* Chrome / Android / Safari */
+}
+
+/* =====================================================
+   UTILITIES
+   ===================================================== */
 @layer utilities {
-  /* Text gradient */
-  .text-gradient-primary {
-    background: linear-gradient(135deg, hsl(189 94% 50%), hsl(189 94% 75%));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-gold {
-    background: linear-gradient(135deg, hsl(45 93% 58%), hsl(35 90% 65%));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  /* Glow effects */
-  .glow-primary {
-    box-shadow: 0 0 20px hsl(189 94% 50% / 0.5);
-  }
-
-  .glow-gold {
-    box-shadow: 0 0 20px hsl(45 93% 58% / 0.5);
-  }
-
-  /* ✅ Hide scrollbar but keep functionality (stronger than display:none on Android) */
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .scrollbar-hide::-webkit-scrollbar {
-    width: 0 !important;
-    height: 0 !important;
+    display: none;
   }
 
-  /* ✅ Optional: themed scrollbar ONLY when you add this class */
-  .scrollbar-themed::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  .scrollbar-themed::-webkit-scrollbar-track {
-    @apply bg-muted;
-  }
-  .scrollbar-themed::-webkit-scrollbar-thumb {
-    @apply bg-primary/50 rounded-full;
-  }
-  .scrollbar-themed::-webkit-scrollbar-thumb:hover {
-    @apply bg-primary/70;
-  }
-
-  /* Animations */
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes slideIn {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(0); }
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
-  .animate-slideIn { animation: slideIn 0.3s ease-out; }
-  .animate-pulse-slow { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-  .animate-bounce-slow { animation: bounce 2s ease-in-out infinite; }
-}
-
-@layer base {
-  [data-debug-wrapper="true"] {
-    display: contents !important;
-  }
-
-  [data-debug-wrapper="true"] > * {
-    margin-left: inherit;
-    margin-right: inherit;
-    margin-top: inherit;
-    margin-bottom: inherit;
-    padding-left: inherit;
-    padding-right: inherit;
-    padding-top: inherit;
-    padding-bottom: inherit;
-    column-gap: inherit;
-    row-gap: inherit;
-    gap: inherit;
-    border-left-width: inherit;
-    border-right-width: inherit;
-    border-top-width: inherit;
-    border-bottom-width: inherit;
-    border-left-style: inherit;
-    border-right-style: inherit;
-    border-top-style: inherit;
-    border-bottom-style: inherit;
-    border-left-color: inherit;
-    border-right-color: inherit;
-    border-top-color: inherit;
-    border-bottom-color: inherit;
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.5);
   }
 }
