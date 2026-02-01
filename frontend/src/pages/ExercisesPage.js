@@ -93,7 +93,7 @@ export default function ExercisesPage() {
   };
 
   // ✅ Use your PWA icon from /public (works on GH Pages via PUBLIC_URL)
-  const appLogoSrc = `${process.env.PUBLIC_URL}/icons/icon-overlay-32- white-v1.png`;
+  const appLogoSrc = `${process.env.PUBLIC_URL}/icons/icon-overlay-32-white-v1.png`;
 
   const defaultExerciseMap = useMemo(() => {
     try {
