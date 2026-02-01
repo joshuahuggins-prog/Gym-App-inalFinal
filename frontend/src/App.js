@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Home,
   History,
@@ -18,74 +18,134 @@ import ExercisesPage from "./pages/ExercisesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ImportExportPage from "./pages/ImportExportPage";
 import EditWorkoutPage from "./pages/EditWorkoutPage";
+import ThemeCreatorPage from "./pages/ThemeCreatorPage";
 
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
 
 import useUpsideDown from "./hooks/useUpsideDown";
 
+const PAGES = {
+  HOME: "home",
+  HISTORY: "history",
+  EDIT_WORKOUT: "edit-workout",
+  PROGRESS: "progress",
+  PROGRAMMES: "programmes",
+  EXERCISES: "exercises",
+  SETTINGS: "settings",
+  IMPORT_EXPORT: "import-export",
+  THEME_CREATOR: "themeCreator",
+};
+
 const App = () => {
   const upsideDown = useUpsideDown();
 
-  const [currentPage, setCurrentPage] = useState("home");
+  const [currentPage, setCurrentPage] = useState(PAGES.HOME);
 
   // Edit workout page state
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
 
-  const isEditMode = currentPage === "edit-workout";
+  const isEditMode = currentPage === PAGES.EDIT_WORKOUT;
 
-  const handleNavigate = (page) => {
+  const handleNavigate = useCallback((page) => {
     setCurrentPage(page);
 
     // If navigating away from edit screen, clear selected workout
-    if (page !== "edit-workout") setEditingWorkoutId(null);
-  };
+    if (page !== PAGES.EDIT_WORKOUT) setEditingWorkoutId(null);
+  }, []);
 
   // Called by HistoryPage pencil button
-  const openEditWorkout = (workoutId) => {
+  const openEditWorkout = useCallback((workoutId) => {
     if (!workoutId) return;
     setEditingWorkoutId(workoutId);
-    setCurrentPage("edit-workout");
-  };
+    setCurrentPage(PAGES.EDIT_WORKOUT);
+  }, []);
 
-  const closeEditWorkout = () => {
+  const closeEditWorkout = useCallback(() => {
     setEditingWorkoutId(null);
-    setCurrentPage("history");
-  };
+    setCurrentPage(PAGES.HISTORY);
+  }, []);
+
+  const openThemeCreator = useCallback(() => {
+    setCurrentPage(PAGES.THEME_CREATOR);
+  }, []);
+
+  const closeThemeCreator = useCallback(() => {
+    setCurrentPage(PAGES.SETTINGS);
+  }, []);
+
+  const navItems = useMemo(
+    () => [
+      { key: PAGES.HOME, label: "Today", icon: <Home className="w-5 h-5" /> },
+      {
+        key: PAGES.HISTORY,
+        label: "History",
+        icon: <History className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.PROGRESS,
+        label: "Progress",
+        icon: <TrendingUp className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.PROGRAMMES,
+        label: "Programmes",
+        icon: <FileText className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.EXERCISES,
+        label: "Exercises",
+        icon: <Dumbbell className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.SETTINGS,
+        label: "Settings",
+        icon: <Settings className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.IMPORT_EXPORT,
+        label: "Data",
+        icon: <Download className="w-5 h-5" />,
+      },
+    ],
+    []
+  );
 
   const renderPage = () => {
     switch (currentPage) {
-      case "home":
+      case PAGES.HOME:
         return <HomePage />;
 
-      case "history":
+      case PAGES.HISTORY:
         return <HistoryPage onEditWorkout={openEditWorkout} />;
 
-      case "edit-workout":
+      case PAGES.EDIT_WORKOUT:
         // Safety: if somehow opened without an id, bounce to history
         if (!editingWorkoutId) {
           return <HistoryPage onEditWorkout={openEditWorkout} />;
         }
         return (
-          <EditWorkoutPage
-            workoutId={editingWorkoutId}
-            onClose={closeEditWorkout}
-          />
+          <EditWorkoutPage workoutId={editingWorkoutId} onClose={closeEditWorkout} />
         );
 
-      case "progress":
+      case PAGES.PROGRESS:
         return <ProgressPage />;
 
-      case "programmes":
+      case PAGES.PROGRAMMES:
         return <ProgrammesPage />;
 
-      case "exercises":
+      case PAGES.EXERCISES:
         return <ExercisesPage />;
 
-      case "settings":
+      case PAGES.SETTINGS:
+        // We’ll add the button later — but wiring is ready.
+        // You can pass `onCreateTheme={openThemeCreator}` whenever you’re ready.
         return <SettingsPage />;
 
-      case "import-export":
+      case PAGES.THEME_CREATOR:
+        return <ThemeCreatorPage onBack={closeThemeCreator} />;
+
+      case PAGES.IMPORT_EXPORT:
         return <ImportExportPage />;
 
       default:
@@ -113,48 +173,15 @@ const App = () => {
             <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
               <div className="overflow-x-auto scrollbar-hide">
                 <div className="flex items-center h-16 px-2 min-w-max">
-                  <NavButton
-                    icon={<Home className="w-5 h-5" />}
-                    label="Today"
-                    active={currentPage === "home"}
-                    onClick={() => handleNavigate("home")}
-                  />
-                  <NavButton
-                    icon={<History className="w-5 h-5" />}
-                    label="History"
-                    active={currentPage === "history"}
-                    onClick={() => handleNavigate("history")}
-                  />
-                  <NavButton
-                    icon={<TrendingUp className="w-5 h-5" />}
-                    label="Progress"
-                    active={currentPage === "progress"}
-                    onClick={() => handleNavigate("progress")}
-                  />
-                  <NavButton
-                    icon={<FileText className="w-5 h-5" />}
-                    label="Programmes"
-                    active={currentPage === "programmes"}
-                    onClick={() => handleNavigate("programmes")}
-                  />
-                  <NavButton
-                    icon={<Dumbbell className="w-5 h-5" />}
-                    label="Exercises"
-                    active={currentPage === "exercises"}
-                    onClick={() => handleNavigate("exercises")}
-                  />
-                  <NavButton
-                    icon={<Settings className="w-5 h-5" />}
-                    label="Settings"
-                    active={currentPage === "settings"}
-                    onClick={() => handleNavigate("settings")}
-                  />
-                  <NavButton
-                    icon={<Download className="w-5 h-5" />}
-                    label="Data"
-                    active={currentPage === "import-export"}
-                    onClick={() => handleNavigate("import-export")}
-                  />
+                  {navItems.map((it) => (
+                    <NavButton
+                      key={it.key}
+                      icon={it.icon}
+                      label={it.label}
+                      active={currentPage === it.key}
+                      onClick={() => handleNavigate(it.key)}
+                    />
+                  ))}
                 </div>
               </div>
             </nav>
