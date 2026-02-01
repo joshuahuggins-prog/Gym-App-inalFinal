@@ -3,17 +3,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Search,
-  RotateCcw,
-  Video,
   Save,
-  Trash2,
-  Edit2,
+  Video,
+  RotateCcw,
 } from "lucide-react";
+
+import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { Badge } from "../components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -28,8 +27,6 @@ import {
   SelectValue,
 } from "../components/ui/select";
 
-import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
-
 import {
   getExercises,
   saveExercise,
@@ -37,7 +34,7 @@ import {
   getProgrammes,
   getVideoLinks,
   updateVideoLink,
-  getDefaultVideoLinks,
+  getDefaultVideoLinks, // must exist in storage.js
 } from "../utils/storage";
 
 import { toast } from "sonner";
@@ -89,9 +86,6 @@ export default function ExercisesPage() {
   const [resetChallenge, setResetChallenge] = useState(() => makeChallenge());
   const [resetAnswer, setResetAnswer] = useState("");
 
-  // Cache video links for cards
-  const [videoLinks, setVideoLinks] = useState({});
-
   useEffect(() => {
     loadData();
   }, []);
@@ -99,7 +93,6 @@ export default function ExercisesPage() {
   const loadData = () => {
     setExercises(getExercises() || []);
     setProgrammes(getProgrammes() || []);
-    setVideoLinks(getVideoLinks() || {});
   };
 
   const toastAndReload = (message) => {
@@ -138,9 +131,7 @@ export default function ExercisesPage() {
     }
   }, []);
 
-  /**
-   * programmeUsageMap: exerciseId -> array of programme objects that contain that id
-   */
+  // programmeUsageMap: exerciseId -> programmes that contain that id
   const programmeUsageMap = useMemo(() => {
     const map = new Map();
 
@@ -177,7 +168,8 @@ export default function ExercisesPage() {
   };
 
   const handleEditExercise = (exercise) => {
-    const videoUrl = (getVideoLinks() || {})[exercise.id] || "";
+    const videoLinks = getVideoLinks() || {};
+    const videoUrl = videoLinks[exercise.id] || "";
 
     const sets = Number.isFinite(Number(exercise.sets)) ? Number(exercise.sets) : 3;
     const safeSets = clampInt(sets, 1, MAX_SETS);
@@ -203,7 +195,7 @@ export default function ExercisesPage() {
   const setSetsAndSyncGoalReps = (nextSets) => {
     const sets = clampInt(nextSets, 1, MAX_SETS);
 
-    const current = Array.isArray(editingExercise.goalReps)
+    const current = Array.isArray(editingExercise?.goalReps)
       ? [...editingExercise.goalReps]
       : [];
 
@@ -218,7 +210,7 @@ export default function ExercisesPage() {
       nextGoalReps = nextGoalReps.slice(0, sets);
     }
 
-    setEditingExercise({ ...editingExercise, sets, goalReps: nextGoalReps });
+    setEditingExercise((prev) => ({ ...prev, sets, goalReps: nextGoalReps }));
   };
 
   const handleSaveExercise = () => {
@@ -255,6 +247,7 @@ export default function ExercisesPage() {
     const restNum = Number(exerciseData.restTime);
     exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
+    // Save exercise details ONLY
     const ok = saveExercise(exerciseData);
     if (!ok) {
       toast.error("Failed to save exercise");
@@ -367,6 +360,7 @@ export default function ExercisesPage() {
   const filteredExercises = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
+    // Build set of IDs that are in the selected programme (if filtering)
     let allowedIds = null;
     if (filterProgramme !== "all") {
       const prog = (programmes || []).find(
@@ -389,17 +383,19 @@ export default function ExercisesPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* App-style Header */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
+      {/* ===== NEW HEADER (matches other pages) ===== */}
+      <div className="sticky top-0 z-30 border-b border-border bg-gradient-to-b from-card to-background">
+        <div className="max-w-4xl mx-auto px-4 pt-[max(16px,env(safe-area-inset-top))] pb-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div className="min-w-0">
-              <div className="text-xs text-muted-foreground">Library</div>
-              <h1 className="text-2xl font-bold text-foreground truncate">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Library
+              </div>
+              <h1 className="text-3xl font-extrabold text-foreground leading-tight truncate">
                 Exercise Library
               </h1>
-              <div className="text-xs text-muted-foreground">
-                {exercises.length} total exercises • Tip: edit the programme to add/remove
+              <div className="text-sm text-muted-foreground">
+                {exercises.length} total exercises • Tip: edit the programme to add/remove exercises
               </div>
             </div>
 
@@ -410,7 +406,7 @@ export default function ExercisesPage() {
           </div>
 
           {/* Filters */}
-          <div className="mt-3 flex gap-3">
+          <div className="flex gap-3">
             <div className="flex-1 relative min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -423,7 +419,7 @@ export default function ExercisesPage() {
 
             <Select value={filterProgramme} onValueChange={setFilterProgramme}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by programme" />
+                <SelectValue placeholder="All Programmes" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Programmes</SelectItem>
@@ -438,7 +434,7 @@ export default function ExercisesPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* ===== LIST ===== */}
       <div className="max-w-4xl mx-auto px-4 py-6">
         {filteredExercises.length === 0 ? (
           <div className="text-center py-12">
@@ -460,78 +456,37 @@ export default function ExercisesPage() {
               const canReset =
                 !userMade && defaultExerciseMap.has(String(exercise.id || "").trim());
 
-              const vUrl = videoLinks?.[exercise.id] || "";
-
               return (
-                <div key={exercise.id}>
-                  <ExerciseLibraryCard
-                    exercise={exercise}
-                    usedBy={usedBy}
-                    userMade={userMade}
-                    canReset={canReset}
-                    defaultExists={defaultExerciseMap.has(String(exercise.id || "").trim())}
-                    videoUrl={vUrl}
-                    onOpenVideo={() => {
-                      if (!vUrl) return;
-                      window.open(vUrl, "_blank");
-                    }}
-                    onDelete={() => handleDeleteExercise(exercise.id, exercise.name)}
-                    onResetToDefault={() => {
-                      if (isOpen) closeResetUI();
-                      else openResetFor(exercise.id);
-                    }}
-                    onChanged={loadData}
-                  />
-
-                  {/* Reset confirm box under the card (same behavior as your original) */}
-                  {isOpen && (
-                    <div className="mt-3 rounded-lg border border-border bg-background/40 p-3 space-y-2">
-                      <div className="text-sm font-medium text-foreground">
-                        Reset to app default
-                      </div>
-
-                      <div className="text-xs text-muted-foreground">
-                        Solve to confirm:{" "}
-                        <span className="font-semibold text-foreground">
-                          {resetChallenge.text}
-                        </span>
-                      </div>
-
-                      <div className="flex gap-2 items-center">
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          value={resetAnswer}
-                          onChange={(e) => setResetAnswer(e.target.value)}
-                          placeholder="Answer"
-                        />
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setResetChallenge(makeChallenge());
-                            setResetAnswer("");
-                          }}
-                        >
-                          New
-                        </Button>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button onClick={() => runExerciseReset(exercise)}>Reset</Button>
-                        <Button variant="outline" onClick={closeResetUI}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <ExerciseLibraryCard
+                  key={exercise.id}
+                  exercise={exercise}
+                  usedBy={usedBy}
+                  canReset={canReset}
+                  resetOpen={isOpen}
+                  resetChallenge={resetChallenge}
+                  resetAnswer={resetAnswer}
+                  onResetAnswerChange={setResetAnswer}
+                  onToggleReset={() => {
+                    if (!canReset) return;
+                    if (isOpen) closeResetUI();
+                    else openResetFor(exercise.id);
+                  }}
+                  onNewChallenge={() => {
+                    setResetChallenge(makeChallenge());
+                    setResetAnswer("");
+                  }}
+                  onRunReset={() => runExerciseReset(exercise)}
+                  onCancelReset={closeResetUI}
+                  onEdit={() => handleEditExercise(exercise)}
+                  onDelete={() => handleDeleteExercise(exercise.id, exercise.name)}
+                />
               );
             })}
           </div>
         )}
       </div>
 
-      {/* Edit/Create Dialog */}
+      {/* ===== EDIT DIALOG ===== */}
       <Dialog
         open={showEditDialog}
         onOpenChange={(open) => {
@@ -553,6 +508,7 @@ export default function ExercisesPage() {
 
           {editingExercise ? (
             <div className="space-y-4 py-4">
+              {/* Name */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Exercise Name *
@@ -566,6 +522,7 @@ export default function ExercisesPage() {
                 />
               </div>
 
+              {/* Sets & Rep Scheme */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-foreground block mb-2">
@@ -581,6 +538,7 @@ export default function ExercisesPage() {
                       setSetsDraft(raw);
 
                       if (raw === "") return;
+
                       const n = Number(raw);
                       if (!Number.isFinite(n)) return;
 
@@ -622,9 +580,10 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
+              {/* Rep boxes */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-foreground block">
-                  Goal reps for each set
+                  Goal reps for each set (one box per set)
                 </label>
 
                 <div className="grid grid-cols-4 gap-2">
@@ -668,6 +627,7 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
+              {/* Rest Time */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Rest Time (seconds)
@@ -692,6 +652,7 @@ export default function ExercisesPage() {
                 />
               </div>
 
+              {/* Video URL */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Form Check Video URL
@@ -716,6 +677,7 @@ export default function ExercisesPage() {
                 </div>
               </div>
 
+              {/* Notes */}
               <div>
                 <label className="text-sm font-medium text-foreground block mb-2">
                   Notes / Instructions
@@ -732,8 +694,7 @@ export default function ExercisesPage() {
 
               <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">Programme membership:</span>{" "}
-                This is controlled in the Programme editor. This page edits the exercise details
-                only.
+                This is controlled in the Programme editor. This page edits the exercise details only.
               </div>
             </div>
           ) : null}
