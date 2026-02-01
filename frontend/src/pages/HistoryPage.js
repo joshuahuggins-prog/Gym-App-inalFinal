@@ -119,7 +119,7 @@ const HistoryPage = ({ onEditWorkout }) => {
     <AppHeader
       title="Workout History"
       subtitle={subtitle}
-      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v2.png`}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
     >
       {/* History List */}
       {totalCount === 0 ? (
