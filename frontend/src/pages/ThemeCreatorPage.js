@@ -1,6 +1,6 @@
 // src/pages/ThemeCreatorPage.js
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Save, Palette } from "lucide-react";
+import { ArrowLeft, Save, Palette, Wand2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
@@ -21,7 +21,6 @@ const hexToRgb = (hex) => {
 };
 
 const rgbToHsl = ({ r, g, b }) => {
-  // r,g,b in 0..255
   const rr = r / 255;
   const gg = g / 255;
   const bb = b / 255;
@@ -58,10 +57,9 @@ const rgbToHsl = ({ r, g, b }) => {
   };
 };
 
-const hslStr = (h, s, l) => `${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%`;
+const hslToken = (h, s, l) => `${Math.round(h)} ${Math.round(s)}% ${Math.round(l)}%`;
 
 const luminance01 = ({ r, g, b }) => {
-  // relative luminance-ish, good enough for choosing black/white text
   const toLin = (c) => {
     const v = c / 255;
     return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
@@ -72,12 +70,18 @@ const luminance01 = ({ r, g, b }) => {
   return 0.2126 * R + 0.7152 * G + 0.0722 * B;
 };
 
-const pickBWForeground = (hex) => {
+const pickBWForegroundHex = (hex) => {
   const rgb = hexToRgb(hex);
   if (!rgb) return "#ffffff";
   const lum = luminance01(rgb);
-  // threshold tuned for typical UI
   return lum > 0.45 ? "#111111" : "#ffffff";
+};
+
+const hexToHslToken = (hex, fallbackToken) => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return fallbackToken;
+  const hsl = rgbToHsl(rgb);
+  return hslToken(hsl.h, hsl.s, hsl.l);
 };
 
 const getCustomThemes = () => {
@@ -105,43 +109,55 @@ const applyVars = (vars) => {
   });
 };
 
-const isDarkModeNow = () => {
-  // Tailwind/shadcn often use .dark on html. If you use something else, we can adjust later.
-  return document.documentElement.classList.contains("dark");
-};
+const isDarkModeNow = () => document.documentElement.classList.contains("dark");
 
-const buildPalette = ({ baseHex, accentHex, intensity01 }) => {
-  // intensity01: 0..1 where 0 = lighter overall, 1 = darker overall
+/**
+ * Build a token palette from:
+ * - baseHex controls the surface hue (bg/card/border/etc.)
+ * - primaryHex controls primary/accent
+ * - secondaryHex controls secondary/muted tint
+ * - strongHex controls accent-strong
+ * - glowHex controls primary-glow
+ * - slider intensity controls overall lightness targets
+ */
+const buildPalette = ({
+  baseHex,
+  primaryHex,
+  secondaryHex,
+  strongHex,
+  glowHex,
+  intensity01,
+}) => {
   const baseRgb = hexToRgb(baseHex) || { r: 11, g: 31, b: 58 };
   const baseHsl = rgbToHsl(baseRgb);
 
-  const accentRgb = hexToRgb(accentHex) || { r: 244, g: 196, b: 48 };
-  const accentHsl = rgbToHsl(accentRgb);
+  const baseHue = baseHsl.h;
+  const baseSat = clamp(baseHsl.s, 8, 35);
 
-  // Light palette targets
-  // As intensity increases, light mode gets slightly less bright (to stay cohesive)
+  // Surface targets
   const lightBgL = clamp(97 - Math.round(intensity01 * 10), 82, 97);
   const lightCardL = clamp(lightBgL - 4, 75, 95);
   const lightTextL = 12;
 
-  // Dark palette targets
-  // As intensity increases, dark mode gets darker and higher contrast
   const darkBgL = clamp(12 - Math.round(intensity01 * 4), 6, 14);
   const darkCardL = clamp(darkBgL + 6, 10, 22);
   const darkTextL = 92;
 
-  // Use base hue/sat for surfaces (keeps theme cohesive)
-  const baseHue = baseHsl.h;
-  const baseSat = clamp(baseHsl.s, 8, 35);
+  // Convert chosen colours to HSL tokens
+  const primary = hexToHslToken(primaryHex, "45 90% 45%");
+  const secondary = hexToHslToken(secondaryHex, "50 35% 86%");
+  const strong = hexToHslToken(strongHex, "215 70% 45%");
+  const glow = hexToHslToken(glowHex || primaryHex, primary);
 
-  const accentHue = accentHsl.h;
-  const accentSat = clamp(accentHsl.s, 55, 95);
-  const accentLight = clamp(accentHsl.l, 38, 58);
+  // Foregrounds based on black/white contrast
+  const primaryFgHex = pickBWForegroundHex(primaryHex);
+  const secondaryFgHex = pickBWForegroundHex(secondaryHex);
+  const strongFgHex = pickBWForegroundHex(strongHex);
 
-  // Strong accent = opposite hue
-  const strongHue = (accentHue + 180) % 360;
+  const primaryFg = hexToHslToken(primaryFgHex, "0 0% 100%");
+  const secondaryFg = hexToHslToken(secondaryFgHex, "40 25% 12%");
+  const strongFg = hexToHslToken(strongFgHex, "0 0% 100%");
 
-  // Borders + muted derived from surfaces
   const mkVars = (mode) => {
     const isDark = mode === "dark";
     const bgL = isDark ? darkBgL : lightBgL;
@@ -150,88 +166,60 @@ const buildPalette = ({ baseHex, accentHex, intensity01 }) => {
 
     const mutedL = isDark ? clamp(cardL + 6, 16, 35) : clamp(cardL - 2, 70, 92);
     const mutedFgL = isDark ? clamp(fgL - 40, 40, 65) : 35;
-
     const borderL = isDark ? clamp(cardL + 10, 18, 38) : clamp(cardL - 10, 55, 85);
 
-    // Foreground for accent chosen via simple luminance check on accentHex
-    const accentFgHex = pickBWForeground(accentHex);
-    const accentFgHsl = rgbToHsl(hexToRgb(accentFgHex) || { r: 255, g: 255, b: 255 });
+    const background = hslToken(baseHue, baseSat, bgL);
+    const foreground = hslToken(baseHue, clamp(baseSat, 10, 30), fgL);
 
-    // For "gold" and success, keep stable defaults but themed slightly
-    const goldH = 45;
-    const goldS = 85;
-    const goldL = isDark ? 52 : 48;
-
-    const successH = 142;
-    const successS = 55;
-    const successL = isDark ? 42 : 38;
-
-    const destructiveH = 0;
-    const destructiveS = 72;
-    const destructiveL = isDark ? 50 : 45;
-
-    const primary = hslStr(accentHue, accentSat, clamp(accentLight + (isDark ? 4 : 0), 35, 62));
-    const primaryGlow = hslStr(accentHue, clamp(accentSat + 5, 55, 100), clamp(accentLight + 10, 40, 70));
-    const background = hslStr(baseHue, baseSat, bgL);
-    const foreground = hslStr(baseHue, clamp(baseSat, 10, 30), fgL);
-    const card = hslStr(baseHue, baseSat, cardL);
+    const card = hslToken(baseHue, baseSat, cardL);
     const cardFg = foreground;
 
     const popover = card;
     const popoverFg = foreground;
 
-    const secondary = hslStr(baseHue, clamp(baseSat - 5, 6, 25), mutedL);
-    const secondaryFg = foreground;
+    // Muted + muted-foreground derived from surfaces
+    const muted = hslToken(baseHue, clamp(baseSat - 6, 5, 22), mutedL);
+    const mutedFg = hslToken(baseHue, 10, mutedFgL);
 
-    const muted = hslStr(baseHue, clamp(baseSat - 6, 5, 22), mutedL);
-    const mutedFg = hslStr(baseHue, 10, mutedFgL);
-
-    const accent = primary;
-    const accentFg = hslStr(accentFgHsl.h, accentFgHsl.s, accentFgHsl.l);
-
-    const accentStrong = hslStr(strongHue, 70, isDark ? 55 : 45);
-    const accentStrongFg = isDark ? "0 0% 10%" : "0 0% 100%";
-
-    const border = hslStr(baseHue, clamp(baseSat - 10, 5, 20), borderL);
+    // Borders/inputs follow surfaces
+    const border = hslToken(baseHue, clamp(baseSat - 10, 5, 20), borderL);
     const input = border;
-    const ring = primary;
 
-    const gold = hslStr(goldH, goldS, goldL);
+    // Gold/success/destructive can be kept stable
+    const gold = isDark ? "45 85% 52%" : "45 85% 48%";
     const goldFg = foreground;
 
-    const success = hslStr(successH, successS, successL);
+    const success = isDark ? "142 55% 42%" : "142 55% 38%";
     const successFg = "0 0% 100%";
 
-    const destructive = hslStr(destructiveH, destructiveS, destructiveL);
+    const destructive = isDark ? "0 72% 50%" : "0 72% 45%";
     const destructiveFg = "0 0% 100%";
 
-    // Charts follow main accents
-    const chart1 = primary;
-    const chart2 = gold;
-    const chart3 = success;
-    const chart4 = hslStr(262, 60, 52);
-    const chart5 = destructive;
+    // Ring uses primary
+    const ring = primary;
 
-    // Gradients and shadows (optional, but keeps parity with your current themes)
-    const gradientPrimary = `linear-gradient(135deg, hsl(${primary}), hsl(${primaryGlow}))`;
+    // Gradients/shadows based on chosen colours
+    const gradientPrimary = `linear-gradient(135deg, hsl(${primary}), hsl(${glow}))`;
     const gradientGold = `linear-gradient(135deg, hsl(${gold}), hsl(35 80% ${isDark ? 52 : 46}%))`;
     const gradientHero = `linear-gradient(180deg, hsl(${background}), hsl(${card}))`;
 
     const shadowElegant = `0 10px 30px -10px hsl(${primary} / ${isDark ? 0.18 : 0.2})`;
-    const shadowGlow = `0 0 40px hsl(${primaryGlow} / ${isDark ? 0.18 : 0.22})`;
+    const shadowGlow = `0 0 40px hsl(${glow} / ${isDark ? 0.18 : 0.22})`;
     const shadowGold = `0 10px 30px -10px hsl(${gold} / ${isDark ? 0.16 : 0.18})`;
 
     return {
       "--background": background,
       "--foreground": foreground,
+
       "--card": card,
       "--card-foreground": cardFg,
+
       "--popover": popover,
       "--popover-foreground": popoverFg,
 
       "--primary": primary,
-      "--primary-foreground": accentFg,
-      "--primary-glow": primaryGlow,
+      "--primary-foreground": primaryFg,
+      "--primary-glow": glow,
 
       "--gold": gold,
       "--gold-foreground": goldFg,
@@ -242,11 +230,12 @@ const buildPalette = ({ baseHex, accentHex, intensity01 }) => {
       "--muted": muted,
       "--muted-foreground": mutedFg,
 
-      "--accent": accent,
-      "--accent-foreground": accentFg,
+      // Accent follows primary
+      "--accent": primary,
+      "--accent-foreground": primaryFg,
 
-      "--accent-strong": accentStrong,
-      "--accent-strong-foreground": accentStrongFg,
+      "--accent-strong": strong,
+      "--accent-strong-foreground": strongFg,
 
       "--destructive": destructive,
       "--destructive-foreground": destructiveFg,
@@ -258,11 +247,11 @@ const buildPalette = ({ baseHex, accentHex, intensity01 }) => {
       "--success": success,
       "--success-foreground": successFg,
 
-      "--chart-1": chart1,
-      "--chart-2": chart2,
-      "--chart-3": chart3,
-      "--chart-4": chart4,
-      "--chart-5": chart5,
+      "--chart-1": primary,
+      "--chart-2": gold,
+      "--chart-3": success,
+      "--chart-4": "262 60% 52%",
+      "--chart-5": destructive,
 
       "--gradient-primary": gradientPrimary,
       "--gradient-gold": gradientGold,
@@ -274,30 +263,61 @@ const buildPalette = ({ baseHex, accentHex, intensity01 }) => {
     };
   };
 
-  return {
-    light: mkVars("light"),
-    dark: mkVars("dark"),
-  };
+  return { light: mkVars("light"), dark: mkVars("dark") };
 };
+
+const ColorRow = ({ label, hex, onHexChange, helper }) => (
+  <div>
+    <div className="flex items-center justify-between">
+      <label className="text-sm opacity-80">{label}</label>
+      {helper ? <span className="text-xs opacity-60">{helper}</span> : null}
+    </div>
+    <div className="flex items-center gap-3 mt-1">
+      <input
+        type="color"
+        value={hex}
+        onChange={(e) => onHexChange(e.target.value)}
+        className="h-10 w-14 rounded-md border"
+        style={{ borderColor: "hsl(var(--border))", background: "transparent" }}
+      />
+      <Input value={hex} onChange={(e) => onHexChange(e.target.value)} />
+    </div>
+  </div>
+);
 
 export default function ThemeCreatorPage({ onBack }) {
   const [name, setName] = useState("");
-  const [accentHex, setAccentHex] = useState("#F4C430"); // mustard-ish default
-  const [baseHex, setBaseHex] = useState("#0B1F3A"); // your dark-blue vibe
-  const [intensity, setIntensity] = useState(65); // 0..100 (higher = darker overall)
+
+  // Surfaces
+  const [baseHex, setBaseHex] = useState("#0B1F3A");
+
+  // Core brand colours (fully customizable)
+  const [primaryHex, setPrimaryHex] = useState("#F4C430");   // primary + accent
+  const [glowHex, setGlowHex] = useState("#FFD86B");         // primary glow
+  const [secondaryHex, setSecondaryHex] = useState("#2A3A55"); // secondary tint
+  const [strongHex, setStrongHex] = useState("#2E7CF6");     // accent-strong
+
+  // 0..100: higher = darker overall
+  const [intensity, setIntensity] = useState(65);
   const intensity01 = clamp(intensity / 100, 0, 1);
 
   const palette = useMemo(() => {
-    return buildPalette({ baseHex, accentHex, intensity01 });
-  }, [baseHex, accentHex, intensity01]);
+    return buildPalette({
+      baseHex,
+      primaryHex,
+      secondaryHex,
+      strongHex,
+      glowHex,
+      intensity01,
+    });
+  }, [baseHex, primaryHex, secondaryHex, strongHex, glowHex, intensity01]);
 
   const previewVars = useMemo(() => {
     return isDarkModeNow() ? palette.dark : palette.light;
   }, [palette]);
 
-  // Apply preview immediately while editing (but only for custom mode)
+  // Apply preview while editing
   useEffect(() => {
-    // Mark custom theme as active and apply preview vars
     document.documentElement.dataset.theme = "custom";
     applyVars(previewVars);
   }, [previewVars]);
@@ -313,10 +333,16 @@ export default function ThemeCreatorPage({ onBack }) {
     const theme = {
       id,
       name: themeName,
+
+      // store inputs too (so you can edit later if you add that screen)
       baseHex,
-      accentHex,
+      primaryHex,
+      glowHex,
+      secondaryHex,
+      strongHex,
       intensity,
-      vars: palette, // { light: {--token: value}, dark: {...} }
+
+      vars: palette,
       createdAt: new Date().toISOString(),
     };
 
@@ -324,15 +350,34 @@ export default function ThemeCreatorPage({ onBack }) {
     all.push(theme);
     saveCustomThemes(all);
 
-    // Apply immediately
     document.documentElement.dataset.theme = "custom";
     applyVars(isDarkModeNow() ? theme.vars.dark : theme.vars.light);
 
     toast.success("Custom theme saved.");
   };
 
+  const setNiceDefaults = () => {
+    setName("");
+    setBaseHex("#0B1F3A");
+    setPrimaryHex("#F4C430");
+    setGlowHex("#FFD86B");
+    setSecondaryHex("#2A3A55");
+    setStrongHex("#2E7CF6");
+    setIntensity(65);
+    toast("Reset theme creator.");
+  };
+
+  const autoGlow = () => {
+    // simple helper: if you pick a primary, glow can follow primary
+    setGlowHex(primaryHex);
+    toast("Primary glow set to match Primary.");
+  };
+
   return (
-    <div className="p-4 pb-28" style={{ background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}>
+    <div
+      className="p-4 pb-28"
+      style={{ background: "hsl(var(--background))", color: "hsl(var(--foreground))" }}
+    >
       <div className="flex items-center gap-2 mb-4">
         <Button variant="ghost" onClick={onBack} className="gap-2">
           <ArrowLeft size={18} /> Back
@@ -344,7 +389,10 @@ export default function ThemeCreatorPage({ onBack }) {
       </div>
 
       <div className="space-y-4">
-        <div className="rounded-xl border p-4" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <div
+          className="rounded-xl border p-4"
+          style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+        >
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="font-medium">Theme details</div>
             <Badge variant="secondary">Custom</Badge>
@@ -359,33 +407,20 @@ export default function ThemeCreatorPage({ onBack }) {
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="text-sm opacity-80">Accent colour</label>
-              <div className="flex items-center gap-3 mt-1">
-                <input
-                  type="color"
-                  value={accentHex}
-                  onChange={(e) => setAccentHex(e.target.value)}
-                  className="h-10 w-14 rounded-md border"
-                  style={{ borderColor: "hsl(var(--border))", background: "transparent" }}
-                />
-                <Input value={accentHex} onChange={(e) => setAccentHex(e.target.value)} />
+            <ColorRow label="Base (surfaces)" hex={baseHex} onHexChange={setBaseHex} />
+            <div className="space-y-2">
+              <ColorRow label="Primary" hex={primaryHex} onHexChange={setPrimaryHex} />
+              <div className="flex justify-end">
+                <Button variant="outline" className="h-8 px-3 gap-2" onClick={autoGlow}>
+                  <Wand2 className="h-4 w-4" />
+                  Glow = Primary
+                </Button>
               </div>
             </div>
 
-            <div>
-              <label className="text-sm opacity-80">Base colour</label>
-              <div className="flex items-center gap-3 mt-1">
-                <input
-                  type="color"
-                  value={baseHex}
-                  onChange={(e) => setBaseHex(e.target.value)}
-                  className="h-10 w-14 rounded-md border"
-                  style={{ borderColor: "hsl(var(--border))", background: "transparent" }}
-                />
-                <Input value={baseHex} onChange={(e) => setBaseHex(e.target.value)} />
-              </div>
-            </div>
+            <ColorRow label="Primary glow" hex={glowHex} onHexChange={setGlowHex} helper="(used for gradients)" />
+            <ColorRow label="Secondary" hex={secondaryHex} onHexChange={setSecondaryHex} helper="(buttons / surfaces)" />
+            <ColorRow label="Strong accent" hex={strongHex} onHexChange={setStrongHex} helper="(opposite / highlight)" />
           </div>
 
           <div className="mt-5">
@@ -408,17 +443,29 @@ export default function ThemeCreatorPage({ onBack }) {
           </div>
         </div>
 
-        <div className="rounded-xl border p-4" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+        <div
+          className="rounded-xl border p-4"
+          style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+        >
           <div className="font-medium mb-3">Preview</div>
 
-          <div className="rounded-xl p-4 space-y-3" style={{ background: "hsl(var(--background))", boxShadow: "var(--shadow-elegant)" }}>
-            <div className="flex items-center gap-2">
+          <div
+            className="rounded-xl p-4 space-y-3"
+            style={{ background: "hsl(var(--background))", boxShadow: "var(--shadow-elegant)" }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
               <div className="h-3 w-3 rounded-full" style={{ background: "hsl(var(--primary))" }} />
               <div className="text-sm font-semibold">Primary</div>
-              <div className="text-xs opacity-70">hsl(var(--primary))</div>
+              <div className="h-3 w-3 rounded-full ml-3" style={{ background: "hsl(var(--secondary))" }} />
+              <div className="text-sm font-semibold">Secondary</div>
+              <div className="h-3 w-3 rounded-full ml-3" style={{ background: "hsl(var(--accent-strong))" }} />
+              <div className="text-sm font-semibold">Strong</div>
             </div>
 
-            <div className="rounded-xl border p-3" style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
+            >
               <div className="text-sm font-medium">Card</div>
               <div className="text-xs opacity-70">
                 This uses your generated tokens for background, foreground, border and card.
@@ -437,7 +484,6 @@ export default function ThemeCreatorPage({ onBack }) {
               </Button>
 
               <Button
-                variant="secondary"
                 onClick={() => toast("Secondary action")}
                 style={{
                   background: "hsl(var(--secondary))",
@@ -448,7 +494,7 @@ export default function ThemeCreatorPage({ onBack }) {
               </Button>
 
               <Button
-                onClick={() => toast("Strong accent")}
+                onClick={() => toast("Strong action")}
                 style={{
                   background: "hsl(var(--accent-strong))",
                   color: "hsl(var(--accent-strong-foreground))",
@@ -464,25 +510,15 @@ export default function ThemeCreatorPage({ onBack }) {
           <Button className="gap-2" onClick={handleSave}>
             <Save size={18} /> Save theme
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setName("");
-              setAccentHex("#F4C430");
-              setBaseHex("#0B1F3A");
-              setIntensity(65);
-              toast("Reset theme creator.");
-            }}
-          >
+          <Button variant="outline" onClick={setNiceDefaults}>
             Reset
           </Button>
         </div>
 
         <div className="text-xs opacity-70">
-          Saved themes are stored locally on this device in localStorage. You’ll wire the “Create Theme” button in Settings to
-          open this page, and the Settings list can load themes from <code>gym_custom_themes</code>.
+          Saved themes are stored locally on this device in localStorage (<code>gym_custom_themes</code>).
         </div>
       </div>
     </div>
   );
-}
+  }
