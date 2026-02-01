@@ -1,5 +1,6 @@
 // src/pages/HistoryPage.js
 import React, { useEffect, useMemo, useState } from "react";
+import AppHeader from "../components/AppHeader";
 import { ChevronDown, ChevronUp, Trash2, Calendar, Pencil } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -32,7 +33,7 @@ const HistoryPage = ({ onEditWorkout }) => {
   // individual workout expand/collapse (existing behaviour)
   const [expandedWorkouts, setExpandedWorkouts] = useState(new Set());
 
-  // NEW: month section expand/collapse
+  // month section expand/collapse
   const [expandedMonths, setExpandedMonths] = useState(() => new Set());
 
   // Keep in sync on mount (covers edge cases if storage changes between renders)
@@ -111,27 +112,24 @@ const HistoryPage = ({ onEditWorkout }) => {
     });
   }, [totalCount, groupedWorkouts]);
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-gradient-to-b from-card to-background border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-primary">Workout History</h1>
-          <p className="text-sm text-muted-foreground">
-            {totalCount} total workouts logged
-          </p>
-        </div>
-      </div>
+  const subtitle =
+    totalCount === 1 ? "1 total workout logged" : `${totalCount} total workouts logged`;
 
+  return (
+    <AppHeader
+      title="Workout History"
+      subtitle={subtitle}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v2.png`}
+    >
       {/* History List */}
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {totalCount === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">💪</div>
-            <p className="text-lg text-muted-foreground mb-2">No workouts yet</p>
-          </div>
-        ) : (
-          Object.keys(groupedWorkouts)
+      {totalCount === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">💪</div>
+          <p className="text-lg text-muted-foreground mb-2">No workouts yet</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.keys(groupedWorkouts)
             .sort(sortMonthKeysDesc)
             .map((monthKey) => {
               const monthWorkouts = ensureArray(groupedWorkouts[monthKey]);
@@ -313,10 +311,10 @@ const HistoryPage = ({ onEditWorkout }) => {
                   ) : null}
                 </div>
               );
-            })
-        )}
-      </div>
-    </div>
+            })}
+        </div>
+      )}
+    </AppHeader>
   );
 };
 
