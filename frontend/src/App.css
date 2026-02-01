@@ -1,94 +1,215 @@
-/* ----------------------------------------
-   Base app styles
------------------------------------------ */
+// src/App.js
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  Home,
+  History,
+  TrendingUp,
+  FileText,
+  Dumbbell,
+  Settings,
+  Download,
+} from "lucide-react";
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-  will-change: transform;
-}
+import HomePage from "./pages/HomePage";
+import HistoryPage from "./pages/HistoryPage";
+import ProgressPage from "./pages/ProgressPage";
+import ProgrammesPage from "./pages/ProgrammesPage";
+import ExercisesPage from "./pages/ExercisesPage";
+import SettingsPage from "./pages/SettingsPage";
+import ImportExportPage from "./pages/ImportExportPage";
+import EditWorkoutPage from "./pages/EditWorkoutPage";
+import ThemeCreatorPage from "./pages/ThemeCreatorPage";
 
-/* Only animate if user allows motion */
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin 20s linear infinite;
-  }
-}
+import { SettingsProvider } from "./contexts/SettingsContext";
+import { Toaster } from "./components/ui/sonner";
 
-.App-header {
-  background-color: #0f0f10;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+import useUpsideDown from "./hooks/useUpsideDown";
 
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
+const PAGES = {
+  HOME: "home",
+  HISTORY: "history",
+  EDIT_WORKOUT: "edit-workout",
+  PROGRESS: "progress",
+  PROGRAMMES: "programmes",
+  EXERCISES: "exercises",
+  SETTINGS: "settings",
+  IMPORT_EXPORT: "import-export",
+  THEME_CREATOR: "themeCreator",
+};
 
-.App-link {
-  color: #61dafb;
-}
+const App = () => {
+  const upsideDown = useUpsideDown();
 
-/* ----------------------------------------
-   Global animation primitives
-   (used only when Tailwind / Framer isn't)
------------------------------------------ */
+  const [currentPage, setCurrentPage] = useState(PAGES.HOME);
 
-/* Smooth slide-up entrance */
-@keyframes slide-up {
-  from {
-    transform: translateY(16px) scale(0.985);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
+  // Edit workout page state
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
 
-/* Fade + subtle scale (good fallback) */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
+  const isEditMode = currentPage === PAGES.EDIT_WORKOUT;
 
-/* ----------------------------------------
-   Utility classes (optional)
------------------------------------------ */
+  const handleNavigate = useCallback((page) => {
+    setCurrentPage(page);
 
-.animate-slide-up {
-  animation: slide-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+    // If navigating away from edit screen, clear selected workout
+    if (page !== PAGES.EDIT_WORKOUT) setEditingWorkoutId(null);
+  }, []);
 
-.animate-fade-in {
-  animation: fade-in 220ms ease-out both;
-}
+  // Called by HistoryPage pencil button
+  const openEditWorkout = useCallback((workoutId) => {
+    if (!workoutId) return;
+    setEditingWorkoutId(workoutId);
+    setCurrentPage(PAGES.EDIT_WORKOUT);
+  }, []);
 
-/* ----------------------------------------
-   Upside-down support polish
------------------------------------------ */
+  const closeEditWorkout = useCallback(() => {
+    setEditingWorkoutId(null);
+    setCurrentPage(PAGES.HISTORY);
+  }, []);
 
-/* Prevent blur during rotate on Android */
-.rotate-180 {
-  transform: rotate(180deg);
-  transform-origin: center;
-  will-change: transform;
-}
+  const openThemeCreator = useCallback(() => {
+    setCurrentPage(PAGES.THEME_CREATOR);
+  }, []);
 
-/* Respect accessibility */
-@media (prefers-reduced-motion: reduce) {
-  .animate-slide-up,
-  .animate-fade-in,
-  .App-logo {
-    animation: none !important;
-    transition: none !important;
-  }
-}
+  const closeThemeCreator = useCallback(() => {
+    setCurrentPage(PAGES.SETTINGS);
+  }, []);
+
+  const navItems = useMemo(
+    () => [
+      { key: PAGES.HOME, label: "Today", icon: <Home className="w-5 h-5" /> },
+      {
+        key: PAGES.HISTORY,
+        label: "History",
+        icon: <History className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.PROGRESS,
+        label: "Progress",
+        icon: <TrendingUp className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.PROGRAMMES,
+        label: "Programmes",
+        icon: <FileText className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.EXERCISES,
+        label: "Exercises",
+        icon: <Dumbbell className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.SETTINGS,
+        label: "Settings",
+        icon: <Settings className="w-5 h-5" />,
+      },
+      {
+        key: PAGES.IMPORT_EXPORT,
+        label: "Data",
+        icon: <Download className="w-5 h-5" />,
+      },
+    ],
+    []
+  );
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case PAGES.HOME:
+        return <HomePage />;
+
+      case PAGES.HISTORY:
+        return <HistoryPage onEditWorkout={openEditWorkout} />;
+
+      case PAGES.EDIT_WORKOUT:
+        // Safety: if somehow opened without an id, bounce to history
+        if (!editingWorkoutId) {
+          return <HistoryPage onEditWorkout={openEditWorkout} />;
+        }
+        return (
+          <EditWorkoutPage workoutId={editingWorkoutId} onClose={closeEditWorkout} />
+        );
+
+      case PAGES.PROGRESS:
+        return <ProgressPage />;
+
+      case PAGES.PROGRAMMES:
+        return <ProgrammesPage />;
+
+      case PAGES.EXERCISES:
+        return <ExercisesPage />;
+
+      case PAGES.SETTINGS:
+        // ✅ Pass prop so Settings can open ThemeCreator
+        return <SettingsPage onCreateTheme={openThemeCreator} />;
+
+      case PAGES.THEME_CREATOR:
+        return <ThemeCreatorPage onBack={closeThemeCreator} />;
+
+      case PAGES.IMPORT_EXPORT:
+        return <ImportExportPage />;
+
+      default:
+        return <HomePage />;
+    }
+  };
+
+  return (
+    <SettingsProvider>
+      {/* ✅ IMPORTANT: fixed viewport wrapper prevents "fixed" children from scrolling
+          when the app is rotated (transform would otherwise break position: fixed). */}
+      <div
+        className={`fixed inset-0 transform-gpu transition-transform duration-350 ease-out ${
+          upsideDown ? "rotate-180" : ""
+        }`}
+      >
+        <div className="flex flex-col h-full bg-background text-foreground">
+          {/* Main Content (ONLY scrolling area) */}
+          {/* ✅ Added `scrollbar-hide` so the vertical scrollbar is invisible */}
+          <main
+            className={`flex-1 overflow-y-auto scrollbar-hide ${
+              isEditMode ? "" : "pb-20"
+            }`}
+          >
+            {renderPage()}
+          </main>
+
+          {/* Bottom Navigation (hidden while editing a workout) */}
+          {!isEditMode && (
+            <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex items-center h-16 px-2 min-w-max">
+                  {navItems.map((it) => (
+                    <NavButton
+                      key={it.key}
+                      icon={it.icon}
+                      label={it.label}
+                      active={currentPage === it.key}
+                      onClick={() => handleNavigate(it.key)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </nav>
+          )}
+
+          <Toaster />
+        </div>
+      </div>
+    </SettingsProvider>
+  );
+};
+
+const NavButton = ({ icon, label, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
+      active
+        ? "text-primary scale-105"
+        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+    }`}
+  >
+    <div className={active ? "glow-primary" : ""}>{icon}</div>
+    <span className="text-[10px] font-medium">{label}</span>
+  </button>
+);
+
+export default App;
