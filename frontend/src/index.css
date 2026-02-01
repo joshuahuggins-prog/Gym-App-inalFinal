@@ -343,7 +343,7 @@
   }
 
   .app-header-title {
-    font-size: 20px;         /* was 16px */
+    font-size: 25px;         /* was 16px */
     font-weight: 800;
     letter-spacing: 0.2px;
   }
@@ -362,9 +362,9 @@
   }
 
   .app-header-icon {
-    width: 22px;
-    height: 22px;
-    opacity: 0.95;
+    width: 40px;
+    height: 40px;
+    opacity: 0.98;
     pointer-events: none;
     user-select: none;
   }
