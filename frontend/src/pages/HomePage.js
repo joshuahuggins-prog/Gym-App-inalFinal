@@ -566,7 +566,7 @@ const HomePage = () => {
     <AppHeader
       title="Log Workout"
       subtitle={subtitle}
-      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32.png`}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
       actions={
         <div className="flex items-center justify-between gap-2">
           <div className="flex gap-2">
