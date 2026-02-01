@@ -158,9 +158,8 @@ const ImportExportPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ✅ New header formatting plan */}
+      {/* ✅ Header + glass action bar (NO overflow) */}
       <div className="sticky top-0 z-40">
-        {/* Top gradient header bar */}
         <div className="bg-gradient-to-b from-card to-background border-b border-border">
           <div className="max-w-2xl mx-auto px-4 pt-5 pb-3">
             <div className="flex items-start justify-between gap-3">
@@ -179,44 +178,45 @@ const ImportExportPage = () => {
               <img
                 src={logoSrc}
                 alt="App"
-                className="h-9 w-9 opacity-90"
+                className="h-9 w-9 opacity-90 shrink-0"
                 onError={(e) => {
-                  // hide if missing so layout stays clean
                   e.currentTarget.style.display = "none";
                 }}
               />
             </div>
           </div>
 
-          {/* Glass action bar (button lives here, not in the header) */}
+          {/* ✅ Glass action bar: use grid so it NEVER pushes off-screen */}
           <div className="border-t border-border/60 bg-background/55 backdrop-blur supports-[backdrop-filter]:bg-background/40">
-            <div className="max-w-2xl mx-auto px-4 py-3 flex gap-2">
-              <Button
-                onClick={handleExportFullBackup}
-                className="flex-1"
-                size="lg"
-              >
-                <Download className="w-5 h-5 mr-2" />
-                Export backup
-              </Button>
+            <div className="max-w-2xl mx-auto px-4 py-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  onClick={handleExportFullBackup}
+                  size="lg"
+                  className="w-full min-w-0"
+                >
+                  <Download className="w-5 h-5 mr-2 shrink-0" />
+                  <span className="min-w-0 truncate">Export backup</span>
+                </Button>
 
-              <Button
-                onClick={handleExport}
-                variant="secondary"
-                className="flex-1"
-                size="lg"
-                disabled={totalWorkouts === 0}
-                title={totalWorkouts === 0 ? "No workouts to export" : ""}
-              >
-                <FileText className="w-5 h-5 mr-2" />
-                Export CSV
-              </Button>
+                <Button
+                  onClick={handleExport}
+                  variant="secondary"
+                  size="lg"
+                  className="w-full min-w-0"
+                  disabled={totalWorkouts === 0}
+                  title={totalWorkouts === 0 ? "No workouts to export" : ""}
+                >
+                  <FileText className="w-5 h-5 mr-2 shrink-0" />
+                  <span className="min-w-0 truncate">Export CSV</span>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Page content */}
+      {/* Content */}
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6 pb-20">
         {/* Current Data Summary */}
         <div className="bg-card border border-border rounded-xl p-6">
@@ -234,7 +234,6 @@ const ImportExportPage = () => {
                 {totalWorkouts}
               </div>
             </div>
-
             <div className="p-4 bg-muted/50 rounded-lg border border-border">
               <div className="text-sm text-muted-foreground mb-1">
                 Total Sets Logged
@@ -254,9 +253,7 @@ const ImportExportPage = () => {
               {latestWorkoutDate && (
                 <div className="flex items-center gap-2 mt-1">
                   <span>📅</span>
-                  <span>
-                    Latest workout: {latestWorkoutDate.toLocaleDateString()}
-                  </span>
+                  <span>Latest workout: {latestWorkoutDate.toLocaleDateString()}</span>
                 </div>
               )}
             </div>
@@ -276,55 +273,53 @@ const ImportExportPage = () => {
             pattern.
           </p>
 
-          <div className="grid grid-cols-1 gap-3">
-            <div className="p-4 bg-muted/30 rounded-lg border border-border">
-              <label className="text-sm font-medium text-foreground block mb-2">
-                Select backup file (.json)
-              </label>
-              <input
-                type="file"
-                accept=".json,application/json"
-                onChange={(e) => setFullImportFile(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-foreground file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border border-border rounded-lg bg-muted/30"
-              />
+          <div className="p-4 bg-muted/30 rounded-lg border border-border">
+            <label className="text-sm font-medium text-foreground block mb-2">
+              Select backup file (.json)
+            </label>
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => setFullImportFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-foreground file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer border border-border rounded-lg bg-muted/30"
+            />
 
-              <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                <div className="text-xs text-muted-foreground">Import mode:</div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={fullImportMode === "overwrite" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFullImportMode("overwrite")}
-                  >
-                    Overwrite
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={fullImportMode === "merge" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFullImportMode("merge")}
-                  >
-                    Merge Workouts
-                  </Button>
-                </div>
+            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-xs text-muted-foreground">Import mode:</div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={fullImportMode === "overwrite" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFullImportMode("overwrite")}
+                >
+                  Overwrite
+                </Button>
+                <Button
+                  type="button"
+                  variant={fullImportMode === "merge" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFullImportMode("merge")}
+                >
+                  Merge Workouts
+                </Button>
               </div>
+            </div>
 
-              <Button
-                onClick={handleImportFullBackup}
-                size="lg"
-                className="w-full mt-4"
-                disabled={!fullImportFile}
-              >
-                <Upload className="w-5 h-5 mr-2" />
-                Import Full Backup
-              </Button>
+            <Button
+              onClick={handleImportFullBackup}
+              size="lg"
+              className="w-full mt-4"
+              disabled={!fullImportFile}
+            >
+              <Upload className="w-5 h-5 mr-2" />
+              Import Full Backup
+            </Button>
 
-              <div className="mt-3 text-xs text-muted-foreground">
-                <strong>Overwrite</strong> replaces everything on this device.{" "}
-                <strong>Merge Workouts</strong> merges workout history by id, but
-                still overwrites settings/programmes/exercises from the file.
-              </div>
+            <div className="mt-3 text-xs text-muted-foreground">
+              <strong>Overwrite</strong> replaces everything on this device.{" "}
+              <strong>Merge Workouts</strong> merges workout history by id, but
+              still overwrites settings/programmes/exercises from the file.
             </div>
           </div>
         </div>
@@ -341,9 +336,7 @@ const ImportExportPage = () => {
           </p>
 
           <div className="bg-muted/30 rounded-lg p-4 border border-border mb-4">
-            <div className="text-sm font-semibold text-foreground mb-2">
-              CSV Format:
-            </div>
+            <div className="text-sm font-semibold text-foreground mb-2">CSV Format:</div>
             <div className="text-xs text-muted-foreground font-mono">
               Date, Workout, Exercise, Set, Weight, Reps, Notes
             </div>
@@ -368,8 +361,8 @@ const ImportExportPage = () => {
           </h2>
 
           <p className="text-sm text-muted-foreground mb-4">
-            Import historical workout data from a CSV file. It will be{" "}
-            <strong>added</strong> to your existing workouts.
+            Import historical workout data from a CSV file. It will be <strong>added</strong>{" "}
+            to your existing workouts.
           </p>
 
           <div className="mb-4">
@@ -420,18 +413,12 @@ const ImportExportPage = () => {
             </div>
           )}
 
-          <Button
-            onClick={handleImport}
-            size="lg"
-            className="w-full"
-            disabled={!importFile}
-          >
+          <Button onClick={handleImport} size="lg" className="w-full" disabled={!importFile}>
             <Upload className="w-5 h-5 mr-2" />
             Import Workout History (CSV)
           </Button>
         </div>
 
-        {/* Warning */}
         <div className="bg-primary/10 border border-primary/30 rounded-xl p-4">
           <div className="text-sm text-foreground">
             <div className="font-semibold mb-2 flex items-center gap-2">
@@ -439,13 +426,8 @@ const ImportExportPage = () => {
               Important Notes:
             </div>
             <ul className="space-y-1 text-muted-foreground text-xs">
-              <li>
-                • CSV import will <strong>add</strong> workouts (not replace)
-              </li>
-              <li>
-                • Full backup import can <strong>overwrite</strong> your data — export
-                first!
-              </li>
+              <li>• CSV import will <strong>add</strong> workouts (not replace)</li>
+              <li>• Full backup import can <strong>overwrite</strong> your data — export first!</li>
               <li>• Backups are saved to your browser’s Downloads folder</li>
             </ul>
           </div>
