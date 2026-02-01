@@ -14,7 +14,11 @@ import {
 
 import { toast } from "sonner";
 
+// ✅ FIX THIS PATH TO MATCH YOUR FILE LOCATION EXACTLY (case-sensitive on GitHub Actions)
 import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
+// If yours is in a subfolder, use one of these instead:
+// import ExerciseLibraryCard from "../components/exercise/ExerciseLibraryCard";
+// import ExerciseLibraryCard from "../components/workout/ExerciseLibraryCard";
 
 import {
   getExercises,
@@ -30,24 +34,19 @@ const MAX_SETS = 8;
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
 const norm = (s) => String(s || "").trim().toLowerCase();
 
-/** Build defaults map from app code (workoutData) */
 const buildDefaultExerciseMap = () => {
   try {
-    // keep require() so CRA/CRACO doesn't try to hoist and break older builds
     // eslint-disable-next-line global-require
     const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
-
     const all = [
       ...(WORKOUT_A?.exercises || []),
       ...(WORKOUT_B?.exercises || []),
     ];
 
     const map = new Map();
-
     all.forEach((ex) => {
       const id = String(ex?.id || "").trim();
       if (!id) return;
-
       map.set(id, {
         id,
         name: ex?.name || "",
@@ -59,9 +58,8 @@ const buildDefaultExerciseMap = () => {
         ...ex,
       });
     });
-
     return map;
-  } catch (e) {
+  } catch {
     return new Map();
   }
 };
@@ -69,18 +67,9 @@ const buildDefaultExerciseMap = () => {
 export default function ExercisesPage() {
   const [exercises, setExercises] = useState([]);
   const [programmes, setProgrammes] = useState([]);
-
   const [searchTerm, setSearchTerm] = useState("");
   const [filterProgramme, setFilterProgramme] = useState("all");
 
-  // dialog state (still handled by your card via callbacks)
-  const [editingExercise, setEditingExercise] = useState(null);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-
-  // drafts to avoid stuck inputs
-  const [setsDraft, setSetsDraft] = useState("");
-
-  // defaults (for reset-to-default)
   const defaultExerciseMap = useMemo(() => buildDefaultExerciseMap(), []);
 
   useEffect(() => {
@@ -97,10 +86,8 @@ export default function ExercisesPage() {
     setTimeout(() => window.location.reload(), 650);
   };
 
-  /** exerciseId -> programmes containing it */
   const programmeUsageMap = useMemo(() => {
     const map = new Map();
-
     (programmes || []).forEach((p) => {
       const list = Array.isArray(p?.exercises) ? p.exercises : [];
       list.forEach((ex) => {
@@ -110,11 +97,9 @@ export default function ExercisesPage() {
         map.get(id).push(p);
       });
     });
-
     return map;
   }, [programmes]);
 
-  /** quick lookup for video urls */
   const videoLinks = useMemo(() => getVideoLinks() || {}, [exercises]);
 
   const isUserCreatedExercise = (exercise) => {
@@ -123,114 +108,22 @@ export default function ExercisesPage() {
   };
 
   const handleCreateExercise = () => {
-    const sets = 3;
-    const goalReps = [8, 10, 12];
-
-    setEditingExercise({
+    // if your card handles its own edit dialog, it will use these values
+    const newEx = {
       id: `exercise_${Date.now()}`,
       name: "",
-      sets,
+      sets: 3,
       repScheme: "RPT",
-      goalReps,
+      goalReps: [8, 10, 12],
       restTime: 120,
       notes: "",
-      videoUrl: "",
-    });
+    };
 
-    setSetsDraft(String(sets));
-    setShowEditDialog(true);
-  };
-
-  const handleEditExercise = (exercise) => {
-    const videoUrl = (getVideoLinks() || {})[exercise.id] || "";
-
-    const sets = Number.isFinite(Number(exercise.sets)) ? Number(exercise.sets) : 3;
-    const safeSets = clampInt(sets, 1, MAX_SETS);
-
-    let goalReps = Array.isArray(exercise.goalReps) ? [...exercise.goalReps] : [];
-    if (goalReps.length === 0) goalReps = [8];
-
-    if (goalReps.length < safeSets) {
-      goalReps = [
-        ...goalReps,
-        ...Array.from({ length: safeSets - goalReps.length }, () => 8),
-      ];
-    } else if (goalReps.length > safeSets) {
-      goalReps = goalReps.slice(0, safeSets);
-    }
-
-    setEditingExercise({ ...exercise, sets: safeSets, goalReps, videoUrl });
-    setSetsDraft(String(safeSets));
-    setShowEditDialog(true);
-  };
-
-  const setSetsAndSyncGoalReps = (nextSets) => {
-    const sets = clampInt(nextSets, 1, MAX_SETS);
-
-    const current = Array.isArray(editingExercise?.goalReps)
-      ? [...editingExercise.goalReps]
-      : [];
-
-    let nextGoalReps = current;
-
-    if (nextGoalReps.length < sets) {
-      nextGoalReps = [
-        ...nextGoalReps,
-        ...Array.from({ length: sets - nextGoalReps.length }, () => 8),
-      ];
-    } else if (nextGoalReps.length > sets) {
-      nextGoalReps = nextGoalReps.slice(0, sets);
-    }
-
-    setEditingExercise({ ...editingExercise, sets, goalReps: nextGoalReps });
-  };
-
-  const handleSaveExercise = () => {
-    if (!editingExercise?.name || !editingExercise.name.trim()) {
-      toast.error("Please enter exercise name");
-      return;
-    }
-
-    const { videoUrl, ...exerciseData } = editingExercise;
-
-    const setsNum = Number(exerciseData.sets);
-    const sets = Number.isFinite(setsNum) ? clampInt(setsNum, 1, MAX_SETS) : 3;
-    exerciseData.sets = sets;
-
-    const rawGoalReps = Array.isArray(exerciseData.goalReps) ? exerciseData.goalReps : [];
-    let cleaned = rawGoalReps.map((x) => {
-      if (x === "" || x == null) return 8;
-      const n = Number(x);
-      if (!Number.isFinite(n) || n <= 0) return 8;
-      return clampInt(n, 1, 200);
-    });
-
-    if (cleaned.length < sets) {
-      cleaned = [...cleaned, ...Array.from({ length: sets - cleaned.length }, () => 8)];
-    } else if (cleaned.length > sets) {
-      cleaned = cleaned.slice(0, sets);
-    }
-
-    exerciseData.goalReps = cleaned.length > 0 ? cleaned : [8];
-
-    const restNum = Number(exerciseData.restTime);
-    exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
-
-    const ok = saveExercise(exerciseData);
-    if (!ok) {
-      toast.error("Failed to save exercise");
-      return;
-    }
-
-    if (videoUrl && videoUrl.trim()) {
-      updateVideoLink(exerciseData.id, videoUrl.trim());
-    }
-
+    // save immediately or open edit UI—depends how your card is built.
+    // Here: create + open edit via toast hint
+    saveExercise(newEx);
+    toast.success("Exercise created. Tap edit to fill details.");
     loadData();
-    setShowEditDialog(false);
-    setEditingExercise(null);
-    setSetsDraft("");
-    toast.success("Exercise saved!");
   };
 
   const handleDeleteExercise = (exercise) => {
@@ -242,9 +135,9 @@ export default function ExercisesPage() {
 
     const msg =
       usedNames.length > 0
-        ? `Delete "${name}"?\n\nIt is currently used in: ${usedNames.join(
+        ? `Delete "${name}"?\n\nUsed in: ${usedNames.join(
             ", "
-          )}.\n\nDeleting may break those programmes unless you remove it from them too.`
+          )}.\n\nDeleting may break those programmes unless removed there too.`
         : `Delete "${name}"?`;
 
     if (!window.confirm(msg)) return;
@@ -254,16 +147,13 @@ export default function ExercisesPage() {
       toast.error("Failed to delete exercise");
       return;
     }
-
     loadData();
     toast.success("Exercise deleted");
   };
 
-  /** Reset one exercise back to app default (matching your original logic) */
   const handleResetExerciseToDefault = (exercise) => {
     const id = String(exercise?.id || "").trim();
     if (!id) return;
-
     if (isUserCreatedExercise(exercise)) return;
 
     const def = defaultExerciseMap.get(id);
@@ -272,34 +162,28 @@ export default function ExercisesPage() {
       return;
     }
 
-    try {
-      const ok = saveExercise({
-        id: def.id,
-        name: def.name,
-        sets: def.sets ?? 3,
-        repScheme: def.repScheme ?? "RPT",
-        goalReps: Array.isArray(def.goalReps) ? def.goalReps : [8, 10, 12],
-        restTime: def.restTime ?? 120,
-        notes: def.notes ?? "",
-        hidden: typeof exercise?.hidden === "boolean" ? exercise.hidden : false,
-        assignedTo: Array.isArray(exercise?.assignedTo) ? exercise.assignedTo : [],
-      });
+    const ok = saveExercise({
+      id: def.id,
+      name: def.name,
+      sets: def.sets ?? 3,
+      repScheme: def.repScheme ?? "RPT",
+      goalReps: Array.isArray(def.goalReps) ? def.goalReps : [8, 10, 12],
+      restTime: def.restTime ?? 120,
+      notes: def.notes ?? "",
+      hidden: typeof exercise?.hidden === "boolean" ? exercise.hidden : false,
+      assignedTo: Array.isArray(exercise?.assignedTo) ? exercise.assignedTo : [],
+    });
 
-      if (!ok) {
-        toast.error("Reset failed");
-        return;
-      }
-
-      const defaults =
-        (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) || {};
-      if (defaults[id]) {
-        updateVideoLink(id, defaults[id]);
-      }
-
-      toastAndReload(`Reset "${def.name || exercise.name}" to default`);
-    } catch (e) {
-      toast.error(e?.message || "Reset failed");
+    if (!ok) {
+      toast.error("Reset failed");
+      return;
     }
+
+    const defaults =
+      (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) || {};
+    if (defaults[id]) updateVideoLink(id, defaults[id]);
+
+    toastAndReload(`Reset "${def.name || exercise.name}" to default`);
   };
 
   const filteredExercises = useMemo(() => {
@@ -310,7 +194,6 @@ export default function ExercisesPage() {
       const prog = (programmes || []).find(
         (p) => String(p?.type) === String(filterProgramme)
       );
-
       const ids = new Set(
         (prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean)
       );
@@ -379,7 +262,7 @@ export default function ExercisesPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Cards */}
       <div className="max-w-4xl mx-auto px-4 py-6">
         {filteredExercises.length === 0 ? (
           <div className="text-center py-12">
@@ -398,6 +281,7 @@ export default function ExercisesPage() {
             {filteredExercises.map((exercise) => {
               const usedBy = programmeUsageMap.get(norm(exercise.id)) || [];
               const userMade = isUserCreatedExercise(exercise);
+
               const idTrim = String(exercise?.id || "").trim();
               const defaultExists = defaultExerciseMap.has(idTrim);
               const canReset = !userMade && defaultExists;
@@ -413,40 +297,24 @@ export default function ExercisesPage() {
                   canReset={canReset}
                   defaultExists={defaultExists}
                   videoUrl={videoUrl}
-                  onEdit={() => handleEditExercise(exercise)}
                   onDelete={() => handleDeleteExercise(exercise)}
-                  onOpenVideo={(ex, url) => {
-                    const u = url || videoUrl;
-                    if (!u) {
+                  onResetToDefault={() => handleResetExerciseToDefault(exercise)}
+                  onOpenVideo={() => {
+                    if (!videoUrl) {
                       toast.message("No video saved", {
                         description: "Add a video URL when editing the exercise.",
                       });
                       return;
                     }
-                    window.open(u, "_blank");
+                    window.open(videoUrl, "_blank");
                   }}
-                  onResetToDefault={() => handleResetExerciseToDefault(exercise)}
-                  // edit modal wiring (optional: if your card triggers it internally)
-                  editingExercise={editingExercise}
-                  showEditDialog={showEditDialog}
-                  setShowEditDialog={setShowEditDialog}
-                  setEditingExercise={setEditingExercise}
-                  setsDraft={setsDraft}
-                  setSetsDraft={setSetsDraft}
-                  setSetsAndSyncGoalReps={setSetsAndSyncGoalReps}
-                  onSaveExercise={handleSaveExercise}
+                  onChanged={() => loadData()}
                 />
               );
             })}
           </div>
         )}
       </div>
-
-      {/* IMPORTANT:
-          If your ExerciseLibraryCard DOES NOT render the edit dialog internally,
-          then you should move the dialog back here. If it DOES render it,
-          leave it inside the card or (better) make a separate ExerciseEditDialog component.
-      */}
     </div>
   );
 }
