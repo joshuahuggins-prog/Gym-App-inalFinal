@@ -21,9 +21,6 @@ import {
 
 import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
 
-// ✅ Change this path to wherever your icon actually is
-import AppLogo from "../assets/app-logo.png";
-
 import {
   getExercises,
   saveExercise,
@@ -95,6 +92,9 @@ export default function ExercisesPage() {
     }, 650);
   };
 
+  // ✅ Use your PWA icon from /public (works on GH Pages via PUBLIC_URL)
+  const appLogoSrc = `${process.env.PUBLIC_URL}/icons/icon-192.png`;
+
   const defaultExerciseMap = useMemo(() => {
     try {
       const { WORKOUT_A, WORKOUT_B } = require("../data/workoutData");
@@ -164,9 +164,7 @@ export default function ExercisesPage() {
     const videoLinks = getVideoLinks() || {};
     const videoUrl = videoLinks[exercise.id] || "";
 
-    const sets = Number.isFinite(Number(exercise.sets))
-      ? Number(exercise.sets)
-      : 3;
+    const sets = Number.isFinite(Number(exercise.sets)) ? Number(exercise.sets) : 3;
     const safeSets = clampInt(sets, 1, MAX_SETS);
 
     let goalReps = Array.isArray(exercise.goalReps) ? [...exercise.goalReps] : [];
@@ -216,14 +214,10 @@ export default function ExercisesPage() {
     const { videoUrl, ...exerciseData } = editingExercise;
 
     const setsNum = Number(exerciseData.sets);
-    const sets = Number.isFinite(setsNum)
-      ? clampInt(setsNum, 1, MAX_SETS)
-      : 3;
+    const sets = Number.isFinite(setsNum) ? clampInt(setsNum, 1, MAX_SETS) : 3;
     exerciseData.sets = sets;
 
-    const rawGoalReps = Array.isArray(exerciseData.goalReps)
-      ? exerciseData.goalReps
-      : [];
+    const rawGoalReps = Array.isArray(exerciseData.goalReps) ? exerciseData.goalReps : [];
     let cleaned = rawGoalReps.map((x) => {
       if (x === "" || x == null) return 8;
       const n = Number(x);
@@ -232,10 +226,7 @@ export default function ExercisesPage() {
     });
 
     if (cleaned.length < sets) {
-      cleaned = [
-        ...cleaned,
-        ...Array.from({ length: sets - cleaned.length }, () => 8),
-      ];
+      cleaned = [...cleaned, ...Array.from({ length: sets - cleaned.length }, () => 8)];
     } else if (cleaned.length > sets) {
       cleaned = cleaned.slice(0, sets);
     }
@@ -243,11 +234,9 @@ export default function ExercisesPage() {
     exerciseData.goalReps = cleaned.length > 0 ? cleaned : [8];
 
     const restNum = Number(exerciseData.restTime);
-    exerciseData.restTime =
-      Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
+    exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
     const ok = saveExercise(exerciseData);
-
     if (!ok) {
       toast.error("Failed to save exercise");
       return;
@@ -287,10 +276,7 @@ export default function ExercisesPage() {
     toast.success("Exercise deleted");
   };
 
-  const isUserCreatedExercise = (exercise) => {
-    const id = String(exercise?.id || "");
-    return id.startsWith("exercise_");
-  };
+  const isUserCreatedExercise = (exercise) => String(exercise?.id || "").startsWith("exercise_");
 
   const openResetFor = (exerciseId) => {
     setResetOpenId(exerciseId);
@@ -343,12 +329,8 @@ export default function ExercisesPage() {
         return;
       }
 
-      const defaults =
-        (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) ||
-        {};
-      if (defaults[id]) {
-        updateVideoLink(id, defaults[id]);
-      }
+      const defaults = (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) || {};
+      if (defaults[id]) updateVideoLink(id, defaults[id]);
 
       closeResetUI();
       toastAndReload(`Reset "${def.name || exercise.name}" to default`);
@@ -363,12 +345,8 @@ export default function ExercisesPage() {
 
     let allowedIds = null;
     if (filterProgramme !== "all") {
-      const prog = (programmes || []).find(
-        (p) => String(p?.type) === String(filterProgramme)
-      );
-      const ids = new Set(
-        (prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean)
-      );
+      const prog = (programmes || []).find((p) => String(p?.type) === String(filterProgramme));
+      const ids = new Set((prog?.exercises || []).map((e) => norm(e?.id)).filter(Boolean));
       allowedIds = ids;
     }
 
@@ -377,8 +355,7 @@ export default function ExercisesPage() {
       const matchesSearch = !search || name.toLowerCase().includes(search);
 
       const id = norm(ex?.id);
-      const matchesProgramme =
-        filterProgramme === "all" ? true : allowedIds?.has(id);
+      const matchesProgramme = filterProgramme === "all" ? true : allowedIds?.has(id);
 
       return matchesSearch && matchesProgramme;
     });
@@ -386,36 +363,33 @@ export default function ExercisesPage() {
 
   return (
     <div className="bg-background text-foreground">
-      {/* ===== Sticky header stack ===== */}
       <div className="sticky top-0 z-30">
-        {/* Top teal bar: title + count + icon */}
+        {/* Top bar */}
         <div className="bg-primary text-primary-foreground border-b border-border">
           <div className="max-w-4xl mx-auto px-4 pt-[max(12px,env(safe-area-inset-top))] pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-wide opacity-80">
-                  Library
-                </div>
-                <h1 className="text-2xl font-extrabold leading-tight truncate">
-                  Exercises
-                </h1>
-                <div className="text-xs opacity-90">
-                  {exercises.length} total exercises
-                </div>
+                <div className="text-[11px] uppercase tracking-wide opacity-80">Library</div>
+                <h1 className="text-2xl font-extrabold leading-tight truncate">Exercises</h1>
+                <div className="text-xs opacity-90">{exercises.length} total exercises</div>
               </div>
 
               <div className="shrink-0 flex items-center gap-3">
                 <img
-                  src={AppLogo}
+                  src={appLogoSrc}
                   alt="App"
                   className="h-9 w-9 rounded-xl bg-primary-foreground/10 p-1 border border-primary-foreground/15"
+                  onError={(e) => {
+                    // If icon-192.png name differs, at least don't break layout
+                    e.currentTarget.style.display = "none";
+                  }}
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Glass bar: search + filter + New Exercise button */}
+        {/* Glass row */}
         <div className="border-b border-border bg-background/85 backdrop-blur">
           <div className="max-w-4xl mx-auto px-4 py-3 space-y-2">
             <div className="flex gap-3">
@@ -449,10 +423,7 @@ export default function ExercisesPage() {
                 Tip: To add/remove exercises from workouts, edit the programme (not here).
               </div>
 
-              <Button
-                onClick={handleCreateExercise}
-                className="shrink-0 gap-2"
-              >
+              <Button onClick={handleCreateExercise} className="shrink-0 gap-2">
                 <Plus className="w-4 h-4" />
                 New Exercise
               </Button>
@@ -461,15 +432,13 @@ export default function ExercisesPage() {
         </div>
       </div>
 
-      {/* ===== Body ===== */}
+      {/* Body */}
       <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
         {filteredExercises.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-2">🏋️</div>
             <p className="text-lg text-muted-foreground mb-2">
-              {searchTerm || filterProgramme !== "all"
-                ? "No exercises found"
-                : "No exercises yet"}
+              {searchTerm || filterProgramme !== "all" ? "No exercises found" : "No exercises yet"}
             </p>
             {!searchTerm && filterProgramme === "all" && (
               <Button onClick={handleCreateExercise}>Create your first exercise</Button>
@@ -516,7 +485,7 @@ export default function ExercisesPage() {
         )}
       </div>
 
-      {/* ===== Edit Exercise Dialog ===== */}
+      {/* Edit dialog (unchanged logic) */}
       <Dialog
         open={showEditDialog}
         onOpenChange={(open) => {
