@@ -1,14 +1,6 @@
 // src/pages/ExercisesPage.js
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Plus,
-  Search,
-  Save,
-  Video,
-  RotateCcw,
-} from "lucide-react";
-
-import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
+import { Plus, Search, Save, Video } from "lucide-react";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -27,6 +19,8 @@ import {
   SelectValue,
 } from "../components/ui/select";
 
+import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
+
 import {
   getExercises,
   saveExercise,
@@ -34,7 +28,7 @@ import {
   getProgrammes,
   getVideoLinks,
   updateVideoLink,
-  getDefaultVideoLinks, // must exist in storage.js
+  getDefaultVideoLinks, // must be exported from storage.js
 } from "../utils/storage";
 
 import { toast } from "sonner";
@@ -59,6 +53,7 @@ const makeChallenge = () => {
     b = randInt(1, 12);
   }
 
+  // keep subtraction non-negative (nicer UX)
   if (op === "-" && b > a) [a, b] = [b, a];
 
   let result = 0;
@@ -97,7 +92,10 @@ export default function ExercisesPage() {
 
   const toastAndReload = (message) => {
     toast.success(message);
-    setTimeout(() => window.location.reload(), 650);
+    setTimeout(() => {
+      // reload so everything re-hydrates from storage (matches your pattern)
+      window.location.href = window.location.href;
+    }, 650);
   };
 
   // Build defaults map from app code (workoutData)
@@ -131,7 +129,9 @@ export default function ExercisesPage() {
     }
   }, []);
 
-  // programmeUsageMap: exerciseId -> programmes that contain that id
+  /**
+   * programmeUsageMap: exerciseId -> array of programme objects that contain that id
+   */
   const programmeUsageMap = useMemo(() => {
     const map = new Map();
 
@@ -171,7 +171,9 @@ export default function ExercisesPage() {
     const videoLinks = getVideoLinks() || {};
     const videoUrl = videoLinks[exercise.id] || "";
 
-    const sets = Number.isFinite(Number(exercise.sets)) ? Number(exercise.sets) : 3;
+    const sets = Number.isFinite(Number(exercise.sets))
+      ? Number(exercise.sets)
+      : 3;
     const safeSets = clampInt(sets, 1, MAX_SETS);
 
     let goalReps = Array.isArray(exercise.goalReps) ? [...exercise.goalReps] : [];
@@ -210,7 +212,7 @@ export default function ExercisesPage() {
       nextGoalReps = nextGoalReps.slice(0, sets);
     }
 
-    setEditingExercise((prev) => ({ ...prev, sets, goalReps: nextGoalReps }));
+    setEditingExercise({ ...editingExercise, sets, goalReps: nextGoalReps });
   };
 
   const handleSaveExercise = () => {
@@ -223,11 +225,15 @@ export default function ExercisesPage() {
 
     // Clean sets (1..MAX_SETS)
     const setsNum = Number(exerciseData.sets);
-    const sets = Number.isFinite(setsNum) ? clampInt(setsNum, 1, MAX_SETS) : 3;
+    const sets = Number.isFinite(setsNum)
+      ? clampInt(setsNum, 1, MAX_SETS)
+      : 3;
     exerciseData.sets = sets;
 
     // Clean goalReps to match sets
-    const rawGoalReps = Array.isArray(exerciseData.goalReps) ? exerciseData.goalReps : [];
+    const rawGoalReps = Array.isArray(exerciseData.goalReps)
+      ? exerciseData.goalReps
+      : [];
     let cleaned = rawGoalReps.map((x) => {
       if (x === "" || x == null) return 8;
       const n = Number(x);
@@ -236,7 +242,10 @@ export default function ExercisesPage() {
     });
 
     if (cleaned.length < sets) {
-      cleaned = [...cleaned, ...Array.from({ length: sets - cleaned.length }, () => 8)];
+      cleaned = [
+        ...cleaned,
+        ...Array.from({ length: sets - cleaned.length }, () => 8),
+      ];
     } else if (cleaned.length > sets) {
       cleaned = cleaned.slice(0, sets);
     }
@@ -245,10 +254,12 @@ export default function ExercisesPage() {
 
     // Rest time
     const restNum = Number(exerciseData.restTime);
-    exerciseData.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
+    exerciseData.restTime =
+      Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
     // Save exercise details ONLY
     const ok = saveExercise(exerciseData);
+
     if (!ok) {
       toast.error("Failed to save exercise");
       return;
@@ -276,22 +287,25 @@ export default function ExercisesPage() {
           )}.\n\nDeleting may break those programmes unless you remove it from them too.`
         : `Delete "${name}"?`;
 
-    if (window.confirm(msg)) {
-      const ok = deleteExercise(id);
-      if (!ok) {
-        toast.error("Failed to delete exercise");
-        return;
-      }
-      loadData();
-      toast.success("Exercise deleted");
+    if (!window.confirm(msg)) return;
+
+    const ok = deleteExercise(id);
+    if (!ok) {
+      toast.error("Failed to delete exercise");
+      return;
     }
+
+    loadData();
+    toast.success("Exercise deleted");
   };
 
+  // Identify user created exercises (reset disabled)
   const isUserCreatedExercise = (exercise) => {
     const id = String(exercise?.id || "");
     return id.startsWith("exercise_");
   };
 
+  // open/close reset UI per card
   const openResetFor = (exerciseId) => {
     setResetOpenId(exerciseId);
     setResetAnswer("");
@@ -304,6 +318,7 @@ export default function ExercisesPage() {
     setResetChallenge(makeChallenge());
   };
 
+  // reset one exercise back to app default (only if it's in workoutData defaults)
   const runExerciseReset = (exercise) => {
     const id = String(exercise?.id || "").trim();
     if (!id) return;
@@ -344,7 +359,8 @@ export default function ExercisesPage() {
       }
 
       const defaults =
-        (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) || {};
+        (typeof getDefaultVideoLinks === "function" ? getDefaultVideoLinks() : {}) ||
+        {};
       if (defaults[id]) {
         updateVideoLink(id, defaults[id]);
       }
@@ -382,65 +398,81 @@ export default function ExercisesPage() {
   }, [exercises, programmes, searchTerm, filterProgramme]);
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      {/* ===== NEW HEADER (matches other pages) ===== */}
-      <div className="sticky top-0 z-30 border-b border-border bg-gradient-to-b from-card to-background">
-        <div className="max-w-4xl mx-auto px-4 pt-[max(16px,env(safe-area-inset-top))] pb-4">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="min-w-0">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                Library
+    <div className="bg-background text-foreground">
+      {/* ===== Sticky Header (SOLID PRIMARY like other pages) ===== */}
+      <div className="sticky top-0 z-30">
+        {/* Top app-bar */}
+        <div className="bg-primary text-primary-foreground border-b border-border">
+          <div className="max-w-4xl mx-auto px-4 pt-[max(12px,env(safe-area-inset-top))] pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] uppercase tracking-wide opacity-80">
+                  Library
+                </div>
+                <h1 className="text-2xl font-extrabold leading-tight truncate">
+                  Exercises
+                </h1>
+                <div className="text-xs opacity-90">
+                  {exercises.length} total exercises
+                </div>
               </div>
-              <h1 className="text-3xl font-extrabold text-foreground leading-tight truncate">
-                Exercise Library
-              </h1>
-              <div className="text-sm text-muted-foreground">
-                {exercises.length} total exercises • Tip: edit the programme to add/remove exercises
-              </div>
-            </div>
 
-            <Button onClick={handleCreateExercise} className="shrink-0">
-              <Plus className="w-4 h-4 mr-2" />
-              New Exercise
-            </Button>
+              <Button
+                onClick={handleCreateExercise}
+                className="shrink-0 bg-primary-foreground/15 hover:bg-primary-foreground/25 text-primary-foreground border border-primary-foreground/20"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Exercise
+              </Button>
+            </div>
           </div>
+        </div>
 
-          {/* Filters */}
-          <div className="flex gap-3">
-            <div className="flex-1 relative min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search exercises..."
-                className="pl-10"
-              />
+        {/* Filters row */}
+        <div className="border-b border-border bg-background/95 backdrop-blur">
+          <div className="max-w-4xl mx-auto px-4 py-3">
+            <div className="flex gap-3">
+              <div className="flex-1 relative min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search exercises..."
+                  className="pl-10"
+                />
+              </div>
+
+              <Select value={filterProgramme} onValueChange={setFilterProgramme}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Programmes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Programmes</SelectItem>
+                  {(programmes || []).map((prog) => (
+                    <SelectItem key={prog.type} value={prog.type}>
+                      {prog.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select value={filterProgramme} onValueChange={setFilterProgramme}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Programmes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Programmes</SelectItem>
-                {(programmes || []).map((prog) => (
-                  <SelectItem key={prog.type} value={prog.type}>
-                    {prog.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Tip: To add/remove exercises from workouts, edit the programme (not here).
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ===== LIST ===== */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      {/* ===== Body ===== */}
+      <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
         {filteredExercises.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-2">🏋️</div>
             <p className="text-lg text-muted-foreground mb-2">
-              {searchTerm || filterProgramme !== "all" ? "No exercises found" : "No exercises yet"}
+              {searchTerm || filterProgramme !== "all"
+                ? "No exercises found"
+                : "No exercises yet"}
             </p>
             {!searchTerm && filterProgramme === "all" && (
               <Button onClick={handleCreateExercise}>Create your first exercise</Button>
@@ -461,11 +493,12 @@ export default function ExercisesPage() {
                   key={exercise.id}
                   exercise={exercise}
                   usedBy={usedBy}
+                  userMade={userMade}
                   canReset={canReset}
                   resetOpen={isOpen}
                   resetChallenge={resetChallenge}
                   resetAnswer={resetAnswer}
-                  onResetAnswerChange={setResetAnswer}
+                  onChangeResetAnswer={setResetAnswer}
                   onToggleReset={() => {
                     if (!canReset) return;
                     if (isOpen) closeResetUI();
@@ -475,7 +508,7 @@ export default function ExercisesPage() {
                     setResetChallenge(makeChallenge());
                     setResetAnswer("");
                   }}
-                  onRunReset={() => runExerciseReset(exercise)}
+                  onConfirmReset={() => runExerciseReset(exercise)}
                   onCancelReset={closeResetUI}
                   onEdit={() => handleEditExercise(exercise)}
                   onDelete={() => handleDeleteExercise(exercise.id, exercise.name)}
@@ -486,7 +519,7 @@ export default function ExercisesPage() {
         )}
       </div>
 
-      {/* ===== EDIT DIALOG ===== */}
+      {/* ===== Edit Exercise Dialog ===== */}
       <Dialog
         open={showEditDialog}
         onOpenChange={(open) => {
@@ -692,9 +725,11 @@ export default function ExercisesPage() {
                 />
               </div>
 
+              {/* Usage hint */}
               <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">Programme membership:</span>{" "}
-                This is controlled in the Programme editor. This page edits the exercise details only.
+                This is controlled in the Programme editor. This page edits the exercise
+                details only.
               </div>
             </div>
           ) : null}
