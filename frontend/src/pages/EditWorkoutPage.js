@@ -1,5 +1,5 @@
-// src/pages/EditWorkoutPage.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import AppHeader from "../components/AppHeader";
 import { X, Save, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -55,7 +55,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   const [isDirty, setIsDirty] = useState(false);
   const didHydrateRef = useRef(false);
 
-  // Add exercise UI (same idea as HomePage)
+  // Add exercise UI
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState("");
 
@@ -100,11 +100,11 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     setIsDirty(true);
   }, [rows, originalWorkout]);
 
-  const headerTitle = useMemo(() => {
-    if (!originalWorkout) return "Edit Workout";
+  const subtitle = useMemo(() => {
+    if (!originalWorkout) return "Edit saved workout";
     const type = String(originalWorkout.type || "").toUpperCase();
     const date = formatDateLong(originalWorkout.date);
-    return `Edit Workout ${type}${date ? ` — ${date}` : ""}`;
+    return `${type}${date ? ` — ${date}` : ""}`;
   }, [originalWorkout]);
 
   const handleWeightChange = (exercise, setsData) => {
@@ -121,7 +121,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     );
   };
 
-  // ✅ NEW: Add an extra set to an exercise row while editing history
   const handleAddSetToExercise = (exercise) => {
     if (!exercise?.id) return;
 
@@ -130,7 +129,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
         if (ex.id !== exercise.id) return ex;
 
         const currentSetsData = Array.isArray(ex.setsData) ? ex.setsData : [];
-
         const baseCount =
           currentSetsData.length > 0
             ? currentSetsData.length
@@ -163,7 +161,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     });
   };
 
-  // ✅ NEW: Remove an exercise from this saved workout entry (history)
   const handleRemoveExerciseFromWorkout = (exercise) => {
     if (!exercise) return;
 
@@ -173,10 +170,9 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     );
     if (!sure) return;
 
-    setRows((prev) => {
-      const next = (prev || []).filter((r) => r !== exercise && r.id !== exercise.id);
-      return next;
-    });
+    setRows((prev) =>
+      (prev || []).filter((r) => r !== exercise && r.id !== exercise.id)
+    );
 
     toast.success("Exercise removed", {
       description: `"${label}" removed from this workout.`,
@@ -188,9 +184,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     if (!originalWorkout) return;
 
     if (!rows || rows.length === 0) {
-      toast.error("Workout needs at least 1 exercise", {
-        description: "You removed all exercises. Add one before saving.",
-      });
+      toast.error("Workout needs at least 1 exercise");
       return;
     }
 
@@ -205,9 +199,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       return;
     }
 
-    toast.success("Workout updated ✅", {
-      description: "Your history has been updated.",
-    });
+    toast.success("Workout updated ✅");
     setIsDirty(false);
     onClose?.();
   };
@@ -218,64 +210,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       if (!sure) return;
     }
     onClose?.();
-  };
-
-  // Library list (for add dialog)
-  const allLibraryExercises = useMemo(() => {
-    const list = getExercises() || [];
-    return list
-      .slice()
-      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-  }, [showAddDialog]);
-
-  const addCandidates = useMemo(() => {
-    const q = norm(addSearch);
-
-    // prevent adding duplicates already in this workout
-    const existing = new Set((rows || []).map((r) => norm(r?.id || r?.name)));
-
-    return allLibraryExercises
-      .filter((ex) => {
-        if (!ex) return false;
-
-        const idKey = norm(ex.id);
-        const nameKey = norm(ex.name || ex.id);
-
-        if (existing.has(idKey) || existing.has(nameKey)) return false;
-        if (!q) return true;
-
-        return norm(ex.name).includes(q) || norm(ex.id).includes(q);
-      })
-      .slice(0, 50);
-  }, [allLibraryExercises, addSearch, rows]);
-
-  const handleAddExerciseToWorkout = (ex) => {
-    if (!ex?.id) return;
-
-    const setsCount = clampInt(Number(ex.sets ?? 3), 1, 12);
-
-    const newRow = {
-      id: ex.id,
-      name: ex.name || ex.id,
-      repScheme: ex.repScheme || "RPT",
-      goalReps: Array.isArray(ex.goalReps) ? ex.goalReps : undefined,
-      sets: setsCount,
-      restTime: ex.restTime ?? 120,
-      notes: ex.notes ?? "",
-
-      userNotes: "",
-      setsData: buildExerciseDefaultSetsData(setsCount),
-      lastWorkoutData: null,
-    };
-
-    setRows((prev) => [...prev, newRow]);
-    setShowAddDialog(false);
-    setAddSearch("");
-
-    toast.success("Exercise added", {
-      description: `${newRow.name} added to this workout.`,
-      duration: 1800,
-    });
   };
 
   if (!originalWorkout) {
@@ -294,76 +228,45 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-24">
-      {/* Header */}
-      <div className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
-        <div className="max-w-2xl mx-auto px-4 py-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm text-muted-foreground">Editing</div>
-              <h1 className="text-lg font-bold text-gold truncate">
-                {headerTitle}
-              </h1>
-              <div className="text-xs text-muted-foreground mt-1">
-                Edit sets / reps / weight, then save.
-              </div>
-            </div>
+    <AppHeader
+      title="Edit Workout"
+      subtitle={subtitle}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
+      actions={
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddDialog(true)}
+            title="Add exercise"
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
 
-            <div className="flex gap-2 shrink-0">
-              {/* Add exercise */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddDialog(true)}
-                className="border-border hover:bg-muted/50"
-                title="Add exercise"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={!isDirty}
+          >
+            <Save className="w-4 h-4 mr-1" />
+            Save
+          </Button>
 
-              {/* Close */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancel}
-                className="border-border hover:bg-muted/50"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              onClick={handleSave}
-              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={!isDirty}
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save & Close
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              className="flex-1 border-border hover:bg-muted/50"
-            >
-              Cancel
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCancel}
+          >
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-      </div>
-
-      {/* Body */}
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      }
+    >
+      <div className="space-y-4">
         {rows.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card/40 p-4">
             <div className="text-sm text-muted-foreground">
               No exercises left in this workout entry.
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Use the + button to add an exercise, then save.
             </div>
           </div>
         ) : (
@@ -372,12 +275,11 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
               key={exercise.id || `${exercise.name}-${idx}`}
               className="rounded-2xl border border-border bg-card/40 relative"
             >
-              {/* ✅ Remove button (top-right of card) */}
               <button
                 type="button"
                 onClick={() => handleRemoveExerciseFromWorkout(exercise)}
-                className="absolute top-3 right-3 z-10 inline-flex items-center justify-center rounded-lg border border-border bg-background/80 backdrop-blur px-2 py-2 hover:bg-muted/60 transition"
-                title="Remove exercise from this workout"
+                className="absolute top-3 right-3 z-10 rounded-lg border border-border bg-background/80 px-2 py-2 hover:bg-muted/60"
+                title="Remove exercise"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -396,7 +298,6 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
         )}
       </div>
 
-      {/* Add Exercise Dialog */}
       <Dialog
         open={showAddDialog}
         onOpenChange={(open) => {
@@ -415,39 +316,10 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
               onChange={(e) => setAddSearch(e.target.value)}
               placeholder="Search exercise library..."
             />
-
-            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-              {addCandidates.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6 text-center">
-                  No matches (or already in this workout).
-                </div>
-              ) : (
-                addCandidates.map((ex) => (
-                  <button
-                    key={ex.id}
-                    type="button"
-                    onClick={() => handleAddExerciseToWorkout(ex)}
-                    className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
-                  >
-                    <div className="font-semibold text-foreground">
-                      {ex.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-
-            <div className="text-xs text-muted-foreground">
-              This only edits this saved workout entry (history). It won’t change
-              your programme template.
-            </div>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </AppHeader>
   );
 };
 
