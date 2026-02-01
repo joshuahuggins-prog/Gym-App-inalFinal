@@ -1,6 +1,6 @@
 // src/pages/HomePage.js
-import AppHeader from "../components/AppHeader";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import AppHeader from "../components/AppHeader";
 import { Calendar, Flame, RotateCcw, ChevronDown, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -270,7 +270,7 @@ const HomePage = () => {
     return () => {
       if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
     };
-  }, [currentWorkout, workoutData]);
+  }, [currentWorkout, workoutData,]);
 
   const handleSetComplete = (exercise, set, levelUp) => {
     const progressionSettings = getProgressionSettings();
@@ -556,141 +556,136 @@ const HomePage = () => {
 
   const nextInSequence = peekNextWorkoutTypeFromPattern();
 
+  const subtitle = `${new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  })}`;
+
   return (
-    <div className="min-h-screen bg-background pb-28">
-      {/* Header */}
-      <div className="bg-gradient-to-b from-card to-background border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-primary">
-                Log Workout
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                {new Date().toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
-            </div>
+    <AppHeader
+      title="Log Workout"
+      subtitle={subtitle}
+      rightIconSrc="/icons/icon-overlay-white-32.png"
+      actions={
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddDialog(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add
+            </Button>
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddDialog(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => loadRef.current?.()}
-              >
-                <RotateCcw className="w-4 h-4" />
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadRef.current?.()}
+              title="Reload today"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-muted/50 rounded-lg p-4 border border-border">
-              <div className="flex items-center gap-2 mb-1">
-                <Flame className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">
-                  Weekly streak
-                </span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">
-                {weeklyStreak} weeks
-              </div>
-            </div>
-
-            <div className="bg-muted/50 rounded-lg p-4 border border-border">
-              <div className="flex items-center gap-2 mb-1">
-                <Calendar className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">
-                  Last Trained
-                </span>
-              </div>
-              <div className="text-2xl font-bold text-foreground">
-                {daysSince === null
-                  ? "Never"
-                  : daysSince === 0
-                  ? "Today"
-                  : `${daysSince}d ago`}
-              </div>
-            </div>
+          {/* Small “next in sequence” hint on the right */}
+          <div className="text-xs text-white/90">
+            Next:{" "}
+            <span className="font-semibold text-white">
+              {nextInSequence ? String(nextInSequence) : "—"}
+            </span>
           </div>
+        </div>
+      }
+    >
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-muted/50 rounded-lg p-4 border border-border">
+          <div className="flex items-center gap-2 mb-1">
+            <Flame className="w-4 h-4 text-primary" />
+            <span className="text-xs text-muted-foreground">
+              Weekly streak
+            </span>
+          </div>
+          <div className="text-2xl font-bold text-foreground">
+            {weeklyStreak} weeks
+          </div>
+        </div>
 
-          {/* Workout Info */}
-          <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0">
-                <h2 className="text-xl font-bold text-foreground mb-1 truncate">
-                  {currentWorkout.name}
-                </h2>
-                <Badge className="bg-primary/20 text-primary border-primary/50">
-                  {currentWorkout.focus}
-                </Badge>
+        <div className="bg-muted/50 rounded-lg p-4 border border-border">
+          <div className="flex items-center gap-2 mb-1">
+            <Calendar className="w-4 h-4 text-primary" />
+            <span className="text-xs text-muted-foreground">
+              Last Trained
+            </span>
+          </div>
+          <div className="text-2xl font-bold text-foreground">
+            {daysSince === null
+              ? "Never"
+              : daysSince === 0
+              ? "Today"
+              : `${daysSince}d ago`}
+          </div>
+        </div>
+      </div>
 
-                {/* Manual switcher */}
-                <div className="mt-3 space-y-2">
-                  <div className="text-xs text-muted-foreground">
-                    Next in sequence:{" "}
-                    <span className="font-semibold text-foreground">
-                      {nextInSequence ? String(nextInSequence) : "—"}
-                    </span>
-                  </div>
+      {/* Workout Info */}
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mt-4">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 w-full">
+            <h2 className="text-xl font-bold text-foreground mb-1 truncate">
+              {currentWorkout.name}
+            </h2>
+            <Badge className="bg-primary/20 text-primary border-primary/50">
+              {currentWorkout.focus}
+            </Badge>
 
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <div className="relative">
-                        <select
-                          value={manualWorkoutType || ""}
-                          onChange={(e) => setManualWorkoutType(e.target.value)}
-                          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
-                        >
-                          {getUsableProgrammes().map((p) => (
-                            <option key={p.type} value={p.type}>
-                              {p.name} ({p.type})
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                      disabled={
-                        !manualWorkoutType ||
-                        upper(manualWorkoutType) === upper(currentWorkout.type)
-                      }
-                      className="shrink-0"
+            {/* Manual switcher */}
+            <div className="mt-3 space-y-2">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <div className="relative">
+                    <select
+                      value={manualWorkoutType || ""}
+                      onChange={(e) => setManualWorkoutType(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
                     >
-                      Switch
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleReturnToSequence}
-                      disabled={
-                        !nextInSequence ||
-                        upper(nextInSequence) === upper(currentWorkout.type)
-                      }
-                      className="shrink-0"
-                    >
-                      Next
-                    </Button>
+                      {getUsableProgrammes().map((p) => (
+                        <option key={p.type} value={p.type}>
+                          {p.name} ({p.type})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
+                  disabled={
+                    !manualWorkoutType ||
+                    upper(manualWorkoutType) === upper(currentWorkout.type)
+                  }
+                  className="shrink-0"
+                >
+                  Switch
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReturnToSequence}
+                  disabled={
+                    !nextInSequence ||
+                    upper(nextInSequence) === upper(currentWorkout.type)
+                  }
+                  className="shrink-0"
+                >
+                  Next
+                </Button>
               </div>
             </div>
           </div>
@@ -698,7 +693,7 @@ const HomePage = () => {
       </div>
 
       {/* Exercises */}
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className="mt-4 space-y-4">
         {(workoutData || []).map((exercise, index) => (
           <ExerciseCard
             key={exercise.id}
@@ -798,7 +793,7 @@ const HomePage = () => {
           onClose={() => setPrCelebration(null)}
         />
       )}
-    </div>
+    </AppHeader>
   );
 };
 
