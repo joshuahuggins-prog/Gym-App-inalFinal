@@ -76,7 +76,17 @@ export default function AppHeader({
           </div>
         </div>
 
-        {actions ? <div className="app-header-actions">{actions}</div> : null}
+        {actions ? (
+          <div
+            className="app-header-actions"
+            // ✅ Force actions bar to match the page background token (not primary)
+            style={{
+              background: "hsl(var(--background))",
+            }}
+          >
+            {actions}
+          </div>
+        ) : null}
       </div>
 
       <div className="page-content-with-header">{children}</div>
