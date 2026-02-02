@@ -19,7 +19,9 @@ export default function RestTimer({ duration, onComplete, onClose }) {
 
   const [timeLeft, setTimeLeft] = useState(total);
   const [paused, setPaused] = useState(false);
-  const [minimized, setMinimized] = useState(false);
+
+  // ✅ Start minimized by default
+  const [minimized, setMinimized] = useState(true);
 
   const endAtRef = useRef(null);
   const tickRef = useRef(null);
@@ -29,9 +31,11 @@ export default function RestTimer({ duration, onComplete, onClose }) {
     const start = Math.max(0, Math.floor(Number(duration) || 0));
     setTimeLeft(start);
     setPaused(false);
-    setMinimized(false);
-    completedRef.current = false;
 
+    // ✅ Don't auto-expand when a new timer starts
+    // setMinimized(false);
+
+    completedRef.current = false;
     endAtRef.current = Date.now() + start * 1000;
 
     return () => {
@@ -270,7 +274,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
             ) : null}
           </AnimatePresence>
 
-          {/* Minimized chip (uses ACCENT now) */}
+          {/* Minimized chip (uses ACCENT) */}
           <AnimatePresence>
             {minimized ? (
               <motion.button
@@ -282,7 +286,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                   "rounded-full border shadow-xl",
                   // ✅ Accent instead of Primary
                   "bg-accent text-accent-foreground border-accent/30",
-                  // ✅ ~20% bigger than before
+                  // ✅ ~20% bigger
                   "px-4 py-3",
                 ].join(" ")}
                 initial={{ opacity: 0, scale: 0.95, x: -8, y: -8 }}
@@ -299,7 +303,6 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                   </div>
                 </div>
 
-                {/* Bar: based on accent-foreground */}
                 <div className="h-2.5 w-28 rounded-full bg-accent-foreground/25 overflow-hidden">
                   <motion.div
                     className="h-full bg-accent-foreground"
@@ -327,4 +330,4 @@ export default function RestTimer({ duration, onComplete, onClose }) {
       ) : null}
     </AnimatePresence>
   );
-                                }
+                            }
