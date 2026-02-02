@@ -109,7 +109,7 @@ const computeExerciseProgressAllTime = (workouts) => {
   const list = Array.isArray(workouts) ? [...workouts] : [];
   list.sort((a, b) => new Date(a.date) - new Date(b.date)); // oldest -> newest
 
-  const map = new Map(); // key -> { name, first, last, firstType, lastType }
+  const map = new Map();
   for (const w of list) {
     const type = w?.type ? upper(w.type) : "";
     const exs = Array.isArray(w.exercises) ? w.exercises : [];
@@ -316,11 +316,11 @@ export default function WelcomePage({ onStartToday }) {
       rightIconAlt="Gym App"
     >
       <div className="p-4 space-y-4">
-        {/* 2x2 tiles */}
+        {/* 2x2 tiles (centered) */}
         <div className="grid grid-cols-2 gap-4">
           {/* Weekly streak */}
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="rounded-xl border bg-card p-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Flame className="w-5 h-5 text-orange-500" />
               Weekly streak
             </div>
@@ -333,8 +333,8 @@ export default function WelcomePage({ onStartToday }) {
           </div>
 
           {/* Monthly streak */}
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="rounded-xl border bg-card p-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Flame className="w-5 h-5 text-orange-500" />
               Monthly streak
             </div>
@@ -347,8 +347,8 @@ export default function WelcomePage({ onStartToday }) {
           </div>
 
           {/* Last trained */}
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="rounded-xl border bg-card p-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <span className="text-base" aria-hidden="true">
                 📅
               </span>
@@ -360,15 +360,12 @@ export default function WelcomePage({ onStartToday }) {
           </div>
 
           {/* Workouts this week */}
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-muted-foreground flex items-center gap-2">
-                <span className="text-base" aria-hidden="true">
-                  {mood}
-                </span>
-                Workouts this week
-              </div>
-              <Badge variant="secondary">{workoutsThisWeek}/7</Badge>
+          <div className="rounded-xl border bg-card p-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <span className="text-base" aria-hidden="true">
+                {mood}
+              </span>
+              Workouts this week
             </div>
             <div className="mt-2 text-2xl font-bold text-primary leading-tight">
               {workoutsThisWeek}
@@ -396,10 +393,7 @@ export default function WelcomePage({ onStartToday }) {
           {Array.isArray(nextWorkout?.exercises) && nextWorkout.exercises.length ? (
             <div className="mt-3 space-y-2">
               {nextWorkout.exercises.slice(0, 6).map((ex) => (
-                <div
-                  key={ex.id || ex.name}
-                  className="flex items-center gap-2 text-sm"
-                >
+                <div key={ex.id || ex.name} className="flex items-center gap-2 text-sm">
                   <Dumbbell className="w-4 h-4 text-muted-foreground" />
                   {ex.name}
                 </div>
