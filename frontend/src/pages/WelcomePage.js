@@ -1,7 +1,7 @@
 // src/pages/WelcomePage.js
 import React, { useMemo } from "react";
 import AppHeader from "../components/AppHeader";
-import { Calendar, Flame, Dumbbell, TrendingUp, AlertTriangle } from "lucide-react";
+import { Flame, Dumbbell, TrendingUp, AlertTriangle } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 
 import {
@@ -47,11 +47,6 @@ const formatShortDate = (dateStrOrDate) => {
   });
 };
 
-const getWorkoutTypeFromWorkout = (w) => {
-  // your storage seems to use w.type like "A"/"B"
-  return w?.type ? upper(w.type) : "";
-};
-
 // Same as HomePage style: A/B flip based on most recent saved workout
 const getNextWorkoutTypeFromHistoryAB = () => {
   const workouts = getWorkouts();
@@ -64,7 +59,6 @@ const getNextWorkoutTypeFromHistoryAB = () => {
 
 const getWeightUnit = () => {
   const s = (typeof getSettings === "function" && getSettings()) || {};
-  // your app usually uses kg/lb
   return s.weightUnit || "kg";
 };
 
@@ -72,7 +66,6 @@ const getWeightUnit = () => {
 const getSetWeight = (setObj) => {
   if (!setObj) return null;
 
-  // common keys you might have used
   const candidates = [
     setObj.weight,
     setObj.w,
@@ -90,10 +83,8 @@ const getSetWeight = (setObj) => {
 };
 
 const getBestWeightFromExerciseEntry = (exEntry) => {
-  // exEntry might have sets[] or be a flat object
   if (!exEntry) return null;
 
-  // Sometimes you store top-level weight
   const top = getSetWeight(exEntry);
   if (top !== null) return top;
 
@@ -107,30 +98,20 @@ const getBestWeightFromExerciseEntry = (exEntry) => {
   return best;
 };
 
-const getExerciseKey = (exEntry) => {
-  // Prefer stable IDs if present
-  return (
-    exEntry?.exerciseId ||
-    exEntry?.id ||
-    exEntry?.exercise ||
-    exEntry?.name ||
-    ""
-  );
-};
+const getExerciseKey = (exEntry) =>
+  exEntry?.exerciseId || exEntry?.id || exEntry?.exercise || exEntry?.name || "";
 
-const getExerciseName = (exEntry) => {
-  return exEntry?.name || exEntry?.exerciseName || exEntry?.exercise || "Exercise";
-};
+const getExerciseName = (exEntry) =>
+  exEntry?.name || exEntry?.exerciseName || exEntry?.exercise || "Exercise";
 
 // Compute per-exercise progress: latest best weight - earliest best weight
 const computeExerciseProgressAllTime = (workouts) => {
-  // workouts assumed newest-first in your app, but handle either way
   const list = Array.isArray(workouts) ? [...workouts] : [];
   list.sort((a, b) => new Date(a.date) - new Date(b.date)); // oldest -> newest
 
   const map = new Map(); // key -> { name, first, last, firstType, lastType }
   for (const w of list) {
-    const type = getWorkoutTypeFromWorkout(w);
+    const type = w?.type ? upper(w.type) : "";
     const exs = Array.isArray(w.exercises) ? w.exercises : [];
 
     for (const ex of exs) {
@@ -153,10 +134,8 @@ const computeExerciseProgressAllTime = (workouts) => {
           lastType: type,
         });
       } else {
-        // update last every time as we move forward in time
         existing.last = best;
         existing.lastType = type;
-        // keep existing.first as earliest seen
       }
     }
   }
@@ -173,9 +152,20 @@ const computeExerciseProgressAllTime = (workouts) => {
     });
   }
 
-  // Sort by delta descending
   rows.sort((a, b) => b.delta - a.delta);
   return rows;
+};
+
+const moodForCount = (n) => {
+  const c = Math.max(0, Math.min(7, Number(n) || 0));
+  if (c === 0) return "😔";
+  if (c === 1) return "🙂";
+  if (c === 2) return "😄";
+  if (c === 3) return "😁";
+  if (c === 4) return "🤩";
+  if (c === 5) return "🥳";
+  if (c === 6) return "🤪";
+  return "👽";
 };
 
 // ---------------------------
@@ -185,6 +175,8 @@ export default function WelcomePage({ onStartToday }) {
   const workouts = useMemo(() => getWorkouts() || [], []);
   const programmes = useMemo(() => getProgrammes() || [], []);
   const weightUnit = useMemo(() => getWeightUnit(), []);
+
+  const appLogoSrc = `${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`;
 
   // Random tip shown under title bar (actions area)
   const tip = useMemo(() => {
@@ -200,7 +192,7 @@ export default function WelcomePage({ onStartToday }) {
     for (const w of workouts) {
       const d = new Date(w.date);
       if (Number.isNaN(d.getTime())) continue;
-      const wk = startOfWeekMonday(d).toISOString().slice(0, 10); // YYYY-MM-DD
+      const wk = startOfWeekMonday(d).toISOString().slice(0, 10);
       weekKeys.add(wk);
     }
 
@@ -212,9 +204,7 @@ export default function WelcomePage({ onStartToday }) {
       if (weekKeys.has(key)) {
         streak += 1;
         cursor.setDate(cursor.getDate() - 7);
-      } else {
-        break;
-      }
+      } else break;
     }
 
     return streak;
@@ -247,13 +237,23 @@ export default function WelcomePage({ onStartToday }) {
       if (months.includes(key)) {
         streak += 1;
         cursor.setMonth(cursor.getMonth() - 1);
-      } else {
-        break;
-      }
+      } else break;
     }
 
     return streak;
   }, [workouts]);
+
+  // Workouts this week (Mon -> Sun)
+  const workoutsThisWeek = useMemo(() => {
+    const start = startOfWeekMonday(new Date());
+    return workouts.filter((w) => {
+      const d = new Date(w.date);
+      if (Number.isNaN(d.getTime())) return false;
+      return d >= start;
+    }).length;
+  }, [workouts]);
+
+  const mood = useMemo(() => moodForCount(workoutsThisWeek), [workoutsThisWeek]);
 
   // Last trained label
   const lastTrained = useMemo(() => {
@@ -290,14 +290,12 @@ export default function WelcomePage({ onStartToday }) {
   const progressRows = useMemo(() => computeExerciseProgressAllTime(workouts), [workouts]);
 
   const mostProgress = useMemo(() => {
-    // top 2 positive deltas
     return progressRows.filter((r) => r.delta > 0).slice(0, 2);
   }, [progressRows]);
 
   const needsAttention = useMemo(() => {
-    // top 2 negative deltas (most negative first)
     const neg = progressRows.filter((r) => r.delta < 0);
-    neg.sort((a, b) => a.delta - b.delta); // more negative first
+    neg.sort((a, b) => a.delta - b.delta);
     return neg.slice(0, 2);
   }, [progressRows]);
 
@@ -310,7 +308,13 @@ export default function WelcomePage({ onStartToday }) {
   ) : null;
 
   return (
-    <AppHeader title="Overview" subtitle="Your training at a glance" actions={actions}>
+    <AppHeader
+      title="Overview"
+      subtitle="Your training at a glance"
+      actions={actions}
+      rightIconSrc={appLogoSrc}
+      rightIconAlt="Gym App"
+    >
       <div className="p-4 space-y-4">
         {/* 2x2 tiles */}
         <div className="grid grid-cols-2 gap-4">
@@ -320,8 +324,11 @@ export default function WelcomePage({ onStartToday }) {
               <Flame className="w-5 h-5 text-orange-500" />
               Weekly streak
             </div>
-            <div className="mt-2 text-3xl font-bold text-primary">
-              {weeklyStreak} wk{weeklyStreak === 1 ? "" : "s"}
+            <div className="mt-2 text-2xl font-bold text-primary leading-tight">
+              {weeklyStreak}{" "}
+              <span className="text-sm font-semibold text-muted-foreground">
+                Weeks
+              </span>
             </div>
           </div>
 
@@ -331,37 +338,40 @@ export default function WelcomePage({ onStartToday }) {
               <Flame className="w-5 h-5 text-orange-500" />
               Monthly streak
             </div>
-            <div className="mt-2 text-3xl font-bold text-primary">
-              {monthlyStreak} mo{monthlyStreak === 1 ? "" : "s"}
+            <div className="mt-2 text-2xl font-bold text-primary leading-tight">
+              {monthlyStreak}{" "}
+              <span className="text-sm font-semibold text-muted-foreground">
+                Months
+              </span>
             </div>
           </div>
 
           {/* Last trained */}
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar className="w-5 h-5 text-primary" />
+              <span className="text-base" aria-hidden="true">
+                📅
+              </span>
               Last trained
             </div>
-            <div className="mt-2 text-3xl font-bold text-primary">{lastTrained}</div>
+            <div className="mt-2 text-2xl font-bold text-primary leading-tight">
+              {lastTrained}
+            </div>
           </div>
 
-          {/* Next workout (small summary tile) */}
+          {/* Workouts this week */}
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <div className="text-muted-foreground flex items-center gap-2">
-                <Dumbbell className="w-5 h-5 text-primary" />
-                Next workout
+                <span className="text-base" aria-hidden="true">
+                  {mood}
+                </span>
+                Workouts this week
               </div>
-              {nextWorkout?.type ? (
-                <Badge variant="secondary">{upper(nextWorkout.type)}</Badge>
-              ) : null}
+              <Badge variant="secondary">{workoutsThisWeek}/7</Badge>
             </div>
-            <div className="mt-2 text-base font-semibold">
-              {nextWorkout?.name
-                ? nextWorkout.name
-                : nextWorkout?.type
-                ? `Workout ${upper(nextWorkout.type)}`
-                : "No programmes"}
+            <div className="mt-2 text-2xl font-bold text-primary leading-tight">
+              {workoutsThisWeek}
             </div>
           </div>
         </div>
@@ -429,7 +439,10 @@ export default function WelcomePage({ onStartToday }) {
           <div className="mt-3 space-y-3">
             {mostProgress.length ? (
               mostProgress.map((row) => (
-                <div key={row.key} className="rounded-xl bg-muted/40 p-3 flex items-center justify-between">
+                <div
+                  key={row.key}
+                  className="rounded-xl bg-muted/40 p-3 flex items-center justify-between"
+                >
                   <div>
                     <div className="font-semibold">{row.name}</div>
                     {row.workoutType ? (
@@ -466,7 +479,10 @@ export default function WelcomePage({ onStartToday }) {
           <div className="mt-3 space-y-3">
             {needsAttention.length ? (
               needsAttention.map((row) => (
-                <div key={row.key} className="rounded-xl bg-muted/40 p-3 flex items-center justify-between">
+                <div
+                  key={row.key}
+                  className="rounded-xl bg-muted/40 p-3 flex items-center justify-between"
+                >
                   <div>
                     <div className="font-semibold">{row.name}</div>
                     {row.workoutType ? (
