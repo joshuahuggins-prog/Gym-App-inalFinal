@@ -74,7 +74,7 @@ const App = () => {
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
-  // ✅ Bottom nav items (Home removed)
+  // ✅ Home removed from the nav items (replaced by + button)
   const navItems = useMemo(
     () => [
       { key: PAGES.HISTORY, label: "History", icon: <History className="w-5 h-5" /> },
@@ -87,10 +87,6 @@ const App = () => {
     []
   );
 
-  // Split so we can insert the + button in the middle
-  const leftItems = navItems.slice(0, 3);
-  const rightItems = navItems.slice(3);
-
   const renderPage = () => {
     switch (currentPage) {
       case PAGES.HOME:
@@ -100,15 +96,11 @@ const App = () => {
         return <HistoryPage onEditWorkout={openEditWorkout} />;
 
       case PAGES.EDIT_WORKOUT:
-        // Safety: if somehow opened without an id, bounce to history
         if (!editingWorkoutId) {
           return <HistoryPage onEditWorkout={openEditWorkout} />;
         }
         return (
-          <EditWorkoutPage
-            workoutId={editingWorkoutId}
-            onClose={closeEditWorkout}
-          />
+          <EditWorkoutPage workoutId={editingWorkoutId} onClose={closeEditWorkout} />
         );
 
       case PAGES.PROGRESS:
@@ -121,7 +113,6 @@ const App = () => {
         return <ExercisesPage />;
 
       case PAGES.SETTINGS:
-        // ✅ Pass prop so Settings can open ThemeCreator
         return <SettingsPage onCreateTheme={openThemeCreator} />;
 
       case PAGES.THEME_CREATOR:
@@ -135,15 +126,13 @@ const App = () => {
     }
   };
 
-  const handleAddPress = () => {
-    // ✅ Plus button replaces Home tab: jump to Today/Home page
+  const handlePlus = useCallback(() => {
+    // ✅ Plus replaces Home tab: go to Today/Home page
     handleNavigate(PAGES.HOME);
-  };
+  }, [handleNavigate]);
 
   return (
     <SettingsProvider>
-      {/* ✅ IMPORTANT: fixed viewport wrapper prevents "fixed" children from scrolling
-          when the app is rotated (transform would otherwise break position: fixed). */}
       <div
         className={`fixed inset-0 transform-gpu transition-transform duration-350 ease-out ${
           upsideDown ? "rotate-180" : ""
@@ -151,41 +140,19 @@ const App = () => {
       >
         <div className="flex flex-col h-full bg-background text-foreground">
           {/* Main Content (ONLY scrolling area) */}
-          <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-24"}`}>
+          <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
             {renderPage()}
           </main>
 
           {/* Bottom Navigation (hidden while editing a workout) */}
           {!isEditMode && (
             <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-              <div className="flex items-center justify-between h-16 px-2">
-                {/* Left side */}
-                <div className="flex items-center">
-                  {leftItems.map((it) => (
-                    <NavButton
-                      key={it.key}
-                      icon={it.icon}
-                      label={it.label}
-                      active={currentPage === it.key}
-                      onClick={() => handleNavigate(it.key)}
-                    />
-                  ))}
-                </div>
+              <div className="overflow-x-auto scrollbar-hide">
+                <div className="flex items-center h-16 px-2 min-w-max">
+                  {/* ✅ Plus button on the LEFT, inside the same scroll row */}
+                  <PlusNavButton onClick={handlePlus} />
 
-                {/* Center + button */}
-                <div className="relative flex items-center justify-center px-2">
-                  <button
-                    onClick={handleAddPress}
-                    aria-label="Start workout"
-                    className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center -translate-y-4 active:scale-95 transition-transform"
-                  >
-                    <Plus className="w-7 h-7" />
-                  </button>
-                </div>
-
-                {/* Right side */}
-                <div className="flex items-center">
-                  {rightItems.map((it) => (
+                  {navItems.map((it) => (
                     <NavButton
                       key={it.key}
                       icon={it.icon}
@@ -205,6 +172,19 @@ const App = () => {
     </SettingsProvider>
   );
 };
+
+const PlusNavButton = ({ onClick }) => (
+  <button
+    onClick={onClick}
+    aria-label="Today / Add"
+    className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0"
+  >
+    <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-95 transition-transform">
+      <Plus className="w-6 h-6" />
+    </div>
+    <span className="text-[10px] font-medium text-muted-foreground">Today</span>
+  </button>
+);
 
 const NavButton = ({ icon, label, active, onClick }) => (
   <button
