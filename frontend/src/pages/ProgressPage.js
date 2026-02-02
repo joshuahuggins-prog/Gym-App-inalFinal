@@ -20,12 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import {
-  getProgrammes,
-  getWorkouts,
-  getSettings,
-  getExercises,
-} from "../utils/storage";
+import { getProgrammes, getWorkouts, getSettings, getExercises } from "../utils/storage";
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -269,9 +264,7 @@ export default function ProgressPage() {
     });
 
     const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) =>
-      compressedByKey.set(key, compressByDayMax(pts))
-    );
+    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compressByDayMax(pts)));
 
     const programmeCards = programmes.map((p) => {
       const type = String(p?.type || "").toUpperCase();
@@ -286,7 +279,7 @@ export default function ProgressPage() {
 
         const first = pts.length ? pts[0].y : null;
         const latest = pts.length ? pts[pts.length - 1].y : null;
-        const delta = first != null && latest !=null ? latest - first : null;
+        const delta = first != null && latest != null ? latest - first : null;
 
         return { key, name: name || "Exercise", first, latest, delta, points: pts };
       });
@@ -355,9 +348,7 @@ export default function ProgressPage() {
   }, [selectedPoints]);
 
   const firstVal = selectedPoints.length ? selectedPoints[0].weight : null;
-  const lastVal = selectedPoints.length
-    ? selectedPoints[selectedPoints.length - 1].weight
-    : null;
+  const lastVal = selectedPoints.length ? selectedPoints[selectedPoints.length - 1].weight : null;
 
   const change = firstVal != null && lastVal != null ? lastVal - firstVal : null;
   const percent =
@@ -383,10 +374,7 @@ export default function ProgressPage() {
       rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className="bg-primary/15 text-primary border border-primary/30">
-            {metricLabel}
-          </Badge>
-
+          {/* ✅ Removed the "Max" badge/button above the period selector */}
           <div className="flex flex-wrap gap-2">
             {rangeButtons.map((r) => (
               <Button
@@ -414,9 +402,7 @@ export default function ProgressPage() {
           </div>
 
           {computed.mostProgress.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Not enough data in this range yet.
-            </p>
+            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
           ) : (
             <div className="space-y-2">
               {computed.mostProgress.map((e) => (
@@ -426,9 +412,7 @@ export default function ProgressPage() {
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {e.programme}
-                    </div>
+                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
                   </div>
                   <div className="text-sm font-semibold text-success whitespace-nowrap">
                     +{formatNumber(e.delta)} {weightUnit}
@@ -450,9 +434,7 @@ export default function ProgressPage() {
           </div>
 
           {computed.needsAttention.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Not enough data in this range yet.
-            </p>
+            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
           ) : (
             <div className="space-y-2">
               {computed.needsAttention.map((e) => (
@@ -462,9 +444,7 @@ export default function ProgressPage() {
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {e.programme}
-                    </div>
+                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
                   </div>
                   <div className="text-sm font-semibold text-destructive whitespace-nowrap">
                     {formatNumber(e.delta)} {weightUnit}
@@ -482,10 +462,7 @@ export default function ProgressPage() {
               <div className="text-sm font-medium text-muted-foreground mb-2">
                 Select Exercise
               </div>
-              <Select
-                value={selectedExerciseKey}
-                onValueChange={setSelectedExerciseKey}
-              >
+              <Select value={selectedExerciseKey} onValueChange={setSelectedExerciseKey}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -522,22 +499,13 @@ export default function ProgressPage() {
             {selectedPoints.length < 2 ? (
               <div className="text-sm text-muted-foreground py-10 text-center">
                 Not enough data points yet for{" "}
-                <span className="font-medium text-foreground">
-                  {selectedLabel}
-                </span>
-                .
+                <span className="font-medium text-foreground">{selectedLabel}</span>.
               </div>
             ) : (
               <div className="h-[360px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={selectedPoints}
-                    margin={{ top: 12, right: 14, bottom: 18, left: 12 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 6"
-                      stroke="hsl(var(--border))"
-                    />
+                  <LineChart data={selectedPoints} margin={{ top: 12, right: 14, bottom: 18, left: 12 }}>
+                    <CartesianGrid strokeDasharray="3 6" stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="date"
                       stroke="hsl(var(--muted-foreground))"
@@ -587,8 +555,7 @@ export default function ProgressPage() {
               <span>
                 Latest:{" "}
                 <span className="text-foreground font-medium">
-                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)}{" "}
-                  {weightUnit}
+                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)} {weightUnit}
                 </span>
               </span>
             </div>
