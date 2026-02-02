@@ -5,21 +5,23 @@
   Any theme below overrides the same token names.
 
   Apply a theme by setting:
-    document.documentElement.dataset.theme = "dark" | "green" | "yellow" | "greyRed" | "custom"
+    document.documentElement.dataset.theme =
+      "dark" | "green" | "yellow" | "greyRed" | "custom"
 
   Notes:
   - "dark" is the default (:root), so [data-theme="dark"] is intentionally empty.
-  - "custom" is applied via JS by setting CSS variables on :root style directly.
+  - Dark variants MUST be defined as:
+      .dark[data-theme="..."]
 */
 
-/* Optional explicit dark theme (empty; :root provides the values). */
+/* Default dark theme (comes from :root) */
 [data-theme="dark"] {}
 
 /* Custom theme hook (variables injected via JS) */
 [data-theme="custom"] {}
 
 /* =========================
-   GREEN THEME
+   GREEN — LIGHT
    ========================= */
 [data-theme="green"] {
   --background: 140 30% 96%;
@@ -35,49 +37,49 @@
   --primary-foreground: 140 30% 96%;
   --primary-glow: 144 60% 44%;
 
-  --gold: 45 85% 45%;
-  --gold-foreground: 140 20% 12%;
-
   --secondary: 140 20% 88%;
-  --secondary-foreground: 140 20% 12%;
-
   --muted: 140 18% 90%;
-  --muted-foreground: 140 10% 35%;
-
   --accent: 144 55% 32%;
-  --accent-foreground: 140 30% 96%;
 
-  /* Strong accent (opposite on colour wheel from the green primary) */
   --accent-strong: 324 55% 45%;
   --accent-strong-foreground: 0 0% 100%;
-
-  --destructive: 0 75% 45%;
-  --destructive-foreground: 0 0% 100%;
 
   --border: 140 15% 80%;
   --input: 140 15% 80%;
   --ring: 144 55% 32%;
-
-  --success: 142 60% 35%;
-  --success-foreground: 0 0% 100%;
-
-  --chart-1: 144 55% 32%;
-  --chart-2: 45 85% 45%;
-  --chart-3: 142 60% 35%;
-  --chart-4: 262 60% 52%;
-  --chart-5: 0 75% 45%;
-
-  --gradient-primary: linear-gradient(135deg, hsl(144 55% 32%), hsl(144 60% 44%));
-  --gradient-gold: linear-gradient(135deg, hsl(45 85% 45%), hsl(35 80% 44%));
-  --gradient-hero: linear-gradient(180deg, hsl(140 30% 96%), hsl(140 25% 92%));
-
-  --shadow-elegant: 0 10px 30px -10px hsl(144 55% 32% / 0.22);
-  --shadow-glow: 0 0 40px hsl(144 60% 44% / 0.25);
-  --shadow-gold: 0 10px 30px -10px hsl(45 85% 45% / 0.20);
 }
 
 /* =========================
-   YELLOW THEME
+   GREEN — DARK
+   ========================= */
+.dark[data-theme="green"] {
+  --background: 140 22% 8%;
+  --foreground: 210 40% 98%;
+
+  --card: 140 20% 12%;
+  --card-foreground: 210 40% 98%;
+
+  --popover: 140 20% 12%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 144 76% 45%;
+  --primary-foreground: 140 22% 8%;
+  --primary-glow: 144 76% 58%;
+
+  --secondary: 140 12% 18%;
+  --muted: 140 12% 18%;
+  --accent: 144 76% 45%;
+
+  --accent-strong: 324 70% 62%;
+  --accent-strong-foreground: 324 25% 10%;
+
+  --border: 140 12% 20%;
+  --input: 140 12% 20%;
+  --ring: 144 76% 45%;
+}
+
+/* =========================
+   YELLOW — LIGHT
    ========================= */
 [data-theme="yellow"] {
   --background: 52 55% 95%;
@@ -93,49 +95,45 @@
   --primary-foreground: 40 25% 12%;
   --primary-glow: 45 95% 55%;
 
-  --gold: 40 95% 50%;
-  --gold-foreground: 40 25% 12%;
-
-  --secondary: 50 35% 86%;
-  --secondary-foreground: 40 25% 12%;
-
-  --muted: 50 30% 88%;
-  --muted-foreground: 40 15% 32%;
-
   --accent: 45 90% 45%;
-  --accent-foreground: 40 25% 12%;
 
-  /* Strong accent (opposite on colour wheel from the yellow primary) */
   --accent-strong: 215 70% 45%;
   --accent-strong-foreground: 0 0% 100%;
-
-  --destructive: 0 75% 45%;
-  --destructive-foreground: 0 0% 100%;
 
   --border: 45 25% 78%;
   --input: 45 25% 78%;
   --ring: 45 90% 45%;
-
-  --success: 142 55% 38%;
-  --success-foreground: 0 0% 100%;
-
-  --chart-1: 45 90% 45%;
-  --chart-2: 189 65% 40%;
-  --chart-3: 142 55% 38%;
-  --chart-4: 262 60% 52%;
-  --chart-5: 0 75% 45%;
-
-  --gradient-primary: linear-gradient(135deg, hsl(45 90% 45%), hsl(45 95% 55%));
-  --gradient-gold: linear-gradient(135deg, hsl(40 95% 50%), hsl(35 90% 48%));
-  --gradient-hero: linear-gradient(180deg, hsl(52 55% 95%), hsl(50 45% 90%));
-
-  --shadow-elegant: 0 10px 30px -10px hsl(45 90% 45% / 0.20);
-  --shadow-glow: 0 0 40px hsl(45 95% 55% / 0.22);
-  --shadow-gold: 0 10px 30px -10px hsl(40 95% 50% / 0.18);
 }
 
 /* =========================
-   RED THEME
+   YELLOW — DARK
+   ========================= */
+.dark[data-theme="yellow"] {
+  --background: 45 30% 8%;
+  --foreground: 210 40% 98%;
+
+  --card: 45 22% 12%;
+  --card-foreground: 210 40% 98%;
+
+  --popover: 45 22% 12%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 45 93% 58%;
+  --primary-foreground: 45 30% 8%;
+  --primary-glow: 45 93% 70%;
+
+  --accent: 45 93% 58%;
+
+  --accent-strong: 215 80% 60%;
+  --accent-strong-foreground: 215 30% 10%;
+
+  --border: 45 14% 20%;
+  --input: 45 14% 20%;
+  --ring: 45 93% 58%;
+}
+
+/* =========================
+   GREY / RED — LIGHT
    ========================= */
 [data-theme="greyRed"] {
   --background: 220 10% 94%;
@@ -151,43 +149,41 @@
   --primary-foreground: 0 0% 100%;
   --primary-glow: 0 75% 55%;
 
-  --gold: 45 85% 48%;
-  --gold-foreground: 220 20% 14%;
-
-  --secondary: 220 10% 84%;
-  --secondary-foreground: 220 20% 14%;
-
-  --muted: 220 10% 86%;
-  --muted-foreground: 220 10% 32%;
-
   --accent: 0 72% 45%;
-  --accent-foreground: 0 0% 100%;
 
-  /* Strong accent (opposite on colour wheel from the red primary) */
   --accent-strong: 190 70% 40%;
   --accent-strong-foreground: 0 0% 100%;
-
-  --destructive: 0 72% 45%;
-  --destructive-foreground: 0 0% 100%;
 
   --border: 220 10% 75%;
   --input: 220 10% 75%;
   --ring: 0 72% 45%;
+}
 
-  --success: 142 55% 35%;
-  --success-foreground: 0 0% 100%;
+/* =========================
+   GREY / RED — DARK  ✅ FIX
+   ========================= */
+.dark[data-theme="greyRed"] {
+  --background: 220 18% 8%;
+  --foreground: 210 40% 98%;
 
-  --chart-1: 0 72% 45%;
-  --chart-2: 189 65% 40%;
-  --chart-3: 142 55% 35%;
-  --chart-4: 262 60% 52%;
-  --chart-5: 45 85% 48%;
+  --card: 220 16% 12%;
+  --card-foreground: 210 40% 98%;
 
-  --gradient-primary: linear-gradient(135deg, hsl(0 72% 45%), hsl(0 75% 55%));
-  --gradient-gold: linear-gradient(135deg, hsl(45 85% 48%), hsl(35 80% 46%));
-  --gradient-hero: linear-gradient(180deg, hsl(220 10% 94%), hsl(220 10% 88%));
+  --popover: 220 16% 12%;
+  --popover-foreground: 210 40% 98%;
 
-  --shadow-elegant: 0 10px 30px -10px hsl(0 72% 45% / 0.18);
-  --shadow-glow: 0 0 40px hsl(0 75% 55% / 0.18);
-  --shadow-gold: 0 10px 30px -10px hsl(45 85% 48% / 0.16);
+  --primary: 0 84% 60%;
+  --primary-foreground: 220 18% 8%;
+  --primary-glow: 0 84% 70%;
+
+  --secondary: 220 12% 18%;
+  --muted: 220 12% 18%;
+  --accent: 0 84% 60%;
+
+  --accent-strong: 190 85% 55%;
+  --accent-strong-foreground: 190 30% 10%;
+
+  --border: 220 12% 20%;
+  --input: 220 12% 20%;
+  --ring: 0 84% 60%;
 }
