@@ -8,8 +8,10 @@ import {
   Settings,
   Download,
   Plus,
+  Home,
 } from "lucide-react";
 
+import WelcomePage from "./pages/WelcomePage";
 import HomePage from "./pages/HomePage";
 import HistoryPage from "./pages/HistoryPage";
 import ProgressPage from "./pages/ProgressPage";
@@ -26,6 +28,7 @@ import { Toaster } from "./components/ui/sonner";
 import useUpsideDown from "./hooks/useUpsideDown";
 
 const PAGES = {
+  WELCOME: "welcome",
   HOME: "home",
   HISTORY: "history",
   EDIT_WORKOUT: "edit-workout",
@@ -40,7 +43,8 @@ const PAGES = {
 const App = () => {
   const upsideDown = useUpsideDown();
 
-  const [currentPage, setCurrentPage] = useState(PAGES.HOME);
+  // ✅ Start on Welcome page
+  const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
 
   // Edit workout page state
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
@@ -72,9 +76,14 @@ const App = () => {
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
-  // ✅ Home removed from the nav items (replaced by + button)
+  // ✅ Add Overview (Welcome) tab. Home stays removed (replaced by + button).
   const navItems = useMemo(
     () => [
+      {
+        key: PAGES.WELCOME,
+        label: "Overview",
+        icon: <Home className="w-5 h-5" />,
+      },
       { key: PAGES.HISTORY, label: "History", icon: <History className="w-5 h-5" /> },
       { key: PAGES.PROGRESS, label: "Progress", icon: <TrendingUp className="w-5 h-5" /> },
       { key: PAGES.PROGRAMMES, label: "Programmes", icon: <FileText className="w-5 h-5" /> },
@@ -87,6 +96,9 @@ const App = () => {
 
   const renderPage = () => {
     switch (currentPage) {
+      case PAGES.WELCOME:
+        return <WelcomePage onStartToday={() => handleNavigate(PAGES.HOME)} />;
+
       case PAGES.HOME:
         return <HomePage />;
 
@@ -120,12 +132,12 @@ const App = () => {
         return <ImportExportPage />;
 
       default:
-        return <HomePage />;
+        return <WelcomePage onStartToday={() => handleNavigate(PAGES.HOME)} />;
     }
   };
 
   const handlePlus = useCallback(() => {
-    // ✅ Plus replaces Home tab: go to Today/Home page
+    // ✅ Plus is your "Today / Log Workout" shortcut
     handleNavigate(PAGES.HOME);
   }, [handleNavigate]);
 
@@ -183,7 +195,7 @@ const App = () => {
 const PlusNavButton = ({ onClick }) => (
   <button
     onClick={onClick}
-    aria-label="Go to Today"
+    aria-label="Start workout"
     className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform flex-shrink-0"
   >
     <Plus className="w-6 h-6" />
