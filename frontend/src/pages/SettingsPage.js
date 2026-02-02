@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   ListOrdered,
   Save,
-  Settings as SettingsIcon,
   TrendingUp,
   Palette,
   Sun,
@@ -417,13 +416,7 @@ export default function SettingsPage({ onCreateTheme }) {
       title="Settings"
       subtitle={versionText}
       rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
-      actions={
-        <div className="w-full flex items-center justify-end">
-          <Badge className="bg-white/15 text-white border border-white/25">
-            {colorMode === "dark" ? "Dark" : "Light"}
-          </Badge>
-        </div>
-      }
+      /* ✅ Removed the actions prop entirely (removes the action bar + Light/Dark badge) */
     >
       <div className="space-y-8 p-4 max-w-xl mx-auto pb-20">
         {/* ===== Progress metric ===== */}
@@ -486,7 +479,11 @@ export default function SettingsPage({ onCreateTheme }) {
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  {colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                  {colorMode === "dark" ? (
+                    <Moon className="h-4 w-4" />
+                  ) : (
+                    <Sun className="h-4 w-4" />
+                  )}
                   <div className="font-medium">Dark mode</div>
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -542,9 +539,7 @@ export default function SettingsPage({ onCreateTheme }) {
 
                   {customThemes.length > 0 && (
                     <>
-                      <div className="px-2 py-1 text-xs text-muted-foreground">
-                        Custom themes
-                      </div>
+                      <div className="px-2 py-1 text-xs text-muted-foreground">Custom themes</div>
                       {customThemes.map((t) => (
                         <SelectItem key={t.id} value={`custom:${t.id}`}>
                           {t.name || "Unnamed theme"}
@@ -575,9 +570,7 @@ export default function SettingsPage({ onCreateTheme }) {
                         className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/40 px-3 py-2"
                       >
                         <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">
-                            {t.name || "Unnamed theme"}
-                          </div>
+                          <div className="text-sm font-medium truncate">{t.name || "Unnamed theme"}</div>
                           <div className="text-[11px] text-muted-foreground truncate">
                             {t.accentHex || ""} {t.baseHex ? `• ${t.baseHex}` : ""}
                           </div>
@@ -762,9 +755,8 @@ export default function SettingsPage({ onCreateTheme }) {
           </div>
 
           <p className="text-sm opacity-80">
-            Rebuilds local app data after an update by backing up, rebuilding storage,
-            then restoring your backup. This normally keeps your history. We recommend
-            exporting a manual backup first.
+            Rebuilds local app data after an update by backing up, rebuilding storage, then restoring your
+            backup. This normally keeps your history. We recommend exporting a manual backup first.
           </p>
 
           <Button variant="secondary" onClick={handleForceUpdate}>
