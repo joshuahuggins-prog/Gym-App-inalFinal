@@ -1,12 +1,11 @@
 // src/pages/ImportExportPage.js
-import React, { useMemo, useState } from "react";
-import { Download, Upload, FileText, AlertCircle, Database } from "lucide-react";
+import React, { useState } from "react";
+import { Download, Upload, AlertCircle, Database } from "lucide-react";
 import AppHeader from "../components/AppHeader";
 import { Button } from "../components/ui/button";
 import {
   exportToCSV,
   importFromCSV,
-  getWorkouts,
   exportAllDataToJSON,
   importAllDataFromJSON,
 } from "../utils/storage";
@@ -131,33 +130,6 @@ const ImportExportPage = () => {
     }
   };
 
-  const workouts = useMemo(() => getWorkouts() || [], []);
-  const totalWorkouts = workouts.length;
-
-  const totalSets = useMemo(() => {
-    return workouts.reduce(
-      (sum, w) =>
-        sum +
-        (w?.exercises || []).reduce(
-          (eSum, e) => eSum + (e?.sets?.length || 0),
-          0
-        ),
-      0
-    );
-  }, [workouts]);
-
-  const firstWorkoutDate = useMemo(() => {
-    if (!workouts.length) return null;
-    const d = workouts[workouts.length - 1]?.date;
-    return d ? new Date(d) : null;
-  }, [workouts]);
-
-  const latestWorkoutDate = useMemo(() => {
-    if (!workouts.length) return null;
-    const d = workouts[0]?.date;
-    return d ? new Date(d) : null;
-  }, [workouts]);
-
   return (
     <AppHeader
       title="Import / Export"
@@ -166,43 +138,6 @@ const ImportExportPage = () => {
       rightIconAlt="Gym App"
     >
       <div className="max-w-2xl mx-auto px-4 py-6 pb-24 space-y-6">
-        {/* Current Data Summary */}
-        <div className="bg-card border border-border rounded-xl p-6">
-          <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            Current Data
-          </h2>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-muted/50 rounded-lg border border-border">
-              <div className="text-sm text-muted-foreground mb-1">Total Workouts</div>
-              <div className="text-3xl font-bold text-foreground">{totalWorkouts}</div>
-            </div>
-
-            <div className="p-4 bg-muted/50 rounded-lg border border-border">
-              <div className="text-sm text-muted-foreground mb-1">Total Sets Logged</div>
-              <div className="text-3xl font-bold text-foreground">{totalSets}</div>
-            </div>
-          </div>
-
-          {totalWorkouts > 0 && (
-            <div className="mt-4 text-sm text-muted-foreground">
-              {firstWorkoutDate && (
-                <div className="flex items-center gap-2">
-                  <span>📅</span>
-                  <span>First workout: {firstWorkoutDate.toLocaleDateString()}</span>
-                </div>
-              )}
-              {latestWorkoutDate && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span>📅</span>
-                  <span>Latest workout: {latestWorkoutDate.toLocaleDateString()}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {/* FULL BACKUP (JSON) */}
         <div className="bg-card border border-border rounded-xl p-6">
           <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
@@ -290,12 +225,7 @@ const ImportExportPage = () => {
             </div>
           </div>
 
-          <Button
-            onClick={handleExportCSV}
-            size="lg"
-            className="w-full"
-            disabled={totalWorkouts === 0}
-          >
+          <Button onClick={handleExportCSV} size="lg" className="w-full">
             <Download className="w-5 h-5 mr-2" />
             Export Workout History (CSV)
           </Button>
