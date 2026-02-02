@@ -1,24 +1,18 @@
 // src/App.js
 import React, { useCallback, useMemo, useState } from "react";
-import {
-  History,
-  TrendingUp,
-  FileText,
-  Dumbbell,
-  Settings,
-  Download,
-  Plus,
-  Home,
-} from "lucide-react";
+import { History, TrendingUp, Plus, Home, Wrench } from "lucide-react";
 
 import WelcomePage from "./pages/WelcomePage";
 import HomePage from "./pages/HomePage";
 import HistoryPage from "./pages/HistoryPage";
 import ProgressPage from "./pages/ProgressPage";
+import SetupPage from "./pages/SetupPage";
+
 import ProgrammesPage from "./pages/ProgrammesPage";
 import ExercisesPage from "./pages/ExercisesPage";
 import SettingsPage from "./pages/SettingsPage";
 import ImportExportPage from "./pages/ImportExportPage";
+
 import EditWorkoutPage from "./pages/EditWorkoutPage";
 import ThemeCreatorPage from "./pages/ThemeCreatorPage";
 
@@ -33,10 +27,14 @@ const PAGES = {
   HISTORY: "history",
   EDIT_WORKOUT: "edit-workout",
   PROGRESS: "progress",
+  SETUP: "setup",
+
+  // setup destinations
   PROGRAMMES: "programmes",
   EXERCISES: "exercises",
   SETTINGS: "settings",
   IMPORT_EXPORT: "import-export",
+
   THEME_CREATOR: "themeCreator",
 };
 
@@ -76,20 +74,13 @@ const App = () => {
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
-  // ✅ Add Overview (Welcome) tab. Home stays removed (replaced by + button).
+  // ✅ Bottom nav: 4 icons + centre plus
   const navItems = useMemo(
     () => [
-      {
-        key: PAGES.WELCOME,
-        label: "Overview",
-        icon: <Home className="w-5 h-5" />,
-      },
-      { key: PAGES.HISTORY, label: "History", icon: <History className="w-5 h-5" /> },
+      { key: PAGES.WELCOME, label: "Overview", icon: <Home className="w-5 h-5" /> },
       { key: PAGES.PROGRESS, label: "Progress", icon: <TrendingUp className="w-5 h-5" /> },
-      { key: PAGES.PROGRAMMES, label: "Programmes", icon: <FileText className="w-5 h-5" /> },
-      { key: PAGES.EXERCISES, label: "Exercises", icon: <Dumbbell className="w-5 h-5" /> },
-      { key: PAGES.SETTINGS, label: "Settings", icon: <Settings className="w-5 h-5" /> },
-      { key: PAGES.IMPORT_EXPORT, label: "Data", icon: <Download className="w-5 h-5" /> },
+      { key: PAGES.SETUP, label: "Setup", icon: <Wrench className="w-5 h-5" /> },
+      { key: PAGES.HISTORY, label: "History", icon: <History className="w-5 h-5" /> },
     ],
     []
   );
@@ -110,12 +101,19 @@ const App = () => {
           return <HistoryPage onEditWorkout={openEditWorkout} />;
         }
         return (
-          <EditWorkoutPage workoutId={editingWorkoutId} onClose={closeEditWorkout} />
+          <EditWorkoutPage
+            workoutId={editingWorkoutId}
+            onClose={closeEditWorkout}
+          />
         );
 
       case PAGES.PROGRESS:
         return <ProgressPage />;
 
+      case PAGES.SETUP:
+        return <SetupPage onNavigate={(k) => handleNavigate(k)} />;
+
+      // setup destinations
       case PAGES.PROGRAMMES:
         return <ProgrammesPage />;
 
@@ -137,7 +135,7 @@ const App = () => {
   };
 
   const handlePlus = useCallback(() => {
-    // ✅ Plus is your "Today / Log Workout" shortcut
+    // ✅ Centre Plus = "Today / Log Workout"
     handleNavigate(PAGES.HOME);
   }, [handleNavigate]);
 
@@ -157,29 +155,39 @@ const App = () => {
           {/* Bottom Navigation (hidden while editing a workout) */}
           {!isEditMode && (
             <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-              {/* ✅ Fixed + button on the left, rest scrolls */}
-              <div className="flex items-center h-16">
-                {/* Fixed area */}
-                <div className="pl-2 pr-1 flex items-center">
+              <div className="h-16 grid grid-cols-5 items-center px-2">
+                {/* Left 2 icons */}
+                <NavButton
+                  icon={navItems[0].icon}
+                  label={navItems[0].label}
+                  active={currentPage === navItems[0].key}
+                  onClick={() => handleNavigate(navItems[0].key)}
+                />
+                <NavButton
+                  icon={navItems[1].icon}
+                  label={navItems[1].label}
+                  active={currentPage === navItems[1].key}
+                  onClick={() => handleNavigate(navItems[1].key)}
+                />
+
+                {/* Centre + */}
+                <div className="flex items-center justify-center">
                   <PlusNavButton onClick={handlePlus} />
                 </div>
 
-                {/* Scrollable area */}
-                <div className="flex-1 overflow-x-auto scrollbar-hide">
-                  <div className="flex items-center h-16 px-1 min-w-max">
-                    {navItems.map((it) => (
-                      <NavButton
-                        key={it.key}
-                        icon={it.icon}
-                        label={it.label}
-                        active={currentPage === it.key}
-                        onClick={() => handleNavigate(it.key)}
-                      />
-                    ))}
-                    {/* little end padding so last item isn't hard against the edge */}
-                    <div className="w-2 flex-shrink-0" />
-                  </div>
-                </div>
+                {/* Right 2 icons */}
+                <NavButton
+                  icon={navItems[2].icon}
+                  label={navItems[2].label}
+                  active={currentPage === navItems[2].key}
+                  onClick={() => handleNavigate(navItems[2].key)}
+                />
+                <NavButton
+                  icon={navItems[3].icon}
+                  label={navItems[3].label}
+                  active={currentPage === navItems[3].key}
+                  onClick={() => handleNavigate(navItems[3].key)}
+                />
               </div>
             </nav>
           )}
@@ -191,12 +199,13 @@ const App = () => {
   );
 };
 
-// ✅ Slightly larger than standard icons, but flush in the bar (not floating)
+// ✅ Centre button. Slightly larger, feels "app-like"
 const PlusNavButton = ({ onClick }) => (
   <button
     onClick={onClick}
     aria-label="Start workout"
-    className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform flex-shrink-0"
+    className="flex items-center justify-center w-13 h-13 rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform"
+    style={{ width: 52, height: 52 }}
   >
     <Plus className="w-6 h-6" />
   </button>
@@ -205,7 +214,7 @@ const PlusNavButton = ({ onClick }) => (
 const NavButton = ({ icon, label, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
+    className={`flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-lg transition-all duration-200 ${
       active
         ? "text-primary scale-105"
         : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
