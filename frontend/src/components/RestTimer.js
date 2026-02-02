@@ -270,7 +270,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
             ) : null}
           </AnimatePresence>
 
-          {/* Minimized chip (inverted colors + ~20% bigger) */}
+          {/* Minimized chip (uses ACCENT now) */}
           <AnimatePresence>
             {minimized ? (
               <motion.button
@@ -280,8 +280,8 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                   "fixed left-4 top-4 z-[10000] pointer-events-auto",
                   "flex items-center gap-4",
                   "rounded-full border shadow-xl",
-                  // ✅ Invert: container uses accent (primary), text flips to primary-foreground
-                  "bg-primary text-primary-foreground border-primary/30",
+                  // ✅ Accent instead of Primary
+                  "bg-accent text-accent-foreground border-accent/30",
                   // ✅ ~20% bigger than before
                   "px-4 py-3",
                 ].join(" ")}
@@ -299,10 +299,10 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                   </div>
                 </div>
 
-                {/* Bar: track is light/dark relative to primary via primary-foreground transparency */}
-                <div className="h-2.5 w-28 rounded-full bg-primary-foreground/25 overflow-hidden">
+                {/* Bar: based on accent-foreground */}
+                <div className="h-2.5 w-28 rounded-full bg-accent-foreground/25 overflow-hidden">
                   <motion.div
-                    className="h-full bg-primary-foreground"
+                    className="h-full bg-accent-foreground"
                     initial={false}
                     animate={{ width: `${Math.round(progress)}%` }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -310,7 +310,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                 </div>
 
                 <span
-                  className="ml-1 inline-flex items-center justify-center rounded-full p-1.5 hover:bg-primary-foreground/15 pointer-events-auto"
+                  className="ml-1 inline-flex items-center justify-center rounded-full p-1.5 hover:bg-accent-foreground/15 pointer-events-auto"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -327,4 +327,4 @@ export default function RestTimer({ duration, onComplete, onClose }) {
       ) : null}
     </AnimatePresence>
   );
-}
+                                }
