@@ -1,7 +1,7 @@
 // src/pages/ProgressPage.js
 import React, { useEffect, useMemo, useState } from "react";
 import AppHeader from "../components/AppHeader";
-import { TrendingUp, AlertTriangle } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -155,6 +155,46 @@ function CustomTooltip({ active, payload, label, unitLabel }) {
   );
 }
 
+/**
+ * Mini sparkline (non-interactive) for the exercise pills
+ * Uses the same data shape {x: Date, y: number}
+ */
+function Sparkline({ points }) {
+  const data = (points || []).slice(-14).map((p) => ({
+    x: p.x instanceof Date ? p.x.toISOString() : "",
+    y: Number(p.y),
+  }));
+
+  if (data.length < 2) {
+    return <div className="w-[88px] h-[28px] rounded-md bg-muted/30" />;
+  }
+
+  return (
+    <div className="w-[88px] h-[28px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Line
+            type="monotone"
+            dataKey="y"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// Best-effort "Weighted / Assisted" label from workout data
+const inferWeightedOrAssisted = (pts) => {
+  // If any recorded weight is negative, assume Assisted.
+  const ys = (pts || []).map((p) => Number(p?.y)).filter(Number.isFinite);
+  if (!ys.length) return "Weighted";
+  return ys.some((y) => y < 0) ? "Assisted" : "Weighted";
+};
+
 export default function ProgressPage() {
   const settings = getSettings();
   const weightUnit = settings?.weightUnit || "kg";
@@ -163,6 +203,9 @@ export default function ProgressPage() {
 
   const [range, setRange] = useState("all");
   const [reloadKey, setReloadKey] = useState(0);
+
+  // New UI state
+  const [selectedProgrammeKey, setSelectedProgrammeKey] = useState("");
   const [selectedExerciseKey, setSelectedExerciseKey] = useState("");
 
   // --- Auto refresh so edits in History show up here ---
@@ -204,7 +247,7 @@ export default function ProgressPage() {
   }, []);
 
   const computed = useMemo(() => {
-    const programmes = getProgrammes() || [];
+    const programmesRaw = getProgrammes() || [];
     const workoutsRaw = getWorkouts() || [];
     const exercisesList = (getExercises?.() || []).map((ex) => ({
       id: ex?.id || normKey(ex?.name),
@@ -219,6 +262,7 @@ export default function ProgressPage() {
       .filter((w) => (start ? w._dateObj >= start : true))
       .sort((a, b) => a._dateObj - b._dateObj);
 
+    // Build series per exercise key from workout history
     const seriesByKey = new Map();
 
     const addPoint = (key, x, y, meta) => {
@@ -264,44 +308,54 @@ export default function ProgressPage() {
     });
 
     const compressedByKey = new Map();
-    seriesByKey.forEach((pts, key) => compressedByKey.set(key, compressByDayMax(pts)));
-
-    const programmeCards = programmes.map((p) => {
-      const type = String(p?.type || "").toUpperCase();
-      const programmeKey = normKey(type || p?.name || p?.title || "programme");
-      const displayName =
-        p?.name || p?.title || p?.label || (type ? `Workout ${type}` : "Workout");
-
-      const exercises = (p?.exercises || []).map((ex) => {
-        const name = ex?.name || ex?.id || "";
-        const key = normKey(ex?.id || name);
-        const pts = compressedByKey.get(key) || [];
-
-        const first = pts.length ? pts[0].y : null;
-        const latest = pts.length ? pts[pts.length - 1].y : null;
-        const delta = first != null && latest != null ? latest - first : null;
-
-        return { key, name: name || "Exercise", first, latest, delta, points: pts };
-      });
-
-      return { programmeKey, displayName, exercises };
-    });
-
-    const flat = programmeCards.flatMap((pc) =>
-      pc.exercises.map((e) => ({
-        programme: pc.displayName,
-        programmeKey: pc.programmeKey,
-        ...e,
-      }))
+    seriesByKey.forEach((pts, key) =>
+      compressedByKey.set(key, compressByDayMax(pts))
     );
 
-    const withDelta = flat
-      .filter((e) => Number.isFinite(e.delta))
-      .sort((a, b) => b.delta - a.delta);
+    // Build programmes -> exercises list using programme definitions, but link to history series
+    const programmeCards = programmesRaw
+      .map((p) => {
+        const type = String(p?.type || "").toUpperCase();
+        const programmeKey = normKey(type || p?.name || p?.title || "programme");
+        const displayName =
+          p?.name || p?.title || p?.label || (type ? `Workout ${type}` : "Workout");
 
-    const mostProgress = withDelta.slice(0, 2);
-    const needsAttention = [...withDelta].reverse().slice(0, 2);
+        const exercises = (p?.exercises || [])
+          .map((ex) => {
+            const name = ex?.name || ex?.id || "";
+            const key = normKey(ex?.id || name);
+            const pts = compressedByKey.get(key) || [];
 
+            const first = pts.length ? pts[0].y : null;
+            const latest = pts.length ? pts[pts.length - 1].y : null;
+            const delta =
+              first != null && latest != null ? latest - first : null;
+
+            const mode = inferWeightedOrAssisted(pts);
+
+            return {
+              key,
+              name: name || "Exercise",
+              first,
+              latest,
+              delta,
+              points: pts,
+              mode,
+            };
+          })
+          .filter((e) => e.name);
+
+        return { programmeKey, displayName, exercises };
+      })
+      .filter((pc) => pc.exercises.length > 0);
+
+    // Programme options
+    const programmeOptions = programmeCards.map((pc) => ({
+      key: pc.programmeKey,
+      label: pc.displayName,
+    }));
+
+    // Fallback option building (if someone has history but no programme definitions)
     const keysFromHistory = Array.from(compressedByKey.keys());
     const optionsMap = new Map();
     exercisesList.forEach((ex) => optionsMap.set(normKey(ex.id), ex.name));
@@ -309,30 +363,63 @@ export default function ProgressPage() {
       if (!optionsMap.has(k)) optionsMap.set(k, k.replace(/_/g, " "));
     });
 
-    const exerciseOptions = Array.from(optionsMap.entries())
-      .map(([k, label]) => ({ key: k, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-
     return {
       programmeCards,
-      mostProgress,
-      needsAttention,
+      programmeOptions,
       compressedByKey,
-      exerciseOptions,
     };
   }, [range, progressMetric, reloadKey]);
 
+  // Pick default programme + exercise when data changes
   useEffect(() => {
-    if (selectedExerciseKey) return;
+    if (!computed.programmeCards.length) return;
+
+    // Programme default
+    if (!selectedProgrammeKey) {
+      setSelectedProgrammeKey(computed.programmeCards[0].programmeKey);
+      return;
+    }
+
+    // If current selected programme no longer exists, reset
+    const stillExists = computed.programmeCards.some(
+      (p) => p.programmeKey === selectedProgrammeKey
+    );
+    if (!stillExists) {
+      setSelectedProgrammeKey(computed.programmeCards[0].programmeKey);
+      setSelectedExerciseKey("");
+      return;
+    }
+  }, [computed.programmeCards, selectedProgrammeKey]);
+
+  const selectedProgramme = useMemo(() => {
+    return computed.programmeCards.find(
+      (p) => p.programmeKey === selectedProgrammeKey
+    );
+  }, [computed.programmeCards, selectedProgrammeKey]);
+
+  useEffect(() => {
+    if (!selectedProgramme) return;
+
+    // If exercise already set and still exists, keep it
+    if (selectedExerciseKey) {
+      const ok = selectedProgramme.exercises.some((e) => e.key === selectedExerciseKey);
+      if (ok) return;
+    }
+
+    // Otherwise pick first with >=2 points, else first
     const firstWithData =
-      computed.exerciseOptions.find(
-        (o) => (computed.compressedByKey.get(o.key) || []).length >= 2
-      ) || computed.exerciseOptions[0];
+      selectedProgramme.exercises.find((e) => (e.points || []).length >= 2) ||
+      selectedProgramme.exercises[0];
+
     if (firstWithData?.key) setSelectedExerciseKey(firstWithData.key);
-  }, [computed.exerciseOptions, computed.compressedByKey, selectedExerciseKey]);
+  }, [selectedProgramme, selectedExerciseKey]);
 
   const selectedPoints = useMemo(() => {
-    const pts = computed.compressedByKey.get(selectedExerciseKey) || [];
+    const pts =
+      (selectedProgramme?.exercises.find((e) => e.key === selectedExerciseKey)?.points) ||
+      computed.compressedByKey.get(selectedExerciseKey) ||
+      [];
+
     return pts.map((p) => ({
       date: shortMD(p.x),
       weight: p.y,
@@ -341,16 +428,18 @@ export default function ProgressPage() {
       reps: p.meta?.reps ?? null,
       notes: p.meta?.notes || "",
     }));
-  }, [computed.compressedByKey, selectedExerciseKey]);
+  }, [computed.compressedByKey, selectedExerciseKey, selectedProgramme]);
 
   const ticksInfo = useMemo(() => {
     return buildTicks10(selectedPoints.map((d) => d.weight), true);
   }, [selectedPoints]);
 
   const firstVal = selectedPoints.length ? selectedPoints[0].weight : null;
-  const lastVal = selectedPoints.length ? selectedPoints[selectedPoints.length - 1].weight : null;
+  const lastVal =
+    selectedPoints.length ? selectedPoints[selectedPoints.length - 1].weight : null;
 
-  const change = firstVal != null && lastVal != null ? lastVal - firstVal : null;
+  const change =
+    firstVal != null && lastVal != null ? lastVal - firstVal : null;
   const percent =
     firstVal != null && lastVal != null && Number(firstVal) !== 0
       ? ((change / firstVal) * 100).toFixed(1)
@@ -363,9 +452,10 @@ export default function ProgressPage() {
     { k: "1y", label: "1 year" },
   ];
 
-  const selectedLabel =
-    computed.exerciseOptions.find((o) => o.key === selectedExerciseKey)?.label ||
-    selectedExerciseKey.replace(/_/g, " ");
+  const selectedExerciseLabel = useMemo(() => {
+    const ex = selectedProgramme?.exercises.find((e) => e.key === selectedExerciseKey);
+    return ex?.name || selectedExerciseKey.replace(/_/g, " ");
+  }, [selectedProgramme, selectedExerciseKey]);
 
   return (
     <AppHeader
@@ -373,8 +463,8 @@ export default function ProgressPage() {
       subtitle={`Metric: ${metricLabel} • Unit: ${weightUnit}`}
       rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
-          {/* ✅ Removed the "Max" badge/button above the period selector */}
+        <div className="flex flex-col gap-2">
+          {/* Range buttons */}
           <div className="flex flex-wrap gap-2">
             {rangeButtons.map((r) => (
               <Button
@@ -387,93 +477,121 @@ export default function ProgressPage() {
               </Button>
             ))}
           </div>
-        </div>
-      }
-    >
-      <div className="space-y-3">
-        {/* Most progress */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-5 h-5 text-success" />
-            <h2 className="font-semibold">Most progress</h2>
-            <Badge className="ml-auto bg-success/15 text-success border border-success/30">
-              Top
-            </Badge>
-          </div>
 
-          {computed.mostProgress.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {computed.mostProgress.map((e) => (
-                <div
-                  key={`${e.programmeKey}-${e.key}`}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
-                  </div>
-                  <div className="text-sm font-semibold text-success whitespace-nowrap">
-                    +{formatNumber(e.delta)} {weightUnit}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Needs attention */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
-            <h2 className="font-semibold">Needs attention</h2>
-            <Badge className="ml-auto bg-destructive/15 text-destructive border border-destructive/30">
-              Focus
-            </Badge>
-          </div>
-
-          {computed.needsAttention.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Not enough data in this range yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {computed.needsAttention.map((e) => (
-                <div
-                  key={`${e.programmeKey}-${e.key}`}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 bg-muted/30"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{e.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{e.programme}</div>
-                  </div>
-                  <div className="text-sm font-semibold text-destructive whitespace-nowrap">
-                    {formatNumber(e.delta)} {weightUnit}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Chart */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex-1 min-w-[220px]">
-              <div className="text-sm font-medium text-muted-foreground mb-2">
-                Select Exercise
-              </div>
-              <Select value={selectedExerciseKey} onValueChange={setSelectedExerciseKey}>
+          {/* Programme selector */}
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-muted-foreground">Programme</div>
+            <div className="min-w-[220px] flex-1">
+              <Select
+                value={selectedProgrammeKey}
+                onValueChange={(v) => {
+                  setSelectedProgrammeKey(v);
+                  setSelectedExerciseKey("");
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select programme" />
                 </SelectTrigger>
                 <SelectContent>
-                  {computed.exerciseOptions.map((o) => (
+                  {computed.programmeOptions.map((o) => (
                     <SelectItem key={o.key} value={o.key}>
                       {o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        {/* Exercise pills/list for selected programme */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="font-semibold flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              Exercises
+            </div>
+            <Badge variant="secondary">
+              {selectedProgramme?.displayName || "—"}
+            </Badge>
+          </div>
+
+          {!selectedProgramme?.exercises?.length ? (
+            <p className="text-sm text-muted-foreground">
+              No exercises found in this programme.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {selectedProgramme.exercises.map((e) => {
+                const active = e.key === selectedExerciseKey;
+                const pts = e.points || [];
+                const latest = pts.length ? pts[pts.length - 1].y : null;
+                const delta = e.delta;
+
+                return (
+                  <button
+                    key={e.key}
+                    onClick={() => setSelectedExerciseKey(e.key)}
+                    className={cx(
+                      "w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 border transition-all",
+                      active
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-muted/20 hover:bg-muted/30"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={cx("text-sm font-medium truncate", active && "text-primary")}>
+                          {e.name}
+                        </div>
+                        <Badge variant="secondary" className="shrink-0">
+                          {e.mode || "Weighted"}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="whitespace-nowrap">
+                          Latest:{" "}
+                          <span className="text-foreground font-medium">
+                            {latest != null ? `${formatNumber(latest)} ${weightUnit}` : "—"}
+                          </span>
+                        </span>
+
+                        {Number.isFinite(Number(delta)) ? (
+                          <span
+                            className={cx(
+                              "whitespace-nowrap font-medium",
+                              delta >= 0 ? "text-success" : "text-destructive"
+                            )}
+                          >
+                            {delta >= 0 ? "+" : ""}
+                            {formatNumber(delta)} {weightUnit}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <Sparkline points={pts} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Main chart */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-[220px]">
+              <div className="text-sm font-medium text-muted-foreground mb-1">
+                Selected
+              </div>
+              <div className="text-lg font-semibold">{selectedExerciseLabel}</div>
+              <div className="text-xs text-muted-foreground">
+                Tap an exercise above to change the chart.
+              </div>
             </div>
 
             {change != null && percent != null ? (
@@ -499,13 +617,22 @@ export default function ProgressPage() {
             {selectedPoints.length < 2 ? (
               <div className="text-sm text-muted-foreground py-10 text-center">
                 Not enough data points yet for{" "}
-                <span className="font-medium text-foreground">{selectedLabel}</span>.
+                <span className="font-medium text-foreground">
+                  {selectedExerciseLabel}
+                </span>
+                .
               </div>
             ) : (
               <div className="h-[360px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={selectedPoints} margin={{ top: 12, right: 14, bottom: 18, left: 12 }}>
-                    <CartesianGrid strokeDasharray="3 6" stroke="hsl(var(--border))" />
+                  <LineChart
+                    data={selectedPoints}
+                    margin={{ top: 12, right: 14, bottom: 18, left: 12 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 6"
+                      stroke="hsl(var(--border))"
+                    />
                     <XAxis
                       dataKey="date"
                       stroke="hsl(var(--muted-foreground))"
@@ -555,7 +682,8 @@ export default function ProgressPage() {
               <span>
                 Latest:{" "}
                 <span className="text-foreground font-medium">
-                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)} {weightUnit}
+                  {formatNumber(selectedPoints[selectedPoints.length - 1].weight)}{" "}
+                  {weightUnit}
                 </span>
               </span>
             </div>
