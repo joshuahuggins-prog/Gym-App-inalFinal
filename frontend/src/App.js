@@ -49,8 +49,6 @@ const App = () => {
 
   const handleNavigate = useCallback((page) => {
     setCurrentPage(page);
-
-    // If navigating away from edit screen, clear selected workout
     if (page !== PAGES.EDIT_WORKOUT) setEditingWorkoutId(null);
   }, []);
 
@@ -147,20 +145,28 @@ const App = () => {
           {/* Bottom Navigation (hidden while editing a workout) */}
           {!isEditMode && (
             <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-              <div className="overflow-x-auto scrollbar-hide">
-                <div className="flex items-center h-16 px-2 min-w-max">
-                  {/* ✅ Plus button on the LEFT, inside the same scroll row */}
+              {/* ✅ Fixed + button on the left, rest scrolls */}
+              <div className="flex items-center h-16">
+                {/* Fixed area */}
+                <div className="pl-2 pr-1 flex items-center">
                   <PlusNavButton onClick={handlePlus} />
+                </div>
 
-                  {navItems.map((it) => (
-                    <NavButton
-                      key={it.key}
-                      icon={it.icon}
-                      label={it.label}
-                      active={currentPage === it.key}
-                      onClick={() => handleNavigate(it.key)}
-                    />
-                  ))}
+                {/* Scrollable area */}
+                <div className="flex-1 overflow-x-auto scrollbar-hide">
+                  <div className="flex items-center h-16 px-1 min-w-max">
+                    {navItems.map((it) => (
+                      <NavButton
+                        key={it.key}
+                        icon={it.icon}
+                        label={it.label}
+                        active={currentPage === it.key}
+                        onClick={() => handleNavigate(it.key)}
+                      />
+                    ))}
+                    {/* little end padding so last item isn't hard against the edge */}
+                    <div className="w-2 flex-shrink-0" />
+                  </div>
                 </div>
               </div>
             </nav>
@@ -173,16 +179,14 @@ const App = () => {
   );
 };
 
+// ✅ Slightly larger than standard icons, but flush in the bar (not floating)
 const PlusNavButton = ({ onClick }) => (
   <button
     onClick={onClick}
-    aria-label="Today / Add"
-    className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0"
+    aria-label="Go to Today"
+    className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform flex-shrink-0"
   >
-    <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-95 transition-transform">
-      <Plus className="w-6 h-6" />
-    </div>
-    <span className="text-[10px] font-medium text-muted-foreground">Today</span>
+    <Plus className="w-6 h-6" />
   </button>
 );
 
