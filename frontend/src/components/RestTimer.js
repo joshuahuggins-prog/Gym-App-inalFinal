@@ -20,8 +20,8 @@ export default function RestTimer({ duration, onComplete, onClose }) {
   const [timeLeft, setTimeLeft] = useState(total);
   const [paused, setPaused] = useState(false);
 
-  // ✅ Start minimized by default
-  const [minimized, setMinimized] = useState(true);
+  // ✅ Start maximised
+  const [minimized, setMinimized] = useState(false);
 
   const endAtRef = useRef(null);
   const tickRef = useRef(null);
@@ -32,8 +32,8 @@ export default function RestTimer({ duration, onComplete, onClose }) {
     setTimeLeft(start);
     setPaused(false);
 
-    // ✅ Don't auto-expand when a new timer starts
-    // setMinimized(false);
+    // ✅ Always open when a new timer starts
+    setMinimized(false);
 
     completedRef.current = false;
     endAtRef.current = Date.now() + start * 1000;
@@ -53,15 +53,12 @@ export default function RestTimer({ duration, onComplete, onClose }) {
       tickRef.current = null;
     }
 
-    if (paused) return;
-    if (timeLeft <= 0) return;
+    if (paused || timeLeft <= 0) return;
 
     tickRef.current = setInterval(() => {
       const endAt = endAtRef.current;
       if (!endAt) return;
-
-      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-      setTimeLeft(next);
+      setTimeLeft(Math.max(0, Math.ceil((endAt - Date.now()) / 1000)));
     }, 250);
 
     return () => {
@@ -83,10 +80,10 @@ export default function RestTimer({ duration, onComplete, onClose }) {
 
   const pause = () => {
     if (paused) return;
-    const endAt = endAtRef.current;
-    if (endAt) {
-      const next = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-      setTimeLeft(next);
+    if (endAtRef.current) {
+      setTimeLeft(
+        Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000))
+      );
     }
     endAtRef.current = null;
     setPaused(true);
@@ -120,7 +117,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
 
   return (
     <AnimatePresence>
-      {isOpen ? (
+      {isOpen && (
         <motion.div
           className={`fixed inset-0 z-[9999] ${
             minimized ? "pointer-events-none" : "pointer-events-auto"
@@ -129,22 +126,19 @@ export default function RestTimer({ duration, onComplete, onClose }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          {/* Overlay only when expanded */}
+          {/* Overlay */}
           <AnimatePresence>
-            {!minimized ? (
+            {!minimized && (
               <motion.div
                 className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
                 onClick={onClose}
               />
-            ) : null}
+            )}
           </AnimatePresence>
 
           {/* Expanded bottom sheet */}
           <AnimatePresence>
-            {!minimized ? (
+            {!minimized && (
               <motion.div
                 layoutId={LAYOUT_ID}
                 className="fixed inset-x-0 bottom-0 z-[9999] flex justify-center pointer-events-none"
@@ -175,8 +169,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                           type="button"
                           onClick={() => setMinimized(true)}
                           className="text-muted-foreground hover:text-foreground"
-                          aria-label="Minimize"
-                          title="Minimize"
+                          title="Minimise"
                         >
                           <MinusSquare className="w-4 h-4" />
                         </button>
@@ -185,7 +178,6 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                           type="button"
                           onClick={onClose}
                           className="text-muted-foreground hover:text-foreground"
-                          aria-label="Close"
                           title="Close"
                         >
                           <X className="w-4 h-4" />
@@ -215,7 +207,6 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                               fill="none"
                               strokeDasharray={c}
                               strokeDashoffset={dash}
-                              className="transition-all duration-500 ease-linear"
                             />
                           </svg>
 
@@ -225,7 +216,7 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                                 {fmt(timeLeft)}
                               </div>
                               <div className="text-xs text-muted-foreground mt-1">
-                                {timeLeft === 0 ? "Ready!" : "remaining"}
+                                remaining
                               </div>
                             </div>
                           </div>
@@ -236,13 +227,8 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                         <Button
                           variant="outline"
                           className="flex-1"
-                          onClick={() => {
-                            if (timeLeft === 0) return;
-                            if (paused) resume();
-                            else pause();
-                          }}
+                          onClick={paused ? resume : pause}
                           disabled={timeLeft === 0}
-                          title={paused ? "Resume" : "Pause"}
                         >
                           {paused ? (
                             <>
@@ -257,77 +243,69 @@ export default function RestTimer({ duration, onComplete, onClose }) {
                           )}
                         </Button>
 
-                        <Button variant="outline" onClick={reset} title="Reset">
+                        <Button variant="outline" onClick={reset}>
                           <RotateCcw className="w-4 h-4" />
                         </Button>
                       </div>
-
-                      {timeLeft === 0 && (
-                        <div className="text-center text-sm font-semibold text-success">
-                          Ready for the next set 🎯
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
               </motion.div>
-            ) : null}
+            )}
           </AnimatePresence>
 
-          {/* Minimized chip (uses ACCENT) */}
+          {/* Minimized chip – TRUE accent colour */}
           <AnimatePresence>
-            {minimized ? (
+            {minimized && (
               <motion.button
-                type="button"
                 layoutId={LAYOUT_ID}
-                className={[
-                  "fixed left-4 top-4 z-[10000] pointer-events-auto",
-                  "flex items-center gap-4",
-                  "rounded-full border shadow-xl",
-                  // ✅ Accent instead of Primary
-                  "bg-accent text-accent-foreground border-accent/30",
-                  // ✅ ~20% bigger
-                  "px-4 py-3",
-                ].join(" ")}
-                initial={{ opacity: 0, scale: 0.95, x: -8, y: -8 }}
-                animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                type="button"
+                className="fixed left-4 top-4 z-[10000] flex items-center gap-4 rounded-full shadow-xl px-4 py-3 pointer-events-auto"
+                style={{
+                  backgroundColor: "hsl(var(--accent-strong))",
+                  color: "hsl(var(--accent-strong-foreground))",
+                  border: "1px solid hsl(var(--accent-strong) / 0.35)",
+                }}
                 onClick={() => setMinimized(false)}
-                title="Tap to expand timer"
               >
-                <div className="flex flex-col items-start leading-none">
-                  <div className="text-[12px] opacity-90">Rest</div>
-                  <div className="text-base font-semibold tabular-nums">
+                <div className="flex flex-col leading-none">
+                  <span className="text-xs opacity-90">Rest</span>
+                  <span className="text-base font-semibold tabular-nums">
                     {fmt(timeLeft)}
-                  </div>
+                  </span>
                 </div>
 
-                <div className="h-2.5 w-28 rounded-full bg-accent-foreground/25 overflow-hidden">
+                <div
+                  className="h-2.5 w-28 rounded-full overflow-hidden"
+                  style={{
+                    backgroundColor:
+                      "hsl(var(--accent-strong-foreground) / 0.25)",
+                  }}
+                >
                   <motion.div
-                    className="h-full bg-accent-foreground"
-                    initial={false}
-                    animate={{ width: `${Math.round(progress)}%` }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    className="h-full"
+                    style={{
+                      backgroundColor:
+                        "hsl(var(--accent-strong-foreground))",
+                      width: `${Math.round(progress)}%`,
+                    }}
                   />
                 </div>
 
                 <span
-                  className="ml-1 inline-flex items-center justify-center rounded-full p-1.5 hover:bg-accent-foreground/15 pointer-events-auto"
+                  className="ml-1 rounded-full p-1.5"
                   onClick={(e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                     onClose?.();
                   }}
-                  title="Close timer"
                 >
                   <X className="w-4 h-4 opacity-90" />
                 </span>
               </motion.button>
-            ) : null}
+            )}
           </AnimatePresence>
         </motion.div>
-      ) : null}
+      )}
     </AnimatePresence>
   );
-                            }
+}
