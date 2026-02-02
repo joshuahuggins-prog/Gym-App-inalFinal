@@ -1,13 +1,13 @@
 // src/App.js
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Home,
   History,
   TrendingUp,
   FileText,
   Dumbbell,
   Settings,
   Download,
+  Plus,
 } from "lucide-react";
 
 import HomePage from "./pages/HomePage";
@@ -74,9 +74,9 @@ const App = () => {
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
+  // ✅ Bottom nav items (Home removed)
   const navItems = useMemo(
     () => [
-      { key: PAGES.HOME, label: "Today", icon: <Home className="w-5 h-5" /> },
       { key: PAGES.HISTORY, label: "History", icon: <History className="w-5 h-5" /> },
       { key: PAGES.PROGRESS, label: "Progress", icon: <TrendingUp className="w-5 h-5" /> },
       { key: PAGES.PROGRAMMES, label: "Programmes", icon: <FileText className="w-5 h-5" /> },
@@ -86,6 +86,10 @@ const App = () => {
     ],
     []
   );
+
+  // Split so we can insert the + button in the middle
+  const leftItems = navItems.slice(0, 3);
+  const rightItems = navItems.slice(3);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -131,6 +135,11 @@ const App = () => {
     }
   };
 
+  const handleAddPress = () => {
+    // ✅ Plus button replaces Home tab: jump to Today/Home page
+    handleNavigate(PAGES.HOME);
+  };
+
   return (
     <SettingsProvider>
       {/* ✅ IMPORTANT: fixed viewport wrapper prevents "fixed" children from scrolling
@@ -142,16 +151,41 @@ const App = () => {
       >
         <div className="flex flex-col h-full bg-background text-foreground">
           {/* Main Content (ONLY scrolling area) */}
-          <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
+          <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-24"}`}>
             {renderPage()}
           </main>
 
           {/* Bottom Navigation (hidden while editing a workout) */}
           {!isEditMode && (
             <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
-              <div className="overflow-x-auto scrollbar-hide">
-                <div className="flex items-center h-16 px-2 min-w-max">
-                  {navItems.map((it) => (
+              <div className="flex items-center justify-between h-16 px-2">
+                {/* Left side */}
+                <div className="flex items-center">
+                  {leftItems.map((it) => (
+                    <NavButton
+                      key={it.key}
+                      icon={it.icon}
+                      label={it.label}
+                      active={currentPage === it.key}
+                      onClick={() => handleNavigate(it.key)}
+                    />
+                  ))}
+                </div>
+
+                {/* Center + button */}
+                <div className="relative flex items-center justify-center px-2">
+                  <button
+                    onClick={handleAddPress}
+                    aria-label="Start workout"
+                    className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center -translate-y-4 active:scale-95 transition-transform"
+                  >
+                    <Plus className="w-7 h-7" />
+                  </button>
+                </div>
+
+                {/* Right side */}
+                <div className="flex items-center">
+                  {rightItems.map((it) => (
                     <NavButton
                       key={it.key}
                       icon={it.icon}
