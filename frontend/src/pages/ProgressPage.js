@@ -40,18 +40,6 @@ const toDate = (iso) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-const startOfRange = (rangeKey) => {
-  const now = new Date();
-  if (rangeKey === "all") return null;
-
-  const d = new Date(now);
-  if (rangeKey === "3m") d.setMonth(d.getMonth() - 3);
-  if (rangeKey === "6m") d.setMonth(d.getMonth() - 6);
-  if (rangeKey === "1y") d.setFullYear(d.getFullYear() - 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
 const formatNumber = (n) => {
   const x = Number(n);
   if (!Number.isFinite(x)) return "-";
@@ -60,11 +48,7 @@ const formatNumber = (n) => {
 };
 
 const normKey = (v) =>
-  (v || "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_");
+  (v || "").toString().trim().toLowerCase().replace(/\s+/g, "_");
 
 const shortMD = (d) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -93,22 +77,6 @@ const compressByDayMax = (pts) => {
     .sort((a, b) => a.x - b.x);
 };
 
-const buildTicks10 = (values) => {
-  const STEP = 10;
-  const ys = values.map(Number).filter(Number.isFinite);
-  if (!ys.length) return { ticks: [0, 10], domain: [0, 10] };
-
-  let min = Math.floor(Math.min(...ys) / STEP) * STEP;
-  let max = Math.ceil(Math.max(...ys) / STEP) * STEP;
-  if (min === max) max += STEP;
-
-  const count = Math.round((max - min) / STEP) + 1;
-  return {
-    ticks: Array.from({ length: count }, (_, i) => min + i * STEP),
-    domain: [min, max],
-  };
-};
-
 function CustomTooltip({ active, payload, unitLabel }) {
   if (!active || !payload?.length) return null;
   const p = payload[0]?.payload;
@@ -126,40 +94,12 @@ function CustomTooltip({ active, payload, unitLabel }) {
   );
 }
 
-function Sparkline({ points }) {
-  const data = (points || []).slice(-14).map((p) => ({
-    x: p.x.toISOString(),
-    y: p.y,
-  }));
-
-  if (data.length < 2) {
-    return <div className="w-[88px] h-[28px] rounded-md bg-muted/30" />;
-  }
-
-  return (
-    <div className="w-[88px] h-[28px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <Line
-            type="monotone"
-            dataKey="y"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export default function ProgressPage() {
   const settings = getSettings();
   const weightUnit = settings?.weightUnit || "kg";
   const progressMetric = settings?.progressMetric === "e1rm" ? "e1rm" : "max";
+  const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
 
-  const [range, setRange] = useState("all");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedProgrammeKey, setSelectedProgrammeKey] = useState("");
   const [selectedExerciseKey, setSelectedExerciseKey] = useState("");
@@ -210,10 +150,14 @@ export default function ProgressPage() {
       exercises: (p.exercises || []).map((ex) => {
         const key = normKey(ex.id || ex.name);
         const pts = compressed.get(key) || [];
+        const first = pts.length ? pts[0].y : null;
+        const last = pts.length ? pts[pts.length - 1].y : null;
         return {
           key,
           name: ex.name,
           points: pts,
+          deltaAll:
+            first != null && last != null ? last - first : null,
         };
       }),
     }));
@@ -221,39 +165,39 @@ export default function ProgressPage() {
     return { programmeCards, compressed };
   }, [reloadKey, progressMetric]);
 
-  const selectedProgramme = computed.programmeCards.find(
-    (p) => p.programmeKey === selectedProgrammeKey
-  );
+  const selectedProgramme =
+    computed.programmeCards.find(
+      (p) => p.programmeKey === selectedProgrammeKey
+    ) || computed.programmeCards[0];
 
-  const selectedPoints =
+  const selectedExercise =
     selectedProgramme?.exercises.find(
       (e) => e.key === selectedExerciseKey
-    )?.points || [];
+    ) || selectedProgramme?.exercises[0];
 
-  // 🔥 PROGRESS CALCULATION (LAST + ALL TIME)
+  const selectedPoints =
+    selectedExercise?.points?.map((p) => ({
+      date: shortMD(p.x),
+      weight: p.y,
+      fullDate: p.x.toISOString(),
+    })) || [];
+
   const count = selectedPoints.length;
-  const lastIdx = count - 1;
-
-  const lastVal = lastIdx >= 0 ? selectedPoints[lastIdx].y : null;
-  const prevVal = lastIdx > 0 ? selectedPoints[lastIdx - 1].y : null;
-  const firstVal = count > 0 ? selectedPoints[0].y : null;
+  const lastVal = count >= 1 ? selectedPoints[count - 1].weight : null;
+  const prevVal = count >= 2 ? selectedPoints[count - 2].weight : null;
+  const firstVal = count >= 1 ? selectedPoints[0].weight : null;
 
   const changeLast =
-    prevVal != null && lastVal != null ? lastVal - prevVal : null;
-  const percentLast =
-    prevVal && lastVal
-      ? ((changeLast / prevVal) * 100).toFixed(1)
-      : null;
-
+    lastVal != null && prevVal != null ? lastVal - prevVal : null;
   const changeAll =
-    firstVal != null && lastVal != null ? lastVal - firstVal : null;
-  const percentAll =
-    firstVal && lastVal
-      ? ((changeAll / firstVal) * 100).toFixed(1)
-      : null;
+    lastVal != null && firstVal != null ? lastVal - firstVal : null;
 
   return (
-    <AppHeader title="Progress">
+    <AppHeader
+      title="Progress"
+      subtitle={`Metric: ${metricLabel} • Unit: ${weightUnit}`}
+      rightIconSrc="/icons/icon-overlay-white-32-v1.png"
+    >
       <div className="rounded-xl border border-border bg-card p-4">
         {changeLast != null && (
           <div className="text-right">
@@ -267,7 +211,7 @@ export default function ProgressPage() {
               {formatNumber(changeLast)} {weightUnit}
             </div>
             <div className="text-sm text-muted-foreground">
-              Since last • {percentLast}%
+              Since last
             </div>
             {changeAll != null && (
               <div className="text-xs text-muted-foreground mt-1">
@@ -279,7 +223,7 @@ export default function ProgressPage() {
                   )}
                 >
                   {changeAll >= 0 ? "+" : ""}
-                  {formatNumber(changeAll)} {weightUnit} ({percentAll}%)
+                  {formatNumber(changeAll)} {weightUnit}
                 </span>
               </div>
             )}
