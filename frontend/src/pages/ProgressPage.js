@@ -40,6 +40,17 @@ const toDate = (iso) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
+const startOfRange = (rangeKey) => {
+  const now = new Date();
+  if (rangeKey === "all") return null;
+  const d = new Date(now);
+  if (rangeKey === "3m") d.setMonth(d.getMonth() - 3);
+  if (rangeKey === "6m") d.setMonth(d.getMonth() - 6);
+  if (rangeKey === "1y") d.setFullYear(d.getFullYear() - 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
 const formatNumber = (n) => {
   const x = Number(n);
   if (!Number.isFinite(x)) return "-";
@@ -48,7 +59,11 @@ const formatNumber = (n) => {
 };
 
 const normKey = (v) =>
-  (v || "").toString().trim().toLowerCase().replace(/\s+/g, "_");
+  (v || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
 
 const shortMD = (d) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -63,33 +78,74 @@ const longDate = (d) =>
 const compressByDayMax = (pts) => {
   const m = new Map();
   (pts || []).forEach((p) => {
-    const dx = p?.x instanceof Date ? p.x : null;
-    if (!dx) return;
-    const y = Number(p?.y);
+    if (!(p.x instanceof Date)) return;
+    const y = Number(p.y);
     if (!Number.isFinite(y)) return;
-    const k = dx.toISOString().slice(0, 10);
+    const k = p.x.toISOString().slice(0, 10);
     const prev = m.get(k);
-    if (!prev || y > prev.y) m.set(k, { y, meta: p.meta || null });
+    if (!prev || y > prev.y) m.set(k, { y, meta: p.meta });
   });
 
   return Array.from(m.entries())
-    .map(([k, v]) => ({ x: new Date(k), y: v.y, meta: v.meta }))
+    .map(([k, v]) => ({
+      x: new Date(k),
+      y: v.y,
+      meta: v.meta,
+    }))
     .sort((a, b) => a.x - b.x);
+};
+
+const buildTicks10 = (values) => {
+  const ys = values.map(Number).filter(Number.isFinite);
+  if (!ys.length) return { ticks: [0, 10], domain: [0, 10] };
+  const min = Math.floor(Math.min(...ys) / 10) * 10;
+  const max = Math.ceil(Math.max(...ys) / 10) * 10;
+  const ticks = [];
+  for (let i = min; i <= max; i += 10) ticks.push(i);
+  return { ticks, domain: [min, max] };
 };
 
 function CustomTooltip({ active, payload, unitLabel }) {
   if (!active || !payload?.length) return null;
-  const p = payload[0]?.payload;
-  if (!p) return null;
+  const p = payload[0].payload;
+  const d = p?.fullDate ? new Date(p.fullDate) : null;
 
   return (
-    <div className="rounded-xl border border-border bg-card px-3 py-2 shadow-sm">
-      <div className="text-sm font-semibold text-foreground">
+    <div className="rounded-xl border bg-card px-3 py-2 shadow-sm">
+      <div className="font-semibold text-sm">
         {formatNumber(p.weight)} {unitLabel}
       </div>
       <div className="text-xs text-muted-foreground">
-        {longDate(new Date(p.fullDate))}
+        {d ? longDate(d) : ""}
       </div>
+    </div>
+  );
+}
+
+function Sparkline({ points }) {
+  const data = points.slice(-14).map((p) => ({
+    x: p.x.toISOString(),
+    y: p.y,
+  }));
+
+  if (data.length < 2) {
+    return <div className="w-[88px] h-[28px] rounded-md bg-muted/30" />;
+  }
+
+  return (
+    <div className="w-[88px] h-[28px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Line
+            type="monotone"
+            dataKey="y"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -100,6 +156,7 @@ export default function ProgressPage() {
   const progressMetric = settings?.progressMetric === "e1rm" ? "e1rm" : "max";
   const metricLabel = progressMetric === "e1rm" ? "E1RM" : "Max";
 
+  const [range, setRange] = useState("all");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedProgrammeKey, setSelectedProgrammeKey] = useState("");
   const [selectedExerciseKey, setSelectedExerciseKey] = useState("");
@@ -107,128 +164,165 @@ export default function ProgressPage() {
   useEffect(() => {
     const bump = () => setReloadKey((k) => k + 1);
     window.addEventListener("focus", bump);
-    return () => window.removeEventListener("focus", bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener("focus", bump);
+      window.removeEventListener("storage", bump);
+    };
   }, []);
 
   const computed = useMemo(() => {
     const programmes = getProgrammes() || [];
-    const workouts = (getWorkouts() || [])
-      .map((w) => ({ ...w, d: toDate(w.date) }))
-      .filter((w) => w.d)
-      .sort((a, b) => a.d - b.d);
+    const workouts = getWorkouts() || [];
+    const start = startOfRange(range);
 
     const series = new Map();
 
-    workouts.forEach((w) => {
-      (w.exercises || []).forEach((ex) => {
-        const key = normKey(ex.id || ex.name);
-        let best = -Infinity;
-
-        (ex.sets || []).forEach((s) => {
-          const v =
-            progressMetric === "e1rm"
-              ? e1rm(s.weight, s.reps)
-              : Number(s.weight);
-          if (Number.isFinite(v)) best = Math.max(best, v);
+    workouts
+      .map((w) => ({ ...w, d: toDate(w.date) }))
+      .filter((w) => w.d && (!start || w.d >= start))
+      .sort((a, b) => a.d - b.d)
+      .forEach((w) => {
+        (w.exercises || []).forEach((ex) => {
+          const key = normKey(ex.id || ex.name);
+          let best = -Infinity;
+          (ex.sets || []).forEach((s) => {
+            const v =
+              progressMetric === "e1rm"
+                ? e1rm(s.weight, s.reps)
+                : Number(s.weight);
+            if (Number.isFinite(v)) best = Math.max(best, v);
+          });
+          if (best !== -Infinity) {
+            if (!series.has(key)) series.set(key, []);
+            series.get(key).push({ x: w.d, y: best });
+          }
         });
-
-        if (best !== -Infinity) {
-          if (!series.has(key)) series.set(key, []);
-          series.get(key).push({ x: w.d, y: best });
-        }
       });
-    });
 
     const compressed = new Map();
-    series.forEach((pts, k) =>
-      compressed.set(k, compressByDayMax(pts))
-    );
+    series.forEach((pts, k) => compressed.set(k, compressByDayMax(pts)));
 
-    const programmeCards = programmes.map((p) => ({
-      programmeKey: normKey(p.name || p.type),
-      displayName: p.name || p.type,
-      exercises: (p.exercises || []).map((ex) => {
+    const programmeCards = programmes.map((p) => {
+      const exercises = (p.exercises || []).map((ex) => {
         const key = normKey(ex.id || ex.name);
         const pts = compressed.get(key) || [];
-        const first = pts.length ? pts[0].y : null;
-        const last = pts.length ? pts[pts.length - 1].y : null;
+
+        const first = pts[0]?.y ?? null;
+        const latest = pts[pts.length - 1]?.y ?? null;
+        const previous = pts.length >= 2 ? pts[pts.length - 2].y : null;
+
         return {
           key,
           name: ex.name,
           points: pts,
-          deltaAll:
-            first != null && last != null ? last - first : null,
+          deltaAllTime:
+            first != null && latest != null ? latest - first : null,
+          deltaSinceLast:
+            previous != null && latest != null ? latest - previous : null,
         };
-      }),
-    }));
+      });
+
+      return {
+        programmeKey: normKey(p.type || p.name),
+        displayName: p.name || `Workout ${p.type}`,
+        exercises,
+      };
+    });
 
     return { programmeCards, compressed };
-  }, [reloadKey, progressMetric]);
+  }, [range, reloadKey, progressMetric]);
 
-  const selectedProgramme =
-    computed.programmeCards.find(
-      (p) => p.programmeKey === selectedProgrammeKey
-    ) || computed.programmeCards[0];
+  const selectedProgramme = computed.programmeCards.find(
+    (p) => p.programmeKey === selectedProgrammeKey
+  ) || computed.programmeCards[0];
 
   const selectedExercise =
-    selectedProgramme?.exercises.find(
-      (e) => e.key === selectedExerciseKey
-    ) || selectedProgramme?.exercises[0];
+    selectedProgramme?.exercises.find((e) => e.key === selectedExerciseKey) ||
+    selectedProgramme?.exercises[0];
 
-  const selectedPoints =
-    selectedExercise?.points?.map((p) => ({
-      date: shortMD(p.x),
-      weight: p.y,
-      fullDate: p.x.toISOString(),
-    })) || [];
+  const selectedPoints = (selectedExercise?.points || []).map((p) => ({
+    date: shortMD(p.x),
+    weight: p.y,
+    fullDate: p.x.toISOString(),
+  }));
 
   const count = selectedPoints.length;
+  const firstVal = count >= 1 ? selectedPoints[0].weight : null;
   const lastVal = count >= 1 ? selectedPoints[count - 1].weight : null;
   const prevVal = count >= 2 ? selectedPoints[count - 2].weight : null;
-  const firstVal = count >= 1 ? selectedPoints[0].weight : null;
 
-  const changeLast =
-    lastVal != null && prevVal != null ? lastVal - prevVal : null;
-  const changeAll =
-    lastVal != null && firstVal != null ? lastVal - firstVal : null;
+  const changeSinceLast =
+    prevVal != null && lastVal != null ? lastVal - prevVal : null;
+  const changeAllTime =
+    firstVal != null && lastVal != null ? lastVal - firstVal : null;
+
+  const ticksInfo = buildTicks10(selectedPoints.map((p) => p.weight));
 
   return (
     <AppHeader
       title="Progress"
       subtitle={`Metric: ${metricLabel} • Unit: ${weightUnit}`}
-      rightIconSrc="/icons/icon-overlay-white-32-v1.png"
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
     >
-      <div className="rounded-xl border border-border bg-card p-4">
-        {changeLast != null && (
-          <div className="text-right">
-            <div
-              className={cx(
-                "text-3xl font-bold",
-                changeLast >= 0 ? "text-success" : "text-destructive"
-              )}
-            >
-              {changeLast >= 0 ? "+" : ""}
-              {formatNumber(changeLast)} {weightUnit}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Since last
-            </div>
-            {changeAll != null && (
-              <div className="text-xs text-muted-foreground mt-1">
-                All time:{" "}
-                <span
-                  className={cx(
-                    "font-medium",
-                    changeAll >= 0 ? "text-success" : "text-destructive"
-                  )}
-                >
-                  {changeAll >= 0 ? "+" : ""}
-                  {formatNumber(changeAll)} {weightUnit}
-                </span>
+      <div className="space-y-4 p-4">
+        <div className="rounded-xl border bg-card p-4 flex justify-between">
+          {changeSinceLast != null && (
+            <div className="text-right">
+              <div
+                className={cx(
+                  "text-3xl font-bold",
+                  changeSinceLast >= 0 ? "text-success" : "text-destructive"
+                )}
+              >
+                {changeSinceLast >= 0 ? "+" : ""}
+                {formatNumber(changeSinceLast)} {weightUnit}
               </div>
-            )}
-          </div>
-        )}
+              <div className="text-sm text-muted-foreground">Since last</div>
+              {changeAllTime != null && (
+                <div className="text-xs text-muted-foreground">
+                  All time:{" "}
+                  <span
+                    className={cx(
+                      changeAllTime >= 0
+                        ? "text-success"
+                        : "text-destructive"
+                    )}
+                  >
+                    {changeAllTime >= 0 ? "+" : ""}
+                    {formatNumber(changeAllTime)} {weightUnit}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 h-[360px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={selectedPoints}>
+              <CartesianGrid strokeDasharray="3 6" />
+              <XAxis dataKey="date" />
+              <YAxis
+                ticks={ticksInfo.ticks}
+                domain={ticksInfo.domain}
+                label={{
+                  value: `Weight (${weightUnit})`,
+                  angle: -90,
+                  position: "insideLeft",
+                }}
+              />
+              <Tooltip content={<CustomTooltip unitLabel={weightUnit} />} />
+              <Line
+                type="monotone"
+                dataKey="weight"
+                stroke="hsl(var(--primary))"
+                strokeWidth={4}
+                dot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </AppHeader>
   );
