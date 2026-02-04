@@ -130,7 +130,7 @@ const dateText = dt ? longDate(dt) : label || "";
 
 const lines = [];
 if (p?.workoutType) lines.push(`Workout: ${p.workoutType}`);
-if (Number.isFinite(Number(p?.reps))) lines.push(Reps: ${Number(p.reps)});
+if (Number.isFinite(Number(p?.reps))) lines.push(Reps: ${`Number(p.reps)}`);
 if (p?.notes) lines.push(Notes: ${String(p.notes)});
 
 return (
