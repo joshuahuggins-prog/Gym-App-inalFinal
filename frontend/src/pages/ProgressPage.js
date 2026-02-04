@@ -321,7 +321,7 @@ const programmeCards = programmesRaw
 const type = String(p?.type || "").toUpperCase();
 const programmeKey = normKey(type || p?.name || p?.title || "programme");
 const displayName =
-p?.name || p?.title || p?.label || (type ? Workout ${type} : "Workout");
+p?.name || p?.title || p?.label || (type ? `Workout ${type}` : "Workout");
 
 const exercises = (p?.exercises || [])    
   .map((ex) => {    
