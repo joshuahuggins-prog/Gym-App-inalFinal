@@ -467,10 +467,10 @@ return ex?.name || selectedExerciseKey.replace(/_/g, " ");
 
 return (
 <AppHeader
-title="Progress"
-subtitle={Metric: ${metricLabel} • Unit: ${weightUnit}}
-rightIconSrc={${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png}
-actions={
+  title="Progress"
+  subtitle={`Metric: ${metricLabel} • Unit: ${weightUnit}`}
+  rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
+  actions={
 
 <div className="flex flex-col gap-2">  
 {/* Range buttons */}  
