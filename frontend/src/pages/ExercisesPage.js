@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Save, Video } from "lucide-react";
 
+import { WORKOUT_A, WORKOUT_B } from "../data/workoutData";
+
 import AppHeader from "../components/AppHeader";
 import ExerciseLibraryCard from "../components/ExerciseLibraryCard";
 
