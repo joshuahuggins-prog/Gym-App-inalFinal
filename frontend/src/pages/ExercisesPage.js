@@ -343,14 +343,161 @@ export default function ExercisesPage() {
           </DialogHeader>
 
           {editingExercise && (
-            <>
-              {/* form unchanged – omitted for brevity */}
-              <Button onClick={handleSaveExercise}>
-                <Save className="w-4 h-4 mr-2" />
-                Save Exercise
-              </Button>
-            </>
-          )}
+  <div className="space-y-4 py-4">
+    <div>
+      <label className="text-sm font-medium block mb-2">
+        Exercise Name *
+      </label>
+      <Input
+        value={editingExercise.name}
+        onChange={(e) =>
+          setEditingExercise({ ...editingExercise, name: e.target.value })
+        }
+      />
+    </div>
+
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="text-sm font-medium block mb-2">
+          Number of Sets
+        </label>
+        <Input
+          type="number"
+          min="1"
+          max={MAX_SETS}
+          value={setsDraft}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setSetsDraft(raw);
+            const n = Number(raw);
+            if (!Number.isFinite(n)) return;
+            setSetsAndSyncGoalReps(n);
+          }}
+          onBlur={() => {
+            if (!setsDraft) {
+              setSetsDraft(String(editingExercise.sets));
+            }
+          }}
+        />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium block mb-2">
+          Rep Scheme
+        </label>
+        <Select
+          value={editingExercise.repScheme}
+          onValueChange={(v) =>
+            setEditingExercise({ ...editingExercise, repScheme: v })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="RPT">RPT</SelectItem>
+            <SelectItem value="Straight Sets">Straight Sets</SelectItem>
+            <SelectItem value="Rest-Pause">Rest-Pause</SelectItem>
+            <SelectItem value="Kino Reps">Kino Reps</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    <div>
+      <label className="text-sm font-medium block mb-2">
+        Goal reps per set
+      </label>
+      <div className="grid grid-cols-4 gap-2">
+        {editingExercise.goalReps.map((rep, i) => (
+          <Input
+            key={i}
+            type="number"
+            min="1"
+            value={rep}
+            onChange={(e) => {
+              const reps = [...editingExercise.goalReps];
+              reps[i] = Number(e.target.value) || 8;
+              setEditingExercise({ ...editingExercise, goalReps: reps });
+            }}
+          />
+        ))}
+      </div>
+    </div>
+
+    <div>
+      <label className="text-sm font-medium block mb-2">
+        Rest Time (seconds)
+      </label>
+      <Input
+        type="number"
+        value={editingExercise.restTime}
+        onChange={(e) =>
+          setEditingExercise({
+            ...editingExercise,
+            restTime: Number(e.target.value) || 120,
+          })
+        }
+      />
+    </div>
+
+    <div>
+      <label className="text-sm font-medium block mb-2">
+        Form Check Video URL
+      </label>
+      <div className="flex gap-2">
+        <Input
+          value={editingExercise.videoUrl || ""}
+          onChange={(e) =>
+            setEditingExercise({
+              ...editingExercise,
+              videoUrl: e.target.value,
+            })
+          }
+        />
+        {editingExercise.videoUrl && (
+          <Button
+            variant="outline"
+            onClick={() =>
+              window.open(editingExercise.videoUrl, "_blank")
+            }
+          >
+            <Video className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+
+    <div>
+      <label className="text-sm font-medium block mb-2">
+        Notes
+      </label>
+      <Textarea
+        value={editingExercise.notes || ""}
+        onChange={(e) =>
+          setEditingExercise({
+            ...editingExercise,
+            notes: e.target.value,
+          })
+        }
+      />
+    </div>
+
+    <div className="flex gap-3 pt-4">
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={() => setShowEditDialog(false)}
+      >
+        Cancel
+      </Button>
+      <Button className="flex-1" onClick={handleSaveExercise}>
+        <Save className="w-4 h-4 mr-2" />
+        Save Exercise
+      </Button>
+    </div>
+  </div>
+)}
         </DialogContent>
       </Dialog>
     </AppHeader>
