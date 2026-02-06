@@ -53,7 +53,7 @@ export const WORKOUT_A = {
     {
       id: 'lateral_raises',
       name: 'Lateral Raises',
-      sets: 1,
+      sets: 4,
       repScheme: 'Rest-Pause',
       goalReps: [12,6,6,6],
       restTime: 15,
