@@ -262,6 +262,7 @@ export default function ExercisesPage() {
 
     // Save exercise details ONLY (no assignedTo here)
     const ok = saveExercise(exerciseData);
+    updateExerciseInAllProgrammes(exerciseData);
     if (!ok) {
       toast.error("Failed to save exercise");
       return;
