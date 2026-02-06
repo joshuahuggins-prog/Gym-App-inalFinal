@@ -772,26 +772,31 @@ export const getExercises = () => {
 function coerceExerciseForSave(exercise) {
   const ex = { ...(exercise || {}) };
   ex.id = normalizeId(ex.id);
+  if (!ex.id) return null;
 
-  // sets
+  // ----- sets -----
   const setsNum = Number(ex.sets);
   ex.sets = Number.isFinite(setsNum) && setsNum > 0 ? setsNum : 3;
 
-  // restTime
+  // ----- rest time -----
   const restNum = Number(ex.restTime);
   ex.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
-  // goalReps
-  const rawGoalReps = Array.isArray(ex.goalReps) ? ex.goalReps : [];
-  const cleanedGoalReps = rawGoalReps
-    .map((x) => (x === "" || x == null ? null : Number(x)))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  ex.goalReps = cleanedGoalReps.length ? cleanedGoalReps : [8, 10, 12];
+  // ----- goal reps (CRITICAL FIX) -----
+  const raw = Array.isArray(ex.goalReps) ? ex.goalReps : [];
+  const padded = [];
 
-  // hidden
+  for (let i = 0; i < ex.sets; i++) {
+    const v = Number(raw[i]);
+    padded.push(Number.isFinite(v) && v > 0 ? v : 8);
+  }
+
+  ex.goalReps = padded;
+
+  // ----- hidden -----
   if (typeof ex.hidden !== "boolean") ex.hidden = false;
 
-  // assignedTo
+  // ----- assignedTo -----
   if (!Array.isArray(ex.assignedTo)) ex.assignedTo = [];
 
   return ex;
