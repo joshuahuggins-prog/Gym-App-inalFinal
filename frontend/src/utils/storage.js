@@ -772,31 +772,51 @@ export const getExercises = () => {
 function coerceExerciseForSave(exercise) {
   const ex = { ...(exercise || {}) };
   ex.id = normalizeId(ex.id);
-  if (!ex.id) return null;
 
-  // ----- sets -----
+  // ---- sets ----
   const setsNum = Number(ex.sets);
   ex.sets = Number.isFinite(setsNum) && setsNum > 0 ? setsNum : 3;
 
-  // ----- rest time -----
+  // ---- restTime ----
   const restNum = Number(ex.restTime);
   ex.restTime = Number.isFinite(restNum) && restNum > 0 ? restNum : 120;
 
-  // ----- goal reps (CRITICAL FIX) -----
-  const raw = Array.isArray(ex.goalReps) ? ex.goalReps : [];
-  const padded = [];
+  // ---- goalReps (CRITICAL FIX) ----
+  const rawGoalReps = Array.isArray(ex.goalReps) ? ex.goalReps : [];
 
-  for (let i = 0; i < ex.sets; i++) {
-    const v = Number(raw[i]);
-    padded.push(Number.isFinite(v) && v > 0 ? v : 8);
+  let cleanedGoalReps = rawGoalReps
+    .map((x) => {
+      if (x === "" || x == null) return null;
+      const n = Number(x);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    })
+    .filter((n) => n !== null);
+
+  // Default if empty
+  if (cleanedGoalReps.length === 0) {
+    cleanedGoalReps = [8];
   }
 
-  ex.goalReps = padded;
+  // 🔧 PAD OR TRIM TO MATCH SET COUNT
+  if (cleanedGoalReps.length < ex.sets) {
+    const last = cleanedGoalReps[cleanedGoalReps.length - 1] ?? 8;
+    cleanedGoalReps = [
+      ...cleanedGoalReps,
+      ...Array.from(
+        { length: ex.sets - cleanedGoalReps.length },
+        () => last
+      ),
+    ];
+  } else if (cleanedGoalReps.length > ex.sets) {
+    cleanedGoalReps = cleanedGoalReps.slice(0, ex.sets);
+  }
 
-  // ----- hidden -----
+  ex.goalReps = cleanedGoalReps;
+
+  // ---- hidden ----
   if (typeof ex.hidden !== "boolean") ex.hidden = false;
 
-  // ----- assignedTo -----
+  // ---- assignedTo ----
   if (!Array.isArray(ex.assignedTo)) ex.assignedTo = [];
 
   return ex;
