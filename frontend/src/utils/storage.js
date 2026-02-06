@@ -180,7 +180,40 @@ export const initStorage = () => {
     console.error("Storage init failed", e);
   }
 };
+export const updateExerciseInAllProgrammes = (exercise) => {
+  const programmes = getProgrammes() || [];
+  let changed = false;
 
+  const updated = programmes.map((p) => {
+    if (!Array.isArray(p.exercises)) return p;
+
+    let touched = false;
+
+    const exercises = p.exercises.map((ex) => {
+      if (ex.id !== exercise.id) return ex;
+      touched = true;
+
+      return {
+        ...ex,
+        name: exercise.name,
+        sets: exercise.sets,
+        repScheme: exercise.repScheme,
+        goalReps: exercise.goalReps,
+        restTime: exercise.restTime,
+        notes: exercise.notes,
+      };
+    });
+
+    if (!touched) return p;
+    changed = true;
+
+    return { ...p, exercises };
+  });
+
+  if (changed) {
+    localStorage.setItem("programmes", JSON.stringify(updated));
+  }
+};
 // =====================
 // Workout Pattern Helpers
 // =====================
