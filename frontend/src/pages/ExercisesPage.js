@@ -354,7 +354,8 @@ export default function ExercisesPage() {
           ? exercise.assignedTo
           : [],
       });
-
+      updateExerciseInAllProgrammes(def);
+      
       if (!ok) {
         toast.error("Reset failed");
         closeResetUI();
