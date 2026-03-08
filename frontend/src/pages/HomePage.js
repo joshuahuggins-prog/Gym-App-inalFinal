@@ -38,6 +38,25 @@ import {
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
+// ==========================
+// Custom keypad state
+// ==========================
+const [keypadState, setKeypadState] = useState({
+  open: false,
+  exercise: null,
+  setIndex: null,
+  field: null
+});
+
+const closeCustomNumberPad = () => {
+  setKeypadState({
+    open: false,
+    exercise: null,
+    setIndex: null,
+    field: null
+  });
+};
+
 // ---------------------------
 // Helpers
 // ---------------------------
@@ -512,6 +531,7 @@ const HomePage = () => {
             onNotesChange={handleNotesChange}
             onRestTimer={(duration) => setRestTimer(duration)}
             onAddSet={handleAddSetToExercise}
+            openCustomNumberPad={openCustomNumberPad}
             onOpenVideo={(ex, url) => {
               if (!url) {
                 toast.message("No video saved", {
