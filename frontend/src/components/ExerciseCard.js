@@ -1,4 +1,3 @@
-Wait... do I need to update the exercise card
 // src/components/ExerciseCard.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
