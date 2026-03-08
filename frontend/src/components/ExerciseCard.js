@@ -363,11 +363,14 @@ const ExerciseCard = ({
                 <Input
                   type="text"
                   inputMode="none"
-                  value={s.weight}
+                  value={s.weight ?? ""}
                   placeholder={suggestedWeightForSet(i)}
-                  readOnly
+                  onFocus={(e) => {
+                    e.preventDefault();
+                    openCustomNumberPad?.(exercise, i, "weight");
+                  }}
                   onClick={(e) => {
-                    e.stopPropagation();
+                    e.preventDefault();
                     openCustomNumberPad?.(exercise, i, "weight");
                   }}
                 />
@@ -375,11 +378,14 @@ const ExerciseCard = ({
                 <Input
                   type="text"
                   inputMode="none"
-                  value={s.reps}
+                  value={s.reps ?? ""}
                   placeholder={`${goalReps[i] ?? 8}`}
-                  readOnly
+                  onFocus={(e) => {
+                    e.preventDefault();
+                    openCustomNumberPad?.(exercise, i, "reps");
+                  }}
                   onClick={(e) => {
-                    e.stopPropagation();
+                    e.preventDefault();
                     openCustomNumberPad?.(exercise, i, "reps");
                   }}
                 />
