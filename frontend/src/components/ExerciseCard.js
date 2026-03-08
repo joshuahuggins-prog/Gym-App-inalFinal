@@ -23,9 +23,6 @@ import {
 } from "../utils/storage";
 import { EXERCISE_ALTERNATIVES } from "../data/workoutData";
 
-// ==========================
-// Helpers
-// ==========================
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
 const normalizeGoalReps = (goalReps, count) => {
@@ -75,9 +72,94 @@ const fmt1 = (n) => {
   return round1(x).toFixed(1);
 };
 
-// ==========================
-// ExerciseCard Component
-// ==========================
+const bestSetFromHistory = (exerciseKey) => {
+  const workouts = getWorkouts?.() || [];
+  let bestW = -Infinity;
+  let bestR = -Infinity;
+  let bestDate = null;
+
+  workouts.forEach((w) => {
+    const wDate = w?.date || null;
+    (w?.exercises || []).forEach((ex) => {
+      const key = normKey(ex?.id || ex?.name);
+      if (!key || key !== exerciseKey) return;
+
+      (ex?.sets || []).forEach((s) => {
+        const ww = toNumOrNull(s?.weight);
+        const rr = toNumOrNull(s?.reps);
+        if (!Number.isFinite(ww) || !Number.isFinite(rr)) return;
+
+        if (ww > bestW || (ww === bestW && rr > bestR)) {
+          bestW = ww;
+          bestR = rr;
+          bestDate = wDate;
+        }
+      });
+    });
+  });
+
+  if (bestW === -Infinity) return null;
+  return { weight: bestW, reps: bestR, date: bestDate };
+};
+
+const getHistoryBests = (exerciseKey) => {
+  const workouts = getWorkouts?.() || [];
+
+  let maxWeighted = -Infinity;
+  let bestAssist = Infinity;
+
+  let maxCompleteWeighted = -Infinity;
+  let maxIncompleteWeighted = -Infinity;
+
+  let bestCompleteAssist = Infinity;
+  let bestIncompleteAssist = Infinity;
+
+  workouts.forEach((w) => {
+    (w?.exercises || []).forEach((ex) => {
+      const key = normKey(ex?.id || ex?.name);
+      if (!key || key !== exerciseKey) return;
+
+      (ex?.sets || []).forEach((s) => {
+        const ww = toNumOrNull(s?.weight);
+        if (!Number.isFinite(ww)) return;
+
+        const done = !!s?.completed;
+
+        if (ww >= 0) {
+          if (ww > maxWeighted) maxWeighted = ww;
+
+          if (done) {
+            if (ww > maxCompleteWeighted) maxCompleteWeighted = ww;
+          } else {
+            if (ww > maxIncompleteWeighted) maxIncompleteWeighted = ww;
+          }
+        } else {
+          if (ww < bestAssist) bestAssist = ww;
+
+          if (done) {
+            if (ww < bestCompleteAssist) bestCompleteAssist = ww;
+          } else {
+            if (ww < bestIncompleteAssist) bestIncompleteAssist = ww;
+          }
+        }
+      });
+    });
+  });
+
+  return {
+    maxWeighted: maxWeighted === -Infinity ? null : maxWeighted,
+    bestAssist: bestAssist === Infinity ? null : bestAssist,
+    maxCompleteWeighted:
+      maxCompleteWeighted === -Infinity ? null : maxCompleteWeighted,
+    maxIncompleteWeighted:
+      maxIncompleteWeighted === -Infinity ? null : maxIncompleteWeighted,
+    bestCompleteAssist:
+      bestCompleteAssist === Infinity ? null : bestCompleteAssist,
+    bestIncompleteAssist:
+      bestIncompleteAssist === Infinity ? null : bestIncompleteAssist,
+  };
+};
+
 const ExerciseCard = ({
   exercise,
   lastWorkoutData,
@@ -88,6 +170,7 @@ const ExerciseCard = ({
   onAddSet,
   onOpenVideo,
 }) => {
+
   const desiredSetsCount = useMemo(() => {
     const liveLen = Array.isArray(exercise?.setsData)
       ? exercise.setsData.length
@@ -108,6 +191,7 @@ const ExerciseCard = ({
   const [sets, setSets] = useState(() =>
     normalizeSets(exercise?.setsData, desiredSetsCount)
   );
+
   const [mode, setMode] = useState(() =>
     (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
       ? "assisted"
@@ -116,82 +200,18 @@ const ExerciseCard = ({
 
   const userChoseModeRef = useRef(false);
   const lastExerciseIdRef = useRef(exercise?.id || "");
+
   const exerciseKey = useMemo(
     () => normKey(exercise?.id || exercise?.name),
     [exercise?.id, exercise?.name]
   );
 
-  const pr = useMemo(() => {
-    const workouts = getWorkouts?.() || [];
-    let bestW = -Infinity;
-    let bestR = -Infinity;
-    let bestDate = null;
+  const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
 
-    workouts.forEach((w) => {
-      (w?.exercises || []).forEach((ex) => {
-        const key = normKey(ex?.id || ex?.name);
-        if (!key || key !== exerciseKey) return;
-        (ex?.sets || []).forEach((s) => {
-          const ww = toNumOrNull(s?.weight);
-          const rr = toNumOrNull(s?.reps);
-          if (!Number.isFinite(ww) || !Number.isFinite(rr)) return;
-          if (ww > bestW || (ww === bestW && rr > bestR)) {
-            bestW = ww;
-            bestR = rr;
-            bestDate = w?.date || null;
-          }
-        });
-      });
-    });
-
-    if (bestW === -Infinity) return null;
-    return { weight: bestW, reps: bestR, date: bestDate };
-  }, [exerciseKey]);
-
-  const historyBests = useMemo(() => {
-    const workouts = getWorkouts?.() || [];
-    let maxWeighted = -Infinity;
-    let bestAssist = Infinity;
-    let maxCompleteWeighted = -Infinity;
-    let maxIncompleteWeighted = -Infinity;
-    let bestCompleteAssist = Infinity;
-    let bestIncompleteAssist = Infinity;
-
-    workouts.forEach((w) => {
-      (w?.exercises || []).forEach((ex) => {
-        const key = normKey(ex?.id || ex?.name);
-        if (!key || key !== exerciseKey) return;
-
-        (ex?.sets || []).forEach((s) => {
-          const ww = toNumOrNull(s?.weight);
-          if (!Number.isFinite(ww)) return;
-          const done = !!s?.completed;
-          if (ww >= 0) {
-            if (ww > maxWeighted) maxWeighted = ww;
-            if (done && ww > maxCompleteWeighted) maxCompleteWeighted = ww;
-            if (!done && ww > maxIncompleteWeighted) maxIncompleteWeighted = ww;
-          } else {
-            if (ww < bestAssist) bestAssist = ww;
-            if (done && ww < bestCompleteAssist) bestCompleteAssist = ww;
-            if (!done && ww < bestIncompleteAssist) bestIncompleteAssist = ww;
-          }
-        });
-      });
-    });
-
-    return {
-      maxWeighted: maxWeighted === -Infinity ? null : maxWeighted,
-      bestAssist: bestAssist === Infinity ? null : bestAssist,
-      maxCompleteWeighted:
-        maxCompleteWeighted === -Infinity ? null : maxCompleteWeighted,
-      maxIncompleteWeighted:
-        maxIncompleteWeighted === -Infinity ? null : maxIncompleteWeighted,
-      bestCompleteAssist:
-        bestCompleteAssist === Infinity ? null : bestCompleteAssist,
-      bestIncompleteAssist:
-        bestIncompleteAssist === Infinity ? null : bestIncompleteAssist,
-    };
-  }, [exerciseKey]);
+  const historyBests = useMemo(
+    () => getHistoryBests(exerciseKey),
+    [exerciseKey]
+  );
 
   const bestFromCurrentSets = useMemo(() => {
     let best = -Infinity;
@@ -206,6 +226,7 @@ const ExerciseCard = ({
   useEffect(() => {
     setSets(normalizeSets(exercise?.setsData, desiredSetsCount));
     setNotes(exercise?.userNotes || "");
+
     const links = getVideoLinks();
     setVideoLink(links?.[exercise?.id] || "");
   }, [exercise?.setsData, exercise?.userNotes, exercise?.id, desiredSetsCount]);
@@ -215,6 +236,7 @@ const ExerciseCard = ({
     if (currentId !== lastExerciseIdRef.current) {
       lastExerciseIdRef.current = currentId;
       userChoseModeRef.current = false;
+
       setMode(
         (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
           ? "assisted"
@@ -235,8 +257,17 @@ const ExerciseCard = ({
     );
   };
 
+  const handleHeaderToggle = (e) => {
+    const interactive = e.target.closest(
+      "button, a, input, textarea, select, [data-no-toggle]"
+    );
+    if (interactive) return;
+    setExpanded((v) => !v);
+  };
+
   const toggleMode = (nextMode) => {
     if (nextMode === mode) return;
+
     userChoseModeRef.current = true;
     setMode(nextMode);
 
@@ -244,9 +275,11 @@ const ExerciseCard = ({
       if (s.weight === "") return s;
       const ww = toNumOrNull(s.weight);
       if (!Number.isFinite(ww)) return s;
+
       const v = Math.abs(ww);
       return { ...s, weight: nextMode === "assisted" ? -v : v };
     });
+
     pushUp(converted);
   };
 
@@ -254,6 +287,7 @@ const ExerciseCard = ({
     () => sets.filter((s) => s.completed).length,
     [sets]
   );
+
   const isExerciseComplete = useMemo(
     () => sets.length > 0 && sets.every((s) => !!s.completed),
     [sets]
@@ -261,11 +295,17 @@ const ExerciseCard = ({
 
   const topLineLabel = useMemo(() => {
     const parts = [];
-    if (Number.isFinite(historyBests?.maxWeighted))
+
+    if (Number.isFinite(historyBests?.maxWeighted)) {
       parts.push(`Max: ${fmt1(historyBests.maxWeighted)}`);
-    if (Number.isFinite(historyBests?.bestAssist))
+    }
+
+    if (Number.isFinite(historyBests?.bestAssist)) {
       parts.push(`Best assist: ${fmt1(historyBests.bestAssist)}`);
-    return parts.length ? parts.join(" • ") : null;
+    }
+
+    if (parts.length === 0) return null;
+    return parts.join(" • ");
   }, [historyBests]);
 
   const completeIncompleteLabel = useMemo(() => {
@@ -273,284 +313,287 @@ const ExerciseCard = ({
       const a = Number.isFinite(historyBests?.maxCompleteWeighted)
         ? `Max complete: ${fmt1(historyBests.maxCompleteWeighted)}`
         : null;
+
       const b = Number.isFinite(historyBests?.maxIncompleteWeighted)
         ? `Max incomplete: ${fmt1(historyBests.maxIncompleteWeighted)}`
         : null;
+
       if (!a && !b) return null;
       return [a, b].filter(Boolean).join(" • ");
     }
+
     const a = Number.isFinite(historyBests?.bestCompleteAssist)
       ? `Assist complete: ${fmt1(historyBests.bestCompleteAssist)}`
       : null;
+
     const b = Number.isFinite(historyBests?.bestIncompleteAssist)
       ? `Assist incomplete: ${fmt1(historyBests.bestIncompleteAssist)}`
       : null;
+
     if (!a && !b) return null;
     return [a, b].filter(Boolean).join(" • ");
   }, [historyBests, mode]);
 
-  const hasVideo = !!videoLink;
+  const showExerciseInfoNotes =
+    exercise?.notes && String(exercise.notes).trim().length > 0;
 
-// ==========================
-// Render
-// ==========================
-return (
-  <div
-    className={[
-      "relative overflow-hidden rounded-xl border",
-      isExerciseComplete
-        ? "bg-primary/10 border-primary/40"
-        : "bg-card border-border",
-    ].join(" ")}
-  >
-    {isExerciseComplete && (
-      <div className="pointer-events-none absolute right-4 top-4 opacity-20">
-        <Check className="w-16 h-16" />
-      </div>
-    )}
+  const showAlternativesToast = () => {
+    const id = exercise?.id;
+    const alts = id ? EXERCISE_ALTERNATIVES?.[id] : null;
 
-    {/* Header */}
-    <div
-      role="button"
-      tabIndex={0}
-      className="w-full text-left p-4 cursor-pointer select-none"
-      onClick={(e) => {
-        const interactive = e.target.closest(
-          "button, a, input, textarea, select, [data-no-toggle]"
-        );
-        if (interactive) return;
-        setExpanded((v) => !v);
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-bold truncate text-foreground">
-            {exercise?.name || "Exercise"}
-          </h3>
+    if (!alts || !alts.length) {
+      toast.message("Alternatives", {
+        description: "No alternatives saved for this exercise.",
+      });
+      return;
+    }
 
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              {completedCount}/{sets.length} sets
-            </span>
-
-            {exercise?.repScheme && (
-              <Badge variant="secondary" className="text-[10px]">
-                {exercise.repScheme}
-              </Badge>
-            )}
-
-            {pr?.weight != null && pr?.reps != null && (
-              <span className="text-foreground font-semibold">
-                PR: {fmt1(pr.weight)} × {pr.reps}
-              </span>
-            )}
-
-            {isExerciseComplete && (
-              <Badge className="bg-primary/20 text-primary border-primary/40">
-                Completed
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Video + expand */}
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={!hasVideo}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!hasVideo) return;
-              onOpenVideo?.(exercise, videoLink);
-            }}
-            title={hasVideo ? "Watch exercise video" : "No video link saved"}
-            data-no-toggle
-            className={hasVideo ? "hover:bg-muted/40" : "text-muted-foreground"}
-          >
-            <Video
-              className={
-                hasVideo
-                  ? "w-4 h-4 text-[hsl(var(--accent-strong))]"
-                  : "w-4 h-4"
-              }
-            />
-          </Button>
-
-          {expanded ? (
-            <ChevronUp className="w-5 h-5" />
-          ) : (
-            <ChevronDown className="w-5 h-5" />
-          )}
-        </div>
-      </div>
-    </div>
-
-    {/* Body */}
-    {expanded && (
-      <div className="px-4 pb-4 space-y-3">
-        {/* History labels */}
-        {topLineLabel && (
-          <div className="text-xs text-muted-foreground">
-            <span className="text-foreground font-semibold">
-              {topLineLabel}
-            </span>
-          </div>
-        )}
-
-        {completeIncompleteLabel && (
-          <div className="text-xs text-muted-foreground">
-            {completeIncompleteLabel}
-          </div>
-        )}
-
-        {/* Sets */}
-        <div className="space-y-2">
-          {sets.map((s, i) => (
-            <div
-              key={`${i}-${s.completed ? "c" : "n"}`}
-              className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
-            >
-              <span className="text-xs text-muted-foreground">
-                Set {i + 1}
-              </span>
-
-              {/* Weight */}
-              <Input
-                type="number"
-                inputMode="decimal"
-                step="0.1"
-                value={s.weight}
-                placeholder={suggestedWeightForSet(i)}
-                readOnly
-                onFocus={(e) => e.target.blur()}
-                onClick={() =>
-                  openCustomNumberPad(exercise, i, "weight")
-                }
-              />
-
-              {/* Reps */}
-              <Input
-                type="number"
-                value={s.reps}
-                placeholder={`${goalReps[i] ?? 8}`}
-                readOnly
-                onFocus={(e) => e.target.blur()}
-                onClick={() =>
-                  openCustomNumberPad(exercise, i, "reps")
-                }
-              />
-
-              {/* Complete toggle */}
-              <Button
-                type="button"
-                size="sm"
-                variant={s.completed ? "default" : "outline"}
-                className={
-                  s.completed
-                    ? "shadow-sm"
-                    : "bg-background hover:bg-muted/40"
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-
-                  const next = [...sets];
-                  next[i] = { ...s, completed: !s.completed };
-
-                  pushUp(next);
-                  onSetComplete?.(exercise, next[i], false);
-                }}
-              >
-                ✓
-              </Button>
+    toast.message("Alternatives", {
+      description: (
+        <div className="mt-1 space-y-1">
+          {alts.slice(0, 8).map((a, i) => (
+            <div key={i} className="text-sm">
+              • {a}
             </div>
           ))}
         </div>
+      ),
+    });
+  };
 
-        {/* Notes */}
-        <Textarea
-          value={notes}
-          placeholder="Workout notes…"
-          className="min-h-[70px]"
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={() => onNotesChange?.(exercise, notes)}
-        />
+  const handleRemoveSet = () => {
+    if (sets.length <= 1) {
+      toast.message("Can't remove", { description: "You need at least 1 set." });
+      return;
+    }
+    const next = sets.slice(0, -1);
+    pushUp(next);
+    toast.success("Set removed", { duration: 1200 });
+  };
 
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-2">
-          {onRestTimer && (
+  const hasVideo = !!videoLink;
+
+  const suggestedWeightForSet = (i) => {
+    const s = sets?.[i]?.weight;
+    if (s !== "" && s !== null && s !== undefined) return "";
+    return mode === "assisted" ? "Assist" : "Weight";
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border bg-card border-border">
+
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full text-left p-4 cursor-pointer select-none"
+        onClick={handleHeaderToggle}
+      >
+
+        <div className="flex items-start justify-between gap-3">
+
+          <div className="flex-1 min-w-0">
+
+            <h3 className="font-bold truncate text-foreground">
+              {exercise?.name || "Exercise"}
+            </h3>
+
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>
+                {completedCount}/{sets.length} sets
+              </span>
+
+              {exercise?.repScheme && (
+                <Badge variant="secondary" className="text-[10px]">
+                  {exercise.repScheme}
+                </Badge>
+              )}
+
+              {pr?.weight != null && pr?.reps != null && (
+                <span className="text-foreground font-semibold">
+                  PR: {fmt1(pr.weight)} × {pr.reps}
+                </span>
+              )}
+            </div>
+
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!hasVideo}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!hasVideo) return;
+                onOpenVideo?.(exercise, videoLink);
+              }}
+            >
+              <Video className="w-4 h-4" />
+            </Button>
+
+            {expanded ? (
+              <ChevronUp className="w-5 h-5" />
+            ) : (
+              <ChevronDown className="w-5 h-5" />
+            )}
+
+          </div>
+        </div>
+
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3">
+
+          {topLineLabel && (
+            <div className="text-xs text-muted-foreground">
+              <span className="text-foreground font-semibold">
+                {topLineLabel}
+              </span>
+            </div>
+          )}
+
+          {completeIncompleteLabel && (
+            <div className="text-xs text-muted-foreground">
+              {completeIncompleteLabel}
+            </div>
+          )}
+
+          <div className="space-y-2">
+
+            {sets.map((s, i) => (
+              <div
+                key={`${i}-${s.completed ? "c" : "n"}`}
+                className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
+              >
+
+                <span className="text-xs text-muted-foreground">
+                  Set {i + 1}
+                </span>
+
+                <Input
+                  type="number"
+                  value={s.weight}
+                  placeholder={suggestedWeightForSet(i)}
+                  readOnly
+                  onFocus={(e) => e.target.blur()}
+                />
+
+                <Input
+                  type="number"
+                  value={s.reps}
+                  placeholder={`${goalReps[i] ?? 8}`}
+                  readOnly
+                  onFocus={(e) => e.target.blur()}
+                />
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={s.completed ? "default" : "outline"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const next = [...sets];
+                    next[i] = { ...s, completed: !s.completed };
+                    pushUp(next);
+                    onSetComplete?.(exercise, next[i], false);
+                  }}
+                >
+                  ✓
+                </Button>
+
+              </div>
+            ))}
+
+          </div>
+
+          <Textarea
+            value={notes}
+            placeholder="Workout notes…"
+            className="min-h-[70px]"
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={() => onNotesChange?.(exercise, notes)}
+          />
+
+          <div className="flex flex-wrap gap-2">
+
+            {onRestTimer && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestTimer?.(exercise?.restTime ?? 120);
+                }}
+              >
+                <Timer className="w-4 h-4 mr-1" />
+                Rest
+              </Button>
+            )}
+
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                onRestTimer?.(exercise?.restTime ?? 120);
+                onAddSet?.(exercise);
               }}
             >
-              <Timer className="w-4 h-4 mr-1" />
-              Rest
+              <Plus className="w-4 h-4 mr-1" />
+              Set
             </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={sets.length <= 1}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemoveSet();
+              }}
+            >
+              <Minus className="w-4 h-4 mr-1" />
+              Set
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                showAlternativesToast();
+              }}
+            >
+              <Shuffle className="w-4 h-4 mr-1" />
+              Alternatives
+            </Button>
+
+          </div>
+
+          {lastWorkoutData && (
+            <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
+              <div className="font-semibold text-foreground mb-1">
+                Last time
+              </div>
+              {(lastWorkoutData.sets || []).map((s2, idx) => (
+                <div key={idx}>
+                  Set {idx + 1}: {s2.weight} × {s2.reps}
+                </div>
+              ))}
+            </div>
           )}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddSet?.(exercise);
-            }}
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Set
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={sets.length <= 1}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRemoveSet();
-            }}
-          >
-            <Minus className="w-4 h-4 mr-1" />
-            Set
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              showAlternativesToast();
-            }}
-          >
-            <Shuffle className="w-4 h-4 mr-1" />
-            Alternatives
-          </Button>
         </div>
+      )}
 
-        {/* Last workout */}
-        {lastWorkoutData && (
-          <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-            <div className="font-semibold text-foreground mb-1">
-              Last time
-            </div>
+    </div>
+  );
+};
 
-            {(lastWorkoutData.sets || []).map((s2, idx) => (
-              <div key={idx}>
-                Set {idx + 1}: {s2.weight} × {s2.reps}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    )}
-  </div>
-);
 export default ExerciseCard;
