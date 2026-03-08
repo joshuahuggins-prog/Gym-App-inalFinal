@@ -502,4 +502,4 @@ export default function ExercisesPage() {
       </Dialog>
     </AppHeader>
   );
-}
+        }
