@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 
 const numberKeys = [
   "1","2","3",
@@ -11,7 +11,9 @@ const quickWeights = ["+2.5","+5","+10"];
 
 const GymNumberPad = ({ value, setValue }) => {
 
-  const [mode, setMode] = useState("number"); // number | text
+  const [mode, setMode] = useState("number");
+  const holdTimer = useRef(null);
+  const holdInterval = useRef(null);
 
   const press = (k) => {
     if (k === "del") {
@@ -28,6 +30,26 @@ const GymNumberPad = ({ value, setValue }) => {
     setValue((num + add).toString());
   };
 
+  const startHold = (amount) => {
+
+    addWeight(amount);
+
+    holdTimer.current = setTimeout(() => {
+
+      holdInterval.current = setInterval(() => {
+        addWeight(amount);
+      }, 150);
+
+    }, 400);
+  };
+
+  const stopHold = () => {
+
+    clearTimeout(holdTimer.current);
+    clearInterval(holdInterval.current);
+
+  };
+
   if (mode === "text") {
     return (
       <div className="bg-card border-t border-border p-3 space-y-2">
@@ -36,12 +58,12 @@ const GymNumberPad = ({ value, setValue }) => {
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="w-full p-3 rounded-lg border border-border bg-background text-foreground"
+          className="w-full p-3 rounded-lg border border-border bg-background text-foreground text-lg"
         />
 
         <button
           onClick={() => setMode("number")}
-          className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-semibold"
+          className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-semibold active:scale-95"
         >
           123 Number Pad
         </button>
@@ -53,26 +75,30 @@ const GymNumberPad = ({ value, setValue }) => {
   return (
     <div className="bg-card border-t border-border p-3 space-y-3">
 
-      {/* quick weights */}
+      {/* Quick weight buttons */}
       <div className="grid grid-cols-3 gap-2">
         {quickWeights.map((w) => (
           <button
             key={w}
-            onClick={() => addWeight(w)}
-            className="py-3 rounded-lg bg-primary/10 text-primary font-semibold active:scale-95"
+            onMouseDown={() => startHold(w)}
+            onMouseUp={stopHold}
+            onMouseLeave={stopHold}
+            onTouchStart={() => startHold(w)}
+            onTouchEnd={stopHold}
+            className="py-3 rounded-lg bg-primary/10 text-primary font-semibold active:scale-95 transition"
           >
             {w}
           </button>
         ))}
       </div>
 
-      {/* keypad */}
+      {/* Number keypad */}
       <div className="grid grid-cols-3 gap-2">
         {numberKeys.map((k) => (
           <button
             key={k}
             onClick={() => press(k)}
-            className={`py-4 rounded-lg font-semibold text-lg active:scale-95
+            className={`py-4 rounded-lg font-semibold text-lg active:scale-95 transition
               ${
                 k === "del"
                   ? "bg-destructive text-destructive-foreground"
@@ -85,10 +111,10 @@ const GymNumberPad = ({ value, setValue }) => {
         ))}
       </div>
 
-      {/* keyboard toggle */}
+      {/* Keyboard mode toggle */}
       <button
         onClick={() => setMode("text")}
-        className="w-full py-3 rounded-lg bg-secondary text-secondary-foreground font-semibold"
+        className="w-full py-3 rounded-lg bg-secondary text-secondary-foreground font-semibold active:scale-95"
       >
         ABC Text Keyboard
       </button>
