@@ -1,5 +1,5 @@
 // src/components/ExerciseCard.js
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -8,19 +8,13 @@ import {
   Shuffle,
   Plus,
   Minus,
-  Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
-import {
-  getVideoLinks,
-  getWorkouts,
-  getProgressionSettings,
-  getSettings,
-} from "../utils/storage";
+import { getVideoLinks, getWorkouts } from "../utils/storage";
 import { EXERCISE_ALTERNATIVES } from "../data/workoutData";
 
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
@@ -47,11 +41,7 @@ const normalizeSets = (setsData, count) => {
 };
 
 const normKey = (nameOrId) =>
-  (nameOrId || "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "_");
+  (nameOrId || "").toString().trim().toLowerCase().replace(/\s+/g, "_");
 
 const toNumOrNull = (v) => {
   if (v === "" || v == null) return null;
@@ -79,7 +69,6 @@ const bestSetFromHistory = (exerciseKey) => {
   let bestDate = null;
 
   workouts.forEach((w) => {
-    const wDate = w?.date || null;
     (w?.exercises || []).forEach((ex) => {
       const key = normKey(ex?.id || ex?.name);
       if (!key || key !== exerciseKey) return;
@@ -92,7 +81,7 @@ const bestSetFromHistory = (exerciseKey) => {
         if (ww > bestW || (ww === bestW && rr > bestR)) {
           bestW = ww;
           bestR = rr;
-          bestDate = wDate;
+          bestDate = w.date;
         }
       });
     });
@@ -100,62 +89,6 @@ const bestSetFromHistory = (exerciseKey) => {
 
   if (bestW === -Infinity) return null;
   return { weight: bestW, reps: bestR, date: bestDate };
-};
-
-const getHistoryBests = (exerciseKey) => {
-  const workouts = getWorkouts?.() || [];
-
-  let maxWeighted = -Infinity;
-  let bestAssist = Infinity;
-  let maxCompleteWeighted = -Infinity;
-  let maxIncompleteWeighted = -Infinity;
-  let bestCompleteAssist = Infinity;
-  let bestIncompleteAssist = Infinity;
-
-  workouts.forEach((w) => {
-    (w?.exercises || []).forEach((ex) => {
-      const key = normKey(ex?.id || ex?.name);
-      if (!key || key !== exerciseKey) return;
-
-      (ex?.sets || []).forEach((s) => {
-        const ww = toNumOrNull(s?.weight);
-        if (!Number.isFinite(ww)) return;
-
-        const done = !!s?.completed;
-
-        if (ww >= 0) {
-          if (ww > maxWeighted) maxWeighted = ww;
-
-          if (done) {
-            if (ww > maxCompleteWeighted) maxCompleteWeighted = ww;
-          } else {
-            if (ww > maxIncompleteWeighted) maxIncompleteWeighted = ww;
-          }
-        } else {
-          if (ww < bestAssist) bestAssist = ww;
-
-          if (done) {
-            if (ww < bestCompleteAssist) bestCompleteAssist = ww;
-          } else {
-            if (ww < bestIncompleteAssist) bestIncompleteAssist = ww;
-          }
-        }
-      });
-    });
-  });
-
-  return {
-    maxWeighted: maxWeighted === -Infinity ? null : maxWeighted,
-    bestAssist: bestAssist === Infinity ? null : bestAssist,
-    maxCompleteWeighted:
-      maxCompleteWeighted === -Infinity ? null : maxCompleteWeighted,
-    maxIncompleteWeighted:
-      maxIncompleteWeighted === -Infinity ? null : maxIncompleteWeighted,
-    bestCompleteAssist:
-      bestCompleteAssist === Infinity ? null : bestCompleteAssist,
-    bestIncompleteAssist:
-      bestIncompleteAssist === Infinity ? null : bestIncompleteAssist,
-  };
 };
 
 const ExerciseCard = ({
@@ -167,9 +100,8 @@ const ExerciseCard = ({
   onRestTimer,
   onAddSet,
   onOpenVideo,
-  openCustomNumberPad
+  openCustomNumberPad,
 }) => {
-
   const desiredSetsCount = useMemo(() => {
     const liveLen = Array.isArray(exercise?.setsData)
       ? exercise.setsData.length
@@ -191,19 +123,12 @@ const ExerciseCard = ({
     normalizeSets(exercise?.setsData, desiredSetsCount)
   );
 
-  const [mode, setMode] = useState(() =>
-    (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
-      ? "assisted"
-      : "weighted"
-  );
-
   const exerciseKey = useMemo(
     () => normKey(exercise?.id || exercise?.name),
     [exercise?.id, exercise?.name]
   );
 
   const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
-  const historyBests = useMemo(() => getHistoryBests(exerciseKey), [exerciseKey]);
 
   const pushUp = (nextSets) => {
     setSets(nextSets);
@@ -230,11 +155,6 @@ const ExerciseCard = ({
     [sets]
   );
 
-  const isExerciseComplete = useMemo(
-    () => sets.length > 0 && sets.every((s) => !!s.completed),
-    [sets]
-  );
-
   const hasVideo = !!videoLink;
 
   useEffect(() => {
@@ -242,84 +162,35 @@ const ExerciseCard = ({
     setVideoLink(links?.[exercise?.id] || "");
   }, [exercise?.id]);
 
-  const showAlternativesToast = () => {
-    const id = exercise?.id;
-    const alts = id ? EXERCISE_ALTERNATIVES?.[id] : null;
-
-    if (!alts || !alts.length) {
-      toast.message("Alternatives", {
-        description: "No alternatives saved for this exercise.",
-      });
-      return;
-    }
-
-    toast.message("Alternatives", {
-      description: (
-        <div className="mt-1 space-y-1">
-          {alts.slice(0, 8).map((a, i) => (
-            <div key={i} className="text-sm">
-              • {a}
-            </div>
-          ))}
-        </div>
-      ),
-    });
-  };
-
-  const handleRemoveSet = () => {
-    if (sets.length <= 1) {
-      toast.message("Can't remove", { description: "You need at least 1 set." });
-      return;
-    }
-    const next = sets.slice(0, -1);
-    pushUp(next);
-    toast.success("Set removed", { duration: 1200 });
-  };
-
-  const suggestedWeightForSet = (setIndex) => {
-    const ww = sets?.[setIndex]?.weight;
-    if (ww !== "" && ww !== null && ww !== undefined) return "";
-    return mode === "assisted" ? "Assist" : "Weight";
-  };
-
   return (
     <div className="relative overflow-hidden rounded-xl border bg-card border-border">
-
+      {/* Header */}
       <div
         role="button"
         tabIndex={0}
         className="w-full text-left p-4 cursor-pointer select-none"
         onClick={handleHeaderToggle}
       >
-
         <div className="flex items-start justify-between gap-3">
-
           <div className="flex-1 min-w-0">
-
             <h3 className="font-bold truncate text-foreground">
               {exercise?.name || "Exercise"}
             </h3>
-
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>{completedCount}/{sets.length} sets</span>
-
               {exercise?.repScheme && (
                 <Badge variant="secondary" className="text-[10px]">
                   {exercise.repScheme}
                 </Badge>
               )}
-
               {pr?.weight != null && pr?.reps != null && (
                 <span className="text-foreground font-semibold">
                   PR: {fmt1(pr.weight)} × {pr.reps}
                 </span>
               )}
             </div>
-
           </div>
-
           <div className="flex items-center gap-1 shrink-0">
-
             <Button
               type="button"
               variant="ghost"
@@ -333,38 +204,28 @@ const ExerciseCard = ({
             >
               <Video className="w-4 h-4" />
             </Button>
-
-            {expanded ? (
-              <ChevronUp className="w-5 h-5" />
-            ) : (
-              <ChevronDown className="w-5 h-5" />
-            )}
-
+            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
         </div>
-
       </div>
 
+      {/* Expanded Content */}
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
-
           <div className="space-y-2">
-
             {sets.map((s, i) => (
               <div
                 key={`${i}-${s.completed ? "c" : "n"}`}
                 className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
               >
+                <span className="text-xs text-muted-foreground">Set {i + 1}</span>
 
-                <span className="text-xs text-muted-foreground">
-                  Set {i + 1}
-                </span>
-
+                {/* Weight */}
                 <Input
                   type="text"
                   inputMode="none"
                   value={s.weight ?? ""}
-                  placeholder={suggestedWeightForSet(i)}
+                  placeholder="Weight"
                   onFocus={(e) => {
                     e.preventDefault();
                     openCustomNumberPad?.(exercise, i, "weight");
@@ -375,6 +236,7 @@ const ExerciseCard = ({
                   }}
                 />
 
+                {/* Reps */}
                 <Input
                   type="text"
                   inputMode="none"
@@ -390,6 +252,7 @@ const ExerciseCard = ({
                   }}
                 />
 
+                {/* Complete Button */}
                 <Button
                   type="button"
                   size="sm"
@@ -404,10 +267,8 @@ const ExerciseCard = ({
                 >
                   ✓
                 </Button>
-
               </div>
             ))}
-
           </div>
 
           <Textarea
@@ -418,8 +279,8 @@ const ExerciseCard = ({
             onBlur={() => onNotesChange?.(exercise, notes)}
           />
 
+          {/* Buttons row */}
           <div className="flex flex-wrap gap-2">
-
             {onRestTimer && (
               <Button
                 type="button"
@@ -455,7 +316,9 @@ const ExerciseCard = ({
               disabled={sets.length <= 1}
               onClick={(e) => {
                 e.stopPropagation();
-                handleRemoveSet();
+                const next = sets.slice(0, -1);
+                pushUp(next);
+                toast.success("Set removed", { duration: 1200 });
               }}
             >
               <Minus className="w-4 h-4 mr-1" />
@@ -468,20 +331,34 @@ const ExerciseCard = ({
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                showAlternativesToast();
+                const alts = EXERCISE_ALTERNATIVES?.[exercise?.id] || [];
+                if (!alts.length) {
+                  toast.message("Alternatives", {
+                    description: "No alternatives saved for this exercise.",
+                  });
+                  return;
+                }
+                toast.message("Alternatives", {
+                  description: (
+                    <div className="mt-1 space-y-1">
+                      {alts.slice(0, 8).map((a, idx) => (
+                        <div key={idx} className="text-sm">
+                          • {a}
+                        </div>
+                      ))}
+                    </div>
+                  ),
+                });
               }}
             >
               <Shuffle className="w-4 h-4 mr-1" />
               Alternatives
             </Button>
-
           </div>
 
           {lastWorkoutData && (
             <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-              <div className="font-semibold text-foreground mb-1">
-                Last time
-              </div>
+              <div className="font-semibold text-foreground mb-1">Last time</div>
               {(lastWorkoutData.sets || []).map((s2, idx) => (
                 <div key={idx}>
                   Set {idx + 1}: {s2.weight} × {s2.reps}
@@ -489,10 +366,8 @@ const ExerciseCard = ({
               ))}
             </div>
           )}
-
         </div>
       )}
-
     </div>
   );
 };
