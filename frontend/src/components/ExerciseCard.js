@@ -500,4 +500,266 @@ const ExerciseCard = ({
   );
 };
 
+// ==========================
+// Render
+// ==========================
+return (
+  <div
+    className={[
+      "relative overflow-hidden rounded-xl border",
+      isExerciseComplete
+        ? "bg-primary/10 border-primary/40"
+        : "bg-card border-border",
+    ].join(" ")}
+  >
+    {isExerciseComplete && (
+      <div className="pointer-events-none absolute right-4 top-4 opacity-20">
+        <Check className="w-16 h-16" />
+      </div>
+    )}
+
+    {/* Header */}
+    <div
+      role="button"
+      tabIndex={0}
+      className="w-full text-left p-4 cursor-pointer select-none"
+      onClick={(e) => {
+        const interactive = e.target.closest(
+          "button, a, input, textarea, select, [data-no-toggle]"
+        );
+        if (interactive) return;
+        setExpanded((v) => !v);
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold truncate text-foreground">
+            {exercise?.name || "Exercise"}
+          </h3>
+
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {completedCount}/{sets.length} sets
+            </span>
+
+            {exercise?.repScheme && (
+              <Badge variant="secondary" className="text-[10px]">
+                {exercise.repScheme}
+              </Badge>
+            )}
+
+            {pr?.weight != null && pr?.reps != null && (
+              <span className="text-foreground font-semibold">
+                PR: {fmt1(pr.weight)} × {pr.reps}
+              </span>
+            )}
+
+            {isExerciseComplete && (
+              <Badge className="bg-primary/20 text-primary border-primary/40">
+                Completed
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Video + expand */}
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!hasVideo}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!hasVideo) return;
+              onOpenVideo?.(exercise, videoLink);
+            }}
+            title={hasVideo ? "Watch exercise video" : "No video link saved"}
+            data-no-toggle
+            className={hasVideo ? "hover:bg-muted/40" : "text-muted-foreground"}
+          >
+            <Video
+              className={
+                hasVideo
+                  ? "w-4 h-4 text-[hsl(var(--accent-strong))]"
+                  : "w-4 h-4"
+              }
+            />
+          </Button>
+
+          {expanded ? (
+            <ChevronUp className="w-5 h-5" />
+          ) : (
+            <ChevronDown className="w-5 h-5" />
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Body */}
+    {expanded && (
+      <div className="px-4 pb-4 space-y-3">
+        {/* History labels */}
+        {topLineLabel && (
+          <div className="text-xs text-muted-foreground">
+            <span className="text-foreground font-semibold">
+              {topLineLabel}
+            </span>
+          </div>
+        )}
+
+        {completeIncompleteLabel && (
+          <div className="text-xs text-muted-foreground">
+            {completeIncompleteLabel}
+          </div>
+        )}
+
+        {/* Sets */}
+        <div className="space-y-2">
+          {sets.map((s, i) => (
+            <div
+              key={`${i}-${s.completed ? "c" : "n"}`}
+              className="grid grid-cols-[60px_1fr_1fr_44px] gap-2 items-center"
+            >
+              <span className="text-xs text-muted-foreground">
+                Set {i + 1}
+              </span>
+
+              {/* Weight */}
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                value={s.weight}
+                placeholder={suggestedWeightForSet(i)}
+                readOnly
+                onFocus={(e) => e.target.blur()}
+                onClick={() =>
+                  openCustomNumberPad(exercise, i, "weight")
+                }
+              />
+
+              {/* Reps */}
+              <Input
+                type="number"
+                value={s.reps}
+                placeholder={`${goalReps[i] ?? 8}`}
+                readOnly
+                onFocus={(e) => e.target.blur()}
+                onClick={() =>
+                  openCustomNumberPad(exercise, i, "reps")
+                }
+              />
+
+              {/* Complete toggle */}
+              <Button
+                type="button"
+                size="sm"
+                variant={s.completed ? "default" : "outline"}
+                className={
+                  s.completed
+                    ? "shadow-sm"
+                    : "bg-background hover:bg-muted/40"
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+
+                  const next = [...sets];
+                  next[i] = { ...s, completed: !s.completed };
+
+                  pushUp(next);
+                  onSetComplete?.(exercise, next[i], false);
+                }}
+              >
+                ✓
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        {/* Notes */}
+        <Textarea
+          value={notes}
+          placeholder="Workout notes…"
+          className="min-h-[70px]"
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={() => onNotesChange?.(exercise, notes)}
+        />
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2">
+          {onRestTimer && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestTimer?.(exercise?.restTime ?? 120);
+              }}
+            >
+              <Timer className="w-4 h-4 mr-1" />
+              Rest
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddSet?.(exercise);
+            }}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Set
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={sets.length <= 1}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRemoveSet();
+            }}
+          >
+            <Minus className="w-4 h-4 mr-1" />
+            Set
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              showAlternativesToast();
+            }}
+          >
+            <Shuffle className="w-4 h-4 mr-1" />
+            Alternatives
+          </Button>
+        </div>
+
+        {/* Last workout */}
+        {lastWorkoutData && (
+          <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
+            <div className="font-semibold text-foreground mb-1">
+              Last time
+            </div>
+
+            {(lastWorkoutData.sets || []).map((s2, idx) => (
+              <div key={idx}>
+                Set {idx + 1}: {s2.weight} × {s2.reps}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+);
 export default ExerciseCard;
