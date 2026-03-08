@@ -56,7 +56,35 @@ const closeCustomNumberPad = () => {
     field: null
   });
 };
+// ---------------------------
+// Open Custom Number Pad
+// ---------------------------
+const openCustomNumberPad = (exercise, setIndex, field) => {
+  setKeypadState({ open: true, exercise, setIndex, field });
+};
 
+// Handle value change from keypad
+const handleKeypadValueChange = (value) => {
+  const { exercise, setIndex, field } = keypadState;
+  if (!exercise || setIndex == null || !field) return;
+
+  setWorkoutData((prev) =>
+    prev.map((ex) => {
+      if (ex.id !== exercise.id) return ex;
+      const setsData = Array.isArray(ex.setsData) ? [...ex.setsData] : [];
+      setsData[setIndex] = {
+        ...setsData[setIndex],
+        [field]: value,
+      };
+      return { ...ex, setsData };
+    })
+  );
+};
+
+// Handle done/close keypad
+const handleKeypadDone = () => {
+  closeCustomNumberPad();
+};
 // ---------------------------
 // Helpers
 // ---------------------------
@@ -519,32 +547,44 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* Exercises */}
-      <div className="mt-4 space-y-4">
-        {(workoutData || []).map((exercise, index) => (
-          <ExerciseCard
-            key={exercise.id}
-            exercise={exercise}
-            lastWorkoutData={exercise.lastWorkoutData}
-            onSetComplete={handleSetComplete}
-            onWeightChange={handleWeightChange}
-            onNotesChange={handleNotesChange}
-            onRestTimer={(duration) => setRestTimer(duration)}
-            onAddSet={handleAddSetToExercise}
-            openCustomNumberPad={openCustomNumberPad}
-            onOpenVideo={(ex, url) => {
-              if (!url) {
-                toast.message("No video saved", {
-                  description: "Add a YouTube link for this exercise in your library.",
-                });
-                return;
-              }
-              setVideoModal({ open: true, title: ex?.name || "Exercise Video", url });
-            }}
-            isFirst={index === 0}
-          />
-        ))}
-      </div>
+{/* Exercises */}
+<div className="mt-4 space-y-4">
+  {(workoutData || []).map((exercise, index) => (
+    <ExerciseCard
+      key={exercise.id}
+      exercise={exercise}
+      lastWorkoutData={exercise.lastWorkoutData}
+      onSetComplete={handleSetComplete}
+      onWeightChange={handleWeightChange}
+      onNotesChange={handleNotesChange}
+      onRestTimer={(duration) => setRestTimer(duration)}
+      onAddSet={handleAddSetToExercise}
+      openCustomNumberPad={openCustomNumberPad}
+      onOpenVideo={(ex, url) => {
+        if (!url) {
+          toast.message("No video saved", {
+            description: "Add a YouTube link for this exercise in your library.",
+          });
+          return;
+        }
+        setVideoModal({ open: true, title: ex?.name || "Exercise Video", url });
+      }}
+      isFirst={index === 0}
+    />
+  ))}
+</div>
+
+{/* Render GymNumberPad LAST so it floats above everything */}
+{keypadState.open && (
+  <GymNumberPad
+    value={
+      workoutData.find((ex) => ex.id === keypadState.exercise?.id)
+        ?.setsData?.[keypadState.setIndex]?.[keypadState.field] || ""
+    }
+    onChange={handleKeypadValueChange}
+    onDone={handleKeypadDone}
+  />
+)}
 
       {/* Floating Save Button */}
       <WorkoutActionBar
