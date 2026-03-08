@@ -17,6 +17,7 @@ import ExerciseCard from "../components/ExerciseCard";
 import RestTimer from "../components/RestTimer";
 import PRCelebration from "../components/PRCelebration";
 import WorkoutActionBar from "../components/workout/WorkoutActionBar";
+import GymNumberPad from "../components/GymNumberPad";
 
 import {
   getWorkouts,
@@ -38,56 +39,6 @@ import {
 import { useSettings } from "../contexts/SettingsContext";
 import { toast } from "sonner";
 
-// ==========================
-// Custom keypad state
-// ==========================
-const [keypadState, setKeypadState] = useState({
-  open: false,
-  exercise: null,
-  setIndex: null,
-  field: null
-});
-
-const closeCustomNumberPad = () => {
-  setKeypadState({
-    open: false,
-    exercise: null,
-    setIndex: null,
-    field: null
-  });
-};
-// ---------------------------
-// Open Custom Number Pad
-// ---------------------------
-const openCustomNumberPad = (exercise, setIndex, field) => {
-  setKeypadState({ open: true, exercise, setIndex, field });
-};
-
-// Handle value change from keypad
-const handleKeypadValueChange = (value) => {
-  const { exercise, setIndex, field } = keypadState;
-  if (!exercise || setIndex == null || !field) return;
-
-  setWorkoutData((prev) =>
-    prev.map((ex) => {
-      if (ex.id !== exercise.id) return ex;
-      const setsData = Array.isArray(ex.setsData) ? [...ex.setsData] : [];
-      setsData[setIndex] = {
-        ...setsData[setIndex],
-        [field]: value,
-      };
-      return { ...ex, setsData };
-    })
-  );
-};
-
-// Handle done/close keypad
-const handleKeypadDone = () => {
-  closeCustomNumberPad();
-};
-// ---------------------------
-// Helpers
-// ---------------------------
 const norm = (s) => String(s || "").trim().toLowerCase();
 const upper = (s) => String(s || "").trim().toUpperCase();
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
@@ -95,20 +46,16 @@ const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 const getWeekKey = (date) => {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return null;
-
   const thursday = new Date(d);
   thursday.setHours(0, 0, 0, 0);
   thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
-
   const week1 = new Date(thursday.getFullYear(), 0, 4);
   week1.setHours(0, 0, 0, 0);
-
   const weekNo =
     1 +
     Math.round(
       ((thursday - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
     );
-
   return `${thursday.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 };
 
@@ -131,7 +78,7 @@ const getNextWorkoutTypeFromHistoryAB = () => {
 };
 
 // ---------------------------
-// HomePage
+// HomePage Component
 // ---------------------------
 const HomePage = () => {
   const { weightUnit } = useSettings();
@@ -141,6 +88,12 @@ const HomePage = () => {
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
   const [videoModal, setVideoModal] = useState({ open: false, title: "", url: "" });
+  const [keypadState, setKeypadState] = useState({
+    open: false,
+    exercise: null,
+    setIndex: null,
+    field: null
+  });
 
   const draftSaveTimerRef = useRef(null);
   const loadRef = useRef(null);
@@ -148,6 +101,35 @@ const HomePage = () => {
   const [manualWorkoutType, setManualWorkoutType] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState("");
+
+  // ---------------------------
+  // Custom Number Pad Handlers
+  // ---------------------------
+  const openCustomNumberPad = (exercise, setIndex, field) => {
+    setKeypadState({ open: true, exercise, setIndex, field });
+  };
+
+  const closeCustomNumberPad = () => {
+    setKeypadState({ open: false, exercise: null, setIndex: null, field: null });
+  };
+
+  const handleKeypadValueChange = (value) => {
+    const { exercise, setIndex, field } = keypadState;
+    if (!exercise || setIndex == null || !field) return;
+
+    setWorkoutData((prev) =>
+      prev.map((ex) => {
+        if (ex.id !== exercise.id) return ex;
+        const setsData = Array.isArray(ex.setsData) ? [...ex.setsData] : [];
+        setsData[setIndex] = { ...setsData[setIndex], [field]: value };
+        return { ...ex, setsData };
+      })
+    );
+  };
+
+  const handleKeypadDone = () => {
+    closeCustomNumberPad();
+  };
 
   // ---------------------------
   // Load Today's Workout
@@ -175,11 +157,6 @@ const HomePage = () => {
 
     const workout =
       usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || usableProgrammes[0];
-
-    if (!workout) {
-      toast.error("No programmes found. Please create a programme first.");
-      return;
-    }
 
     const lastSameWorkout = workouts.find((w) => upper(w.type) === upper(workout.type));
     setCurrentWorkout(workout);
@@ -249,6 +226,7 @@ const HomePage = () => {
 
     return () => { if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current); };
   }, [currentWorkout, workoutData]);
+
   // ---------------------------
   // Handlers
   // ---------------------------
@@ -408,11 +386,17 @@ const HomePage = () => {
   // ---------------------------
   // Add Exercise Dialog prep
   // ---------------------------
-  const allLibraryExercises = useMemo(() => (getExercises() || []).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), [showAddDialog]);
+  const allLibraryExercises = useMemo(
+    () => (getExercises() || []).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))),
+    [showAddDialog]
+  );
+
   const addCandidates = useMemo(() => {
     const q = norm(addSearch);
     const existingIds = new Set((workoutData || []).map((e) => norm(e.id)));
-    return allLibraryExercises.filter((ex) => ex?.id && !existingIds.has(norm(ex.id)) && (!q || norm(ex.name).includes(q) || norm(ex.id).includes(q))).slice(0, 50);
+    return allLibraryExercises
+      .filter((ex) => ex?.id && !existingIds.has(norm(ex.id)) && (!q || norm(ex.name).includes(q) || norm(ex.id).includes(q)))
+      .slice(0, 50);
   }, [allLibraryExercises, addSearch, workoutData]);
 
   const handleAddExerciseToToday = (ex) => {
@@ -435,9 +419,11 @@ const HomePage = () => {
     setAddSearch("");
     toast.success("Exercise added", { description: `${newRow.name} added to Today` });
   };
+
   if (!currentWorkout) return null;
-  const nextInSequence = peekNextWorkoutTypeFromPattern();
+
   const subtitle = `${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`;
+  const nextInSequence = peekNextWorkoutTypeFromPattern();
 
   return (
     <AppHeader
@@ -469,18 +455,13 @@ const HomePage = () => {
           </div>
           <div className="text-2xl font-bold text-foreground">{weeklyStreak} weeks</div>
         </div>
-
         <div className="bg-muted/50 rounded-lg p-4 border border-border">
           <div className="flex items-center gap-2 mb-1">
             <Calendar className="w-4 h-4 text-primary" />
             <span className="text-xs text-muted-foreground">Last Trained</span>
           </div>
           <div className="text-2xl font-bold text-foreground">
-            {daysSince === null
-              ? "Never"
-              : daysSince === 0
-              ? "Today"
-              : `${daysSince}d ago`}
+            {daysSince === null ? "Never" : daysSince === 0 ? "Today" : `${daysSince}d ago`}
           </div>
         </div>
       </div>
@@ -489,12 +470,8 @@ const HomePage = () => {
       <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mt-4">
         <div className="flex items-start justify-between">
           <div className="min-w-0 w-full">
-            <h2 className="text-xl font-bold text-foreground mb-1 truncate">
-              {currentWorkout.name}
-            </h2>
-            <Badge className="bg-primary/20 text-primary border-primary/50">
-              {currentWorkout.focus}
-            </Badge>
+            <h2 className="text-xl font-bold text-foreground mb-1 truncate">{currentWorkout.name}</h2>
+            <Badge className="bg-primary/20 text-primary border-primary/50">{currentWorkout.focus}</Badge>
 
             {/* Manual switcher */}
             <div className="mt-3 space-y-2">
@@ -515,28 +492,20 @@ const HomePage = () => {
                     <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
-
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                  disabled={
-                    !manualWorkoutType ||
-                    upper(manualWorkoutType) === upper(currentWorkout.type)
-                  }
+                  disabled={!manualWorkoutType || upper(manualWorkoutType) === upper(currentWorkout.type)}
                   className="shrink-0"
                 >
                   Switch
                 </Button>
-
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleReturnToSequence}
-                  disabled={
-                    !nextInSequence ||
-                    upper(nextInSequence) === upper(currentWorkout.type)
-                  }
+                  disabled={!nextInSequence || upper(nextInSequence) === upper(currentWorkout.type)}
                   className="shrink-0"
                 >
                   Next
@@ -547,44 +516,39 @@ const HomePage = () => {
         </div>
       </div>
 
-{/* Exercises */}
-<div className="mt-4 space-y-4">
-  {(workoutData || []).map((exercise, index) => (
-    <ExerciseCard
-      key={exercise.id}
-      exercise={exercise}
-      lastWorkoutData={exercise.lastWorkoutData}
-      onSetComplete={handleSetComplete}
-      onWeightChange={handleWeightChange}
-      onNotesChange={handleNotesChange}
-      onRestTimer={(duration) => setRestTimer(duration)}
-      onAddSet={handleAddSetToExercise}
-      openCustomNumberPad={openCustomNumberPad}
-      onOpenVideo={(ex, url) => {
-        if (!url) {
-          toast.message("No video saved", {
-            description: "Add a YouTube link for this exercise in your library.",
-          });
-          return;
-        }
-        setVideoModal({ open: true, title: ex?.name || "Exercise Video", url });
-      }}
-      isFirst={index === 0}
-    />
-  ))}
-</div>
+      {/* Exercises */}
+      <div className="mt-4 space-y-4">
+        {(workoutData || []).map((exercise, index) => (
+          <ExerciseCard
+            key={exercise.id}
+            exercise={exercise}
+            lastWorkoutData={exercise.lastWorkoutData}
+            onSetComplete={handleSetComplete}
+            onWeightChange={handleWeightChange}
+            onNotesChange={handleNotesChange}
+            onRestTimer={(duration) => setRestTimer(duration)}
+            onAddSet={handleAddSetToExercise}
+            openCustomNumberPad={openCustomNumberPad}
+            onOpenVideo={(ex, url) => {
+              if (!url) {
+                toast.message("No video saved", { description: "Add a YouTube link for this exercise in your library." });
+                return;
+              }
+              setVideoModal({ open: true, title: ex?.name || "Exercise Video", url });
+            }}
+            isFirst={index === 0}
+          />
+        ))}
+      </div>
 
-{/* Render GymNumberPad LAST so it floats above everything */}
-{keypadState.open && (
-  <GymNumberPad
-    value={
-      workoutData.find((ex) => ex.id === keypadState.exercise?.id)
-        ?.setsData?.[keypadState.setIndex]?.[keypadState.field] || ""
-    }
-    onChange={handleKeypadValueChange}
-    onDone={handleKeypadDone}
-  />
-)}
+      {/* Custom Number Pad */}
+      {keypadState.open && (
+        <GymNumberPad
+          value={workoutData.find((ex) => ex.id === keypadState.exercise?.id)?.setsData?.[keypadState.setIndex]?.[keypadState.field] || ""}
+          onChange={handleKeypadValueChange}
+          onDone={handleKeypadDone}
+        />
+      )}
 
       {/* Floating Save Button */}
       <WorkoutActionBar
@@ -593,30 +557,16 @@ const HomePage = () => {
       />
 
       {/* Add Exercise Dialog */}
-      <Dialog
-        open={showAddDialog}
-        onOpenChange={(open) => {
-          setShowAddDialog(open);
-          if (!open) setAddSearch("");
-        }}
-      >
+      <Dialog open={showAddDialog} onOpenChange={(open) => { setShowAddDialog(open); if (!open) setAddSearch(""); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Exercise</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-3">
-            <Input
-              value={addSearch}
-              onChange={(e) => setAddSearch(e.target.value)}
-              placeholder="Search exercise library..."
-            />
-
+            <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="Search exercise library..." />
             <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
               {addCandidates.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6 text-center">
-                  No matches (or already added).
-                </div>
+                <div className="text-sm text-muted-foreground py-6 text-center">No matches (or already added).</div>
               ) : (
                 addCandidates.map((ex) => (
                   <button
@@ -626,14 +576,11 @@ const HomePage = () => {
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
                     <div className="font-semibold text-foreground">{ex.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
-                    </div>
+                    <div className="text-xs text-muted-foreground">{ex.sets ?? 3} sets • {ex.repScheme || "RPT"}</div>
                   </button>
                 ))
               )}
             </div>
-
             <div className="text-xs text-muted-foreground">
               Added exercises only affect Today (they won’t be added into your programme).
             </div>
@@ -645,10 +592,7 @@ const HomePage = () => {
       {restTimer && (
         <RestTimer
           duration={restTimer}
-          onComplete={() => {
-            setRestTimer(null);
-            toast.success("Rest period complete! Ready for next set!");
-          }}
+          onComplete={() => { setRestTimer(null); toast.success("Rest period complete! Ready for next set!"); }}
           onClose={() => setRestTimer(null)}
         />
       )}
@@ -662,12 +606,7 @@ const HomePage = () => {
       />
 
       {/* PR Celebration */}
-      {prCelebration && (
-        <PRCelebration
-          {...prCelebration}
-          onClose={() => setPrCelebration(null)}
-        />
-      )}
+      {prCelebration && <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />}
     </AppHeader>
   );
 };
