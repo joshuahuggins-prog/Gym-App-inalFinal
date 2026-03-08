@@ -202,7 +202,6 @@ const HomePage = () => {
 
     return () => { if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current); };
   }, [currentWorkout, workoutData]);
-
   // ---------------------------
   // Handlers
   // ---------------------------
@@ -360,7 +359,7 @@ const HomePage = () => {
   );
 
   // ---------------------------
-  // Add Exercise Dialog
+  // Add Exercise Dialog prep
   // ---------------------------
   const allLibraryExercises = useMemo(() => (getExercises() || []).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), [showAddDialog]);
   const addCandidates = useMemo(() => {
@@ -389,7 +388,6 @@ const HomePage = () => {
     setAddSearch("");
     toast.success("Exercise added", { description: `${newRow.name} added to Today` });
   };
-
   if (!currentWorkout) return null;
   const nextInSequence = peekNextWorkoutTypeFromPattern();
   const subtitle = `${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`;
@@ -415,7 +413,7 @@ const HomePage = () => {
         </div>
       }
     >
-{/* Stats */}
+      {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-muted/50 rounded-lg p-4 border border-border">
           <div className="flex items-center gap-2 mb-1">
