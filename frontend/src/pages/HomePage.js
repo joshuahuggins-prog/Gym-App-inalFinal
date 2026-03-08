@@ -463,26 +463,41 @@ const HomePage = ({ openNumberPad }) => {
 
   return (
     <AppHeader
-      title="Log Workout"
-      subtitle={subtitle}
-      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
-      actions={
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowAddDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Add
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => loadRef.current?.()} title="Reload today">
-              <RotateCcw className="w-4 h-4"/>
-          </div>
+  title="Log Workout"
+  subtitle={subtitle}
+  rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
+  actions={
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowAddDialog(true)}
+        >
+          <Plus className="w-4 h-4 mr-2" /> Add
+        </Button>
 
-          {/* Small “next in sequence” hint on the right */}
-          <div className="text-xs text-white/90">
-            Next: <span className="font-semibold text-white">{nextInSequence ? String(nextInSequence) : "—"}</span>
-          </div>
-        </div>
-      }
-    >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => loadRef.current?.()}
+          title="Reload today"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </Button>
+      </div>
+
+      {/* Small “next in sequence” hint on the right */}
+      <div className="text-xs text-white/90">
+        Next:{" "}
+        <span className="font-semibold text-white">
+          {nextInSequence ? String(nextInSequence) : "—"}
+        </span>
+      </div>
+    </div>
+  }
+/>
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-muted/50 rounded-lg p-4 border border-border">
