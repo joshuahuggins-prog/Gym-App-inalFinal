@@ -107,10 +107,8 @@ const getHistoryBests = (exerciseKey) => {
 
   let maxWeighted = -Infinity;
   let bestAssist = Infinity;
-
   let maxCompleteWeighted = -Infinity;
   let maxIncompleteWeighted = -Infinity;
-
   let bestCompleteAssist = Infinity;
   let bestIncompleteAssist = Infinity;
 
@@ -169,6 +167,7 @@ const ExerciseCard = ({
   onRestTimer,
   onAddSet,
   onOpenVideo,
+  openCustomNumberPad
 }) => {
 
   const desiredSetsCount = useMemo(() => {
@@ -198,52 +197,13 @@ const ExerciseCard = ({
       : "weighted"
   );
 
-  const userChoseModeRef = useRef(false);
-  const lastExerciseIdRef = useRef(exercise?.id || "");
-
   const exerciseKey = useMemo(
     () => normKey(exercise?.id || exercise?.name),
     [exercise?.id, exercise?.name]
   );
 
   const pr = useMemo(() => bestSetFromHistory(exerciseKey), [exerciseKey]);
-
-  const historyBests = useMemo(
-    () => getHistoryBests(exerciseKey),
-    [exerciseKey]
-  );
-
-  const bestFromCurrentSets = useMemo(() => {
-    let best = -Infinity;
-    (sets || []).forEach((s) => {
-      const ww = toNumOrNull(s?.weight);
-      if (!Number.isFinite(ww)) return;
-      if (ww > best) best = ww;
-    });
-    return best === -Infinity ? null : best;
-  }, [sets]);
-
-  useEffect(() => {
-    setSets(normalizeSets(exercise?.setsData, desiredSetsCount));
-    setNotes(exercise?.userNotes || "");
-
-    const links = getVideoLinks();
-    setVideoLink(links?.[exercise?.id] || "");
-  }, [exercise?.setsData, exercise?.userNotes, exercise?.id, desiredSetsCount]);
-
-  useEffect(() => {
-    const currentId = exercise?.id || "";
-    if (currentId !== lastExerciseIdRef.current) {
-      lastExerciseIdRef.current = currentId;
-      userChoseModeRef.current = false;
-
-      setMode(
-        (exercise?.setsData || []).some((s) => Number(s.weight) < 0)
-          ? "assisted"
-          : "weighted"
-      );
-    }
-  }, [exercise?.id, exercise?.setsData]);
+  const historyBests = useMemo(() => getHistoryBests(exerciseKey), [exerciseKey]);
 
   const pushUp = (nextSets) => {
     setSets(nextSets);
@@ -265,24 +225,6 @@ const ExerciseCard = ({
     setExpanded((v) => !v);
   };
 
-  const toggleMode = (nextMode) => {
-    if (nextMode === mode) return;
-
-    userChoseModeRef.current = true;
-    setMode(nextMode);
-
-    const converted = sets.map((s) => {
-      if (s.weight === "") return s;
-      const ww = toNumOrNull(s.weight);
-      if (!Number.isFinite(ww)) return s;
-
-      const v = Math.abs(ww);
-      return { ...s, weight: nextMode === "assisted" ? -v : v };
-    });
-
-    pushUp(converted);
-  };
-
   const completedCount = useMemo(
     () => sets.filter((s) => s.completed).length,
     [sets]
@@ -293,49 +235,12 @@ const ExerciseCard = ({
     [sets]
   );
 
-  const topLineLabel = useMemo(() => {
-    const parts = [];
+  const hasVideo = !!videoLink;
 
-    if (Number.isFinite(historyBests?.maxWeighted)) {
-      parts.push(`Max: ${fmt1(historyBests.maxWeighted)}`);
-    }
-
-    if (Number.isFinite(historyBests?.bestAssist)) {
-      parts.push(`Best assist: ${fmt1(historyBests.bestAssist)}`);
-    }
-
-    if (parts.length === 0) return null;
-    return parts.join(" • ");
-  }, [historyBests]);
-
-  const completeIncompleteLabel = useMemo(() => {
-    if (mode === "weighted") {
-      const a = Number.isFinite(historyBests?.maxCompleteWeighted)
-        ? `Max complete: ${fmt1(historyBests.maxCompleteWeighted)}`
-        : null;
-
-      const b = Number.isFinite(historyBests?.maxIncompleteWeighted)
-        ? `Max incomplete: ${fmt1(historyBests.maxIncompleteWeighted)}`
-        : null;
-
-      if (!a && !b) return null;
-      return [a, b].filter(Boolean).join(" • ");
-    }
-
-    const a = Number.isFinite(historyBests?.bestCompleteAssist)
-      ? `Assist complete: ${fmt1(historyBests.bestCompleteAssist)}`
-      : null;
-
-    const b = Number.isFinite(historyBests?.bestIncompleteAssist)
-      ? `Assist incomplete: ${fmt1(historyBests.bestIncompleteAssist)}`
-      : null;
-
-    if (!a && !b) return null;
-    return [a, b].filter(Boolean).join(" • ");
-  }, [historyBests, mode]);
-
-  const showExerciseInfoNotes =
-    exercise?.notes && String(exercise.notes).trim().length > 0;
+  useEffect(() => {
+    const links = getVideoLinks();
+    setVideoLink(links?.[exercise?.id] || "");
+  }, [exercise?.id]);
 
   const showAlternativesToast = () => {
     const id = exercise?.id;
@@ -371,11 +276,9 @@ const ExerciseCard = ({
     toast.success("Set removed", { duration: 1200 });
   };
 
-  const hasVideo = !!videoLink;
-
-  const suggestedWeightForSet = (i) => {
-    const s = sets?.[i]?.weight;
-    if (s !== "" && s !== null && s !== undefined) return "";
+  const suggestedWeightForSet = (setIndex) => {
+    const ww = sets?.[setIndex]?.weight;
+    if (ww !== "" && ww !== null && ww !== undefined) return "";
     return mode === "assisted" ? "Assist" : "Weight";
   };
 
@@ -398,9 +301,7 @@ const ExerciseCard = ({
             </h3>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>
-                {completedCount}/{sets.length} sets
-              </span>
+              <span>{completedCount}/{sets.length} sets</span>
 
               {exercise?.repScheme && (
                 <Badge variant="secondary" className="text-[10px]">
@@ -447,20 +348,6 @@ const ExerciseCard = ({
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
 
-          {topLineLabel && (
-            <div className="text-xs text-muted-foreground">
-              <span className="text-foreground font-semibold">
-                {topLineLabel}
-              </span>
-            </div>
-          )}
-
-          {completeIncompleteLabel && (
-            <div className="text-xs text-muted-foreground">
-              {completeIncompleteLabel}
-            </div>
-          )}
-
           <div className="space-y-2">
 
             {sets.map((s, i) => (
@@ -474,19 +361,27 @@ const ExerciseCard = ({
                 </span>
 
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="none"
                   value={s.weight}
                   placeholder={suggestedWeightForSet(i)}
                   readOnly
-                  onFocus={(e) => e.target.blur()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCustomNumberPad?.(exercise, i, "weight");
+                  }}
                 />
 
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="none"
                   value={s.reps}
                   placeholder={`${goalReps[i] ?? 8}`}
                   readOnly
-                  onFocus={(e) => e.target.blur()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCustomNumberPad?.(exercise, i, "reps");
+                  }}
                 />
 
                 <Button
