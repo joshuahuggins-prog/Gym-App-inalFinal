@@ -360,7 +360,7 @@ const completeIncompleteLabel = useMemo(() => {
 // In assisted mode: show assist complete/incomplete (most negative)
 if (mode === "weighted") {
 const a = Number.isFinite(historyBests?.maxCompleteWeighted)
-? Max complete: ${fmt1(historyBests.maxCompleteWeighted)}
+? 'Max complete: ${fmt1(historyBests.maxCompleteWeighted)}
 : null;
 
 const b = Number.isFinite(historyBests?.maxIncompleteWeighted)  
