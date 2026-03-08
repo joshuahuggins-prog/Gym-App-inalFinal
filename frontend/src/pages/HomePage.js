@@ -18,6 +18,8 @@ import RestTimer from "../components/RestTimer";
 import PRCelebration from "../components/PRCelebration";
 import WorkoutActionBar from "../components/workout/WorkoutActionBar";
 
+import GymNumberPad from "../components/GymNumberPad";
+
 import {
   getWorkouts,
   saveWorkout,
@@ -46,11 +48,9 @@ const upper = (s) => String(s || "").trim().toUpperCase();
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
 const getWeekKey = (date) => {
-  // ISO-ish week key (YYYY-W##)
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return null;
 
-  // Thursday in current week decides the year
   const thursday = new Date(d);
   thursday.setHours(0, 0, 0, 0);
   thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
@@ -76,7 +76,6 @@ const buildExerciseDefaultSetsData = (setsCount) =>
 
 const makeEmptySet = () => ({ weight: "", reps: "", completed: false });
 
-// ✅ Next workout type based on most recent saved workout (simple A/B flip).
 const getNextWorkoutTypeFromHistoryAB = () => {
   const workouts = getWorkouts();
   const lastType = workouts?.[0]?.type ? upper(workouts[0].type) : null;
@@ -89,7 +88,7 @@ const getNextWorkoutTypeFromHistoryAB = () => {
 // ---------------------------
 // HomePage
 // ---------------------------
-const HomePage = () => {
+const HomePage = ({ openNumberPad }) => {
   const { weightUnit } = useSettings();
 
   const [currentWorkout, setCurrentWorkout] = useState(null);
@@ -97,22 +96,17 @@ const HomePage = () => {
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
 
-  // ✅ Video modal state
-  const [videoModal, setVideoModal] = useState({
-    open: false,
-    title: "",
-    url: "",
-  });
-
+  const [videoModal, setVideoModal] = useState({ open: false, title: "", url: "" });
   const draftSaveTimerRef = useRef(null);
-
-  // used to force weekly streak recompute after save
-  const [finishedSavedToggle, setFinishedSavedToggle] = useState(false);
-
   const loadRef = useRef(null);
 
   const [manualWorkoutType, setManualWorkoutType] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
 
+  // ---------------------------
+  // Video modal
+  // ---------------------------
   const handleOpenVideo = (exercise, url) => {
     if (!url) {
       toast.message("No video saved", {
@@ -121,66 +115,47 @@ const HomePage = () => {
       return;
     }
 
-    setVideoModal({
-      open: true,
-      title: exercise?.name || "Exercise Video",
-      url,
-    });
+    setVideoModal({ open: true, title: exercise?.name || "Exercise Video", url });
   };
 
-  // Add exercise UI
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [addSearch, setAddSearch] = useState("");
-
+  // ---------------------------
+  // Load Today's Workout
+  // ---------------------------
   const getUsableProgrammes = () => {
     const programmes = getProgrammes() || [];
-    return programmes.filter(
-      (p) => Array.isArray(p.exercises) && p.exercises.length > 0
-    );
+    return programmes.filter((p) => Array.isArray(p.exercises) && p.exercises.length > 0);
   };
 
   const loadTodaysWorkout = () => {
     const workouts = getWorkouts();
     const usableProgrammes = getUsableProgrammes();
-
     const draft = getWorkoutDraft();
-
-    // ✅ FIX: accept either draft.workoutType (preferred) or legacy draft.type
     const draftType = draft?.workoutType || draft?.type;
     const hasTodaysDraft = isWorkoutDraftForToday(draft) && !!draftType;
 
     if (usableProgrammes.length === 0) {
-      toast.error(
-        "No usable programmes found. Add at least 1 exercise to a programme."
-      );
+      toast.error("No usable programmes found. Add at least 1 exercise to a programme.");
       return;
     }
 
-    // ✅ draft wins; else use last workout history A/B; else use pattern fallback
     const nextType = hasTodaysDraft
       ? draftType
       : getNextWorkoutTypeFromHistoryAB() || peekNextWorkoutTypeFromPattern();
 
     const workout =
-      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) ||
-      usableProgrammes[0];
+      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || usableProgrammes[0];
 
     if (!workout) {
       toast.error("No programmes found. Please create a programme first.");
       return;
     }
 
-    const lastSameWorkout = workouts.find(
-      (w) => upper(w.type) === upper(workout.type)
-    );
-
+    const lastSameWorkout = workouts.find((w) => upper(w.type) === upper(workout.type));
     setCurrentWorkout(workout);
     setManualWorkoutType(workout.type);
 
-    // Restore draft if today + same type
     if (hasTodaysDraft && upper(draftType) === upper(workout.type)) {
       const draftById = new Map((draft?.exercises || []).map((e) => [e.id, e]));
-
       setWorkoutData(
         (workout.exercises || []).map((ex) => {
           const lastExerciseData = lastSameWorkout?.exercises?.find(
@@ -204,7 +179,6 @@ const HomePage = () => {
       return;
     }
 
-    // No draft - start fresh
     setWorkoutData(
       (workout.exercises || []).map((ex) => {
         const lastExerciseData = lastSameWorkout?.exercises?.find(
@@ -228,18 +202,18 @@ const HomePage = () => {
     loadRef.current?.();
   }, []);
 
-  // Auto-save workout draft (protects against refresh)
+  // ---------------------------
+  // Auto-save draft
+  // ---------------------------
   useEffect(() => {
     if (!currentWorkout) return;
 
-    // ✅ Meaningful data includes notes, numbers, OR completed ticks
     const hasMeaningfulData = (workoutData || []).some(
       (ex) =>
         (ex.userNotes && ex.userNotes.trim().length > 0) ||
         (Array.isArray(ex.setsData) &&
           ex.setsData.some((set) => {
-            const hasNumbers =
-              (set.weight ?? "") !== "" || (set.reps ?? "") !== "";
+            const hasNumbers = (set.weight ?? "") !== "" || (set.reps ?? "") !== "";
             const hasTick = !!set.completed;
             return hasNumbers || hasTick;
           }))
@@ -254,7 +228,7 @@ const HomePage = () => {
       }
 
       saveWorkoutDraft({
-        workoutType: currentWorkout.type, // ✅ keep consistent key
+        workoutType: currentWorkout.type,
         programmeName: currentWorkout.name,
         focus: currentWorkout.focus,
         exercises: (workoutData || []).map((ex) => ({
@@ -270,13 +244,14 @@ const HomePage = () => {
     return () => {
       if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
     };
-  }, [currentWorkout, workoutData,]);
+  }, [currentWorkout, workoutData]);
 
+  // ---------------------------
+  // Handlers
+  // ---------------------------
   const handleSetComplete = (exercise, set, levelUp) => {
     const progressionSettings = getProgressionSettings();
-    const exerciseSpecificIncrement =
-      progressionSettings.exerciseSpecific?.[exercise.id];
-
+    const exerciseSpecificIncrement = progressionSettings.exerciseSpecific?.[exercise.id];
     const suggestedIncrement =
       exerciseSpecificIncrement && exerciseSpecificIncrement > 0
         ? exerciseSpecificIncrement
@@ -286,27 +261,17 @@ const HomePage = () => {
 
     if (levelUp) {
       const suggestedWeight = (Number(set.weight) || 0) + suggestedIncrement;
-      toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, {
-        duration: 3500,
-      });
+      toast.success(`Level Up! Try ${suggestedWeight}${weightUnit} next time!`, { duration: 3500 });
     }
 
-    // PR check
     const prs = getPersonalRecords();
     const currentPR = prs?.[exercise.id];
-
     const w = Number(set.weight);
     if (!Number.isFinite(w)) return;
 
     if (!currentPR || w > Number(currentPR.weight ?? -Infinity)) {
       const wasNew = updatePersonalRecord(exercise.id, w, Number(set.reps) || 0);
-      if (wasNew) {
-        setPrCelebration({
-          exercise: exercise.name,
-          newWeight: w,
-          oldWeight: currentPR?.weight,
-        });
-      }
+      if (wasNew) setPrCelebration({ exercise: exercise.name, newWeight: w, oldWeight: currentPR?.weight });
     }
   };
 
@@ -318,51 +283,30 @@ const HomePage = () => {
 
   const handleNotesChange = (exercise, notes) => {
     setWorkoutData((prev) =>
-      (prev || []).map((ex) =>
-        ex.id === exercise.id ? { ...ex, userNotes: notes } : ex
-      )
+      (prev || []).map((ex) => (ex.id === exercise.id ? { ...ex, userNotes: notes } : ex))
     );
   };
 
-  // ✅ Add set for today
   const handleAddSetToExercise = (exercise) => {
     if (!exercise?.id) return;
 
     setWorkoutData((prev) =>
       (prev || []).map((ex) => {
         if (ex.id !== exercise.id) return ex;
-
         const currentSetsData = Array.isArray(ex.setsData) ? ex.setsData : [];
-        const baseCount =
-          currentSetsData.length > 0
-            ? currentSetsData.length
-            : clampInt(Number(ex.sets ?? 3), 1, 12);
-
-        const base =
-          currentSetsData.length > 0
-            ? currentSetsData
-            : buildExerciseDefaultSetsData(baseCount);
+        const baseCount = currentSetsData.length > 0 ? currentSetsData.length : clampInt(Number(ex.sets ?? 3), 1, 12);
+        const base = currentSetsData.length > 0 ? currentSetsData : buildExerciseDefaultSetsData(baseCount);
 
         if (base.length >= 20) {
-          toast.message("Max sets reached", {
-            description: "You can add up to 20 sets per exercise for today.",
-          });
+          toast.message("Max sets reached", { description: "You can add up to 20 sets per exercise for today." });
           return ex;
         }
 
-        const nextSetsData = [...base, makeEmptySet()];
-        return {
-          ...ex,
-          sets: nextSetsData.length,
-          setsData: nextSetsData,
-        };
+        return { ...ex, sets: base.length + 1, setsData: [...base, makeEmptySet()] };
       })
     );
 
-    toast.success("Set added", {
-      description: `Added an extra set to ${exercise.name || exercise.id}`,
-      duration: 1800,
-    });
+    toast.success("Set added", { description: `Added an extra set to ${exercise.name || exercise.id}`, duration: 1800 });
   };
 
   const buildWorkoutPayload = () => ({
@@ -384,42 +328,28 @@ const HomePage = () => {
 
     const workout = buildWorkoutPayload();
     saveWorkout(workout);
-
     clearWorkoutDraft();
     advanceWorkoutPatternIndex();
 
-    setFinishedSavedToggle((v) => !v);
-
-    toast.success("Workout saved! Great job! 💪", {
-      description: `${currentWorkout.name} completed`,
-    });
-
     loadRef.current?.();
+    toast.success("Workout saved! Great job! 💪", { description: `${currentWorkout.name} completed` });
   };
 
   const handleManualSwitchWorkout = (nextType) => {
     if (!nextType) return;
-
     const usableProgrammes = getUsableProgrammes();
-    const picked =
-      usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || null;
+    const picked = usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || null;
 
     if (!picked) {
       toast.error("That workout type isn't available yet.");
       return;
     }
 
-    // ✅ This is what drives the next load
     setDraftWorkoutType(picked.type);
-
-    // Optional: update select immediately (nice UX)
     setManualWorkoutType(picked.type);
-
     loadRef.current?.();
 
-    toast.message("Switched workout", {
-      description: `Now showing: ${picked.name}`,
-    });
+    toast.message("Switched workout", { description: `Now showing: ${picked.name}` });
   };
 
   const handleReturnToSequence = () => {
@@ -431,28 +361,23 @@ const HomePage = () => {
     handleManualSwitchWorkout(next);
   };
 
-  // ✅ Weekly streak
+  // ---------------------------
+  // Weekly streak & last workout
+  // ---------------------------
   const weeklyStreak = useMemo(() => {
     const workouts = getWorkouts();
     if (!workouts.length) return 0;
-
     const weeks = workouts.map((w) => getWeekKey(w.date)).filter(Boolean);
 
     const uniq = [];
     const seen = new Set();
-    for (const wk of weeks) {
-      if (!seen.has(wk)) {
-        seen.add(wk);
-        uniq.push(wk);
-      }
-    }
+    for (const wk of weeks) if (!seen.has(wk)) { seen.add(wk); uniq.push(wk); }
 
     const weekStart = (weekKey) => {
       const [y, w] = String(weekKey).split("-W");
       const year = Number(y);
       const week = Number(w);
       if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
-
       const simple = new Date(year, 0, 1 + (week - 1) * 7);
       const dow = simple.getDay();
       const isoMonday = new Date(simple);
@@ -462,10 +387,7 @@ const HomePage = () => {
       return isoMonday;
     };
 
-    const starts = uniq
-      .map((wk) => weekStart(wk))
-      .filter((d) => d && !Number.isNaN(d.getTime()));
-
+    const starts = uniq.map((wk) => weekStart(wk)).filter((d) => d && !Number.isNaN(d.getTime()));
     if (!starts.length) return 0;
 
     let streak = 1;
@@ -476,9 +398,8 @@ const HomePage = () => {
       if (diffDays >= 6 && diffDays <= 8) streak++;
       else break;
     }
-
     return streak;
-  }, [finishedSavedToggle]);
+  }, [currentWorkout, workoutData]);
 
   const getDaysSinceLastWorkout = () => {
     const workouts = getWorkouts();
@@ -492,43 +413,32 @@ const HomePage = () => {
 
   const canFinish = useMemo(
     () =>
-      (workoutData || []).some(
-        (ex) =>
-          Array.isArray(ex.setsData) &&
-          ex.setsData.some(
-            (set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== ""
-          )
+      (workoutData || []).some((ex) =>
+        Array.isArray(ex.setsData) &&
+        ex.setsData.some((set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== "")
       ),
     [workoutData]
   );
 
+  // ---------------------------
   // Add Exercise candidates
+  // ---------------------------
   const allLibraryExercises = useMemo(() => {
     const list = getExercises() || [];
-    return list
-      .slice()
-      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    return list.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
   }, [showAddDialog]);
 
   const addCandidates = useMemo(() => {
     const q = norm(addSearch);
     const existingIds = new Set((workoutData || []).map((e) => norm(e.id)));
-
     return allLibraryExercises
-      .filter((ex) => {
-        if (!ex?.id) return false;
-        if (existingIds.has(norm(ex.id))) return false;
-        if (!q) return true;
-        return norm(ex.name).includes(q) || norm(ex.id).includes(q);
-      })
+      .filter((ex) => ex?.id && !existingIds.has(norm(ex.id)) && (!q || norm(ex.name).includes(q) || norm(ex.id).includes(q)))
       .slice(0, 50);
   }, [allLibraryExercises, addSearch, workoutData]);
 
   const handleAddExerciseToToday = (ex) => {
     if (!ex?.id) return;
-
     const setsCount = clampInt(Number(ex.sets ?? 3), 1, 12);
-
     const newRow = {
       id: ex.id,
       name: ex.name || ex.id,
@@ -537,30 +447,19 @@ const HomePage = () => {
       sets: setsCount,
       restTime: ex.restTime ?? 120,
       notes: ex.notes ?? "",
-
       userNotes: "",
       setsData: buildExerciseDefaultSetsData(setsCount),
       lastWorkoutData: null,
     };
-
     setWorkoutData((prev) => [...(prev || []), newRow]);
     setShowAddDialog(false);
     setAddSearch("");
-
-    toast.success("Exercise added", {
-      description: `${newRow.name} added to Today`,
-    });
+    toast.success("Exercise added", { description: `${newRow.name} added to Today` });
   };
 
   if (!currentWorkout) return null;
-
   const nextInSequence = peekNextWorkoutTypeFromPattern();
-
-  const subtitle = `${new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  })}`;
+  const subtitle = `${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`;
 
   return (
     <AppHeader
@@ -570,31 +469,16 @@ const HomePage = () => {
       actions={
         <div className="flex items-center justify-between gap-2">
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAddDialog(true)}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add
+            <Button variant="outline" size="sm" onClick={() => setShowAddDialog(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Add
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => loadRef.current?.()}
-              title="Reload today"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => loadRef.current?.()} title="Reload today">
+              <RotateCcw className="w-4 h-4"/>
           </div>
 
           {/* Small “next in sequence” hint on the right */}
           <div className="text-xs text-white/90">
-            Next:{" "}
-            <span className="font-semibold text-white">
-              {nextInSequence ? String(nextInSequence) : "—"}
-            </span>
+            Next: <span className="font-semibold text-white">{nextInSequence ? String(nextInSequence) : "—"}</span>
           </div>
         </div>
       }
@@ -604,28 +488,18 @@ const HomePage = () => {
         <div className="bg-muted/50 rounded-lg p-4 border border-border">
           <div className="flex items-center gap-2 mb-1">
             <Flame className="w-4 h-4 text-primary" />
-            <span className="text-xs text-muted-foreground">
-              Weekly streak
-            </span>
+            <span className="text-xs text-muted-foreground">Weekly streak</span>
           </div>
-          <div className="text-2xl font-bold text-foreground">
-            {weeklyStreak} weeks
-          </div>
+          <div className="text-2xl font-bold text-foreground">{weeklyStreak} weeks</div>
         </div>
 
         <div className="bg-muted/50 rounded-lg p-4 border border-border">
           <div className="flex items-center gap-2 mb-1">
             <Calendar className="w-4 h-4 text-primary" />
-            <span className="text-xs text-muted-foreground">
-              Last Trained
-            </span>
+            <span className="text-xs text-muted-foreground">Last Trained</span>
           </div>
           <div className="text-2xl font-bold text-foreground">
-            {daysSince === null
-              ? "Never"
-              : daysSince === 0
-              ? "Today"
-              : `${daysSince}d ago`}
+            {daysSince === null ? "Never" : daysSince === 0 ? "Today" : `${daysSince}d ago`}
           </div>
         </div>
       </div>
@@ -634,41 +508,30 @@ const HomePage = () => {
       <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mt-4">
         <div className="flex items-start justify-between">
           <div className="min-w-0 w-full">
-            <h2 className="text-xl font-bold text-foreground mb-1 truncate">
-              {currentWorkout.name}
-            </h2>
-            <Badge className="bg-primary/20 text-primary border-primary/50">
-              {currentWorkout.focus}
-            </Badge>
+            <h2 className="text-xl font-bold text-foreground mb-1 truncate">{currentWorkout.name}</h2>
+            <Badge className="bg-primary/20 text-primary border-primary/50">{currentWorkout.focus}</Badge>
 
             {/* Manual switcher */}
             <div className="mt-3 space-y-2">
               <div className="flex gap-2">
-                <div className="flex-1">
-                  <div className="relative">
-                    <select
-                      value={manualWorkoutType || ""}
-                      onChange={(e) => setManualWorkoutType(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
-                    >
-                      {getUsableProgrammes().map((p) => (
-                        <option key={p.type} value={p.type}>
-                          {p.name} ({p.type})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
+                <div className="flex-1 relative">
+                  <select
+                    value={manualWorkoutType || ""}
+                    onChange={(e) => setManualWorkoutType(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
+                  >
+                    {getUsableProgrammes().map((p) => (
+                      <option key={p.type} value={p.type}>{p.name} ({p.type})</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                  disabled={
-                    !manualWorkoutType ||
-                    upper(manualWorkoutType) === upper(currentWorkout.type)
-                  }
+                  disabled={!manualWorkoutType || upper(manualWorkoutType) === upper(currentWorkout.type)}
                   className="shrink-0"
                 >
                   Switch
@@ -678,10 +541,7 @@ const HomePage = () => {
                   variant="outline"
                   size="sm"
                   onClick={handleReturnToSequence}
-                  disabled={
-                    !nextInSequence ||
-                    upper(nextInSequence) === upper(currentWorkout.type)
-                  }
+                  disabled={!nextInSequence || upper(nextInSequence) === upper(currentWorkout.type)}
                   className="shrink-0"
                 >
                   Next
@@ -700,47 +560,32 @@ const HomePage = () => {
             exercise={exercise}
             lastWorkoutData={exercise.lastWorkoutData}
             onSetComplete={handleSetComplete}
-            onWeightChange={handleWeightChange}
-            onNotesChange={handleNotesChange}
+            onWeightChange={(setsData) => handleWeightChange(exercise, setsData)}
+            onNotesChange={(notes) => handleNotesChange(exercise, notes)}
             onRestTimer={(duration) => setRestTimer(duration)}
-            onAddSet={handleAddSetToExercise}
-            onOpenVideo={handleOpenVideo}
+            onAddSet={() => handleAddSetToExercise(exercise)}
+            onOpenVideo={(url) => handleOpenVideo(exercise, url)}
             isFirst={index === 0}
+            readOnlyInputs={true}            // <-- prevent system keyboard
+            openNumberPad={openNumberPad}   // <-- attach your GymNumberPad
           />
         ))}
       </div>
 
       {/* Floating Save Button */}
-      <WorkoutActionBar
-        onSaveFinish={handleSaveAndFinishWorkout}
-        disableFinish={!currentWorkout || !canFinish}
-      />
+      <WorkoutActionBar onSaveFinish={handleSaveAndFinishWorkout} disableFinish={!currentWorkout || !canFinish} />
 
       {/* Add Exercise Dialog */}
-      <Dialog
-        open={showAddDialog}
-        onOpenChange={(open) => {
-          setShowAddDialog(open);
-          if (!open) setAddSearch("");
-        }}
-      >
+      <Dialog open={showAddDialog} onOpenChange={(open) => { setShowAddDialog(open); if (!open) setAddSearch(""); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Exercise</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Add Exercise</DialogTitle></DialogHeader>
 
           <div className="space-y-3">
-            <Input
-              value={addSearch}
-              onChange={(e) => setAddSearch(e.target.value)}
-              placeholder="Search exercise library..."
-            />
+            <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="Search exercise library..." />
 
             <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
               {addCandidates.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6 text-center">
-                  No matches (or already added).
-                </div>
+                <div className="text-sm text-muted-foreground py-6 text-center">No matches (or already added).</div>
               ) : (
                 addCandidates.map((ex) => (
                   <button
@@ -750,17 +595,14 @@ const HomePage = () => {
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
                     <div className="font-semibold text-foreground">{ex.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
-                    </div>
+                    <div className="text-xs text-muted-foreground">{ex.sets ?? 3} sets • {ex.repScheme || "RPT"}</div>
                   </button>
                 ))
               )}
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Added exercises only affect Today (they won’t be added into your
-              programme).
+              Added exercises only affect Today (they won’t be added into your programme).
             </div>
           </div>
         </DialogContent>
@@ -770,15 +612,12 @@ const HomePage = () => {
       {restTimer && (
         <RestTimer
           duration={restTimer}
-          onComplete={() => {
-            setRestTimer(null);
-            toast.success("Rest period complete! Ready for next set!");
-          }}
+          onComplete={() => { setRestTimer(null); toast.success("Rest period complete! Ready for next set!"); }}
           onClose={() => setRestTimer(null)}
         />
       )}
 
-      {/* ✅ Video Modal */}
+      {/* Video Modal */}
       <VideoModal
         open={videoModal.open}
         onOpenChange={(open) => setVideoModal((v) => ({ ...v, open }))}
@@ -787,12 +626,7 @@ const HomePage = () => {
       />
 
       {/* PR Celebration */}
-      {prCelebration && (
-        <PRCelebration
-          {...prCelebration}
-          onClose={() => setPrCelebration(null)}
-        />
-      )}
+      {prCelebration && <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />}
     </AppHeader>
   );
 };
