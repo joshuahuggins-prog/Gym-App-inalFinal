@@ -18,8 +18,6 @@ import RestTimer from "../components/RestTimer";
 import PRCelebration from "../components/PRCelebration";
 import WorkoutActionBar from "../components/workout/WorkoutActionBar";
 
-import GymNumberPad from "../components/GymNumberPad";
-
 import {
   getWorkouts,
   saveWorkout,
@@ -88,35 +86,21 @@ const getNextWorkoutTypeFromHistoryAB = () => {
 // ---------------------------
 // HomePage
 // ---------------------------
-const HomePage = ({ openNumberPad }) => {
+const HomePage = () => {
   const { weightUnit } = useSettings();
 
   const [currentWorkout, setCurrentWorkout] = useState(null);
   const [workoutData, setWorkoutData] = useState([]);
   const [restTimer, setRestTimer] = useState(null);
   const [prCelebration, setPrCelebration] = useState(null);
-
   const [videoModal, setVideoModal] = useState({ open: false, title: "", url: "" });
+
   const draftSaveTimerRef = useRef(null);
   const loadRef = useRef(null);
 
   const [manualWorkoutType, setManualWorkoutType] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState("");
-
-  // ---------------------------
-  // Video modal
-  // ---------------------------
-  const handleOpenVideo = (exercise, url) => {
-    if (!url) {
-      toast.message("No video saved", {
-        description: "Add a YouTube link for this exercise in your library.",
-      });
-      return;
-    }
-
-    setVideoModal({ open: true, title: exercise?.name || "Exercise Video", url });
-  };
 
   // ---------------------------
   // Load Today's Workout
@@ -162,7 +146,6 @@ const HomePage = ({ openNumberPad }) => {
             (e) => e.id === ex.id || e.name === ex.name
           );
           const draftEx = draftById.get(ex.id);
-
           return {
             ...ex,
             userNotes: draftEx?.userNotes || "",
@@ -171,11 +154,7 @@ const HomePage = ({ openNumberPad }) => {
           };
         })
       );
-
-      toast.message("Restored unsaved workout", {
-        description: "We loaded your in-progress session after refresh.",
-      });
-
+      toast.message("Restored unsaved workout", { description: "We loaded your in-progress session after refresh." });
       return;
     }
 
@@ -184,23 +163,13 @@ const HomePage = ({ openNumberPad }) => {
         const lastExerciseData = lastSameWorkout?.exercises?.find(
           (e) => e.id === ex.id || e.name === ex.name
         );
-        return {
-          ...ex,
-          userNotes: "",
-          setsData: [],
-          lastWorkoutData: lastExerciseData || null,
-        };
+        return { ...ex, userNotes: "", setsData: [], lastWorkoutData: lastExerciseData || null };
       })
     );
   };
 
-  useEffect(() => {
-    loadRef.current = loadTodaysWorkout;
-  });
-
-  useEffect(() => {
-    loadRef.current?.();
-  }, []);
+  useEffect(() => { loadRef.current = loadTodaysWorkout; }, []);
+  useEffect(() => { loadRef.current?.(); }, []);
 
   // ---------------------------
   // Auto-save draft
@@ -208,24 +177,14 @@ const HomePage = ({ openNumberPad }) => {
   useEffect(() => {
     if (!currentWorkout) return;
 
-    const hasMeaningfulData = (workoutData || []).some(
-      (ex) =>
-        (ex.userNotes && ex.userNotes.trim().length > 0) ||
-        (Array.isArray(ex.setsData) &&
-          ex.setsData.some((set) => {
-            const hasNumbers = (set.weight ?? "") !== "" || (set.reps ?? "") !== "";
-            const hasTick = !!set.completed;
-            return hasNumbers || hasTick;
-          }))
+    const hasMeaningfulData = (workoutData || []).some((ex) =>
+      (ex.userNotes && ex.userNotes.trim().length > 0) ||
+      (Array.isArray(ex.setsData) && ex.setsData.some((set) => (set.weight ?? "") !== "" || (set.reps ?? "") !== "" || !!set.completed))
     );
 
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
-
     draftSaveTimerRef.current = setTimeout(() => {
-      if (!hasMeaningfulData) {
-        clearWorkoutDraft();
-        return;
-      }
+      if (!hasMeaningfulData) return clearWorkoutDraft();
 
       saveWorkoutDraft({
         workoutType: currentWorkout.type,
@@ -241,9 +200,7 @@ const HomePage = ({ openNumberPad }) => {
       });
     }, 400);
 
-    return () => {
-      if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
-    };
+    return () => { if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current); };
   }, [currentWorkout, workoutData]);
 
   // ---------------------------
@@ -293,6 +250,7 @@ const HomePage = ({ openNumberPad }) => {
     setWorkoutData((prev) =>
       (prev || []).map((ex) => {
         if (ex.id !== exercise.id) return ex;
+
         const currentSetsData = Array.isArray(ex.setsData) ? ex.setsData : [];
         const baseCount = currentSetsData.length > 0 ? currentSetsData.length : clampInt(Number(ex.sets ?? 3), 1, 12);
         const base = currentSetsData.length > 0 ? currentSetsData : buildExerciseDefaultSetsData(baseCount);
@@ -325,39 +283,27 @@ const HomePage = ({ openNumberPad }) => {
 
   const handleSaveAndFinishWorkout = () => {
     if (!currentWorkout) return;
-
-    const workout = buildWorkoutPayload();
-    saveWorkout(workout);
+    saveWorkout(buildWorkoutPayload());
     clearWorkoutDraft();
     advanceWorkoutPatternIndex();
-
-    loadRef.current?.();
     toast.success("Workout saved! Great job! 💪", { description: `${currentWorkout.name} completed` });
+    loadRef.current?.();
   };
 
   const handleManualSwitchWorkout = (nextType) => {
     if (!nextType) return;
     const usableProgrammes = getUsableProgrammes();
     const picked = usableProgrammes.find((p) => upper(p.type) === upper(nextType)) || null;
-
-    if (!picked) {
-      toast.error("That workout type isn't available yet.");
-      return;
-    }
-
+    if (!picked) return toast.error("That workout type isn't available yet.");
     setDraftWorkoutType(picked.type);
     setManualWorkoutType(picked.type);
     loadRef.current?.();
-
     toast.message("Switched workout", { description: `Now showing: ${picked.name}` });
   };
 
   const handleReturnToSequence = () => {
     const next = peekNextWorkoutTypeFromPattern();
-    if (!next) {
-      toast.error("No next workout found in your pattern.");
-      return;
-    }
+    if (!next) return toast.error("No next workout found in your pattern.");
     handleManualSwitchWorkout(next);
   };
 
@@ -367,11 +313,9 @@ const HomePage = ({ openNumberPad }) => {
   const weeklyStreak = useMemo(() => {
     const workouts = getWorkouts();
     if (!workouts.length) return 0;
-    const weeks = workouts.map((w) => getWeekKey(w.date)).filter(Boolean);
 
-    const uniq = [];
-    const seen = new Set();
-    for (const wk of weeks) if (!seen.has(wk)) { seen.add(wk); uniq.push(wk); }
+    const weeks = workouts.map((w) => getWeekKey(w.date)).filter(Boolean);
+    const uniq = [...new Set(weeks)];
 
     const weekStart = (weekKey) => {
       const [y, w] = String(weekKey).split("-W");
@@ -387,30 +331,25 @@ const HomePage = ({ openNumberPad }) => {
       return isoMonday;
     };
 
-    const starts = uniq.map((wk) => weekStart(wk)).filter((d) => d && !Number.isNaN(d.getTime()));
+    const starts = uniq.map(weekStart).filter(Boolean);
     if (!starts.length) return 0;
 
     let streak = 1;
     for (let i = 0; i < starts.length - 1; i++) {
-      const a = starts[i];
-      const b = starts[i + 1];
-      const diffDays = Math.round((a - b) / 86400000);
+      const diffDays = Math.round((starts[i] - starts[i + 1]) / 86400000);
       if (diffDays >= 6 && diffDays <= 8) streak++;
       else break;
     }
     return streak;
-  }, [currentWorkout, workoutData]);
+  }, [workoutData]);
 
   const getDaysSinceLastWorkout = () => {
     const workouts = getWorkouts();
     if (!workouts.length) return null;
-    const lastWorkout = new Date(workouts[0].date);
-    const today = new Date();
-    return Math.floor((today - lastWorkout) / (1000 * 60 * 60 * 24));
+    return Math.floor((new Date() - new Date(workouts[0].date)) / (1000 * 60 * 60 * 24));
   };
 
   const daysSince = getDaysSinceLastWorkout();
-
   const canFinish = useMemo(
     () =>
       (workoutData || []).some((ex) =>
@@ -421,19 +360,13 @@ const HomePage = ({ openNumberPad }) => {
   );
 
   // ---------------------------
-  // Add Exercise candidates
+  // Add Exercise Dialog
   // ---------------------------
-  const allLibraryExercises = useMemo(() => {
-    const list = getExercises() || [];
-    return list.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-  }, [showAddDialog]);
-
+  const allLibraryExercises = useMemo(() => (getExercises() || []).slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), [showAddDialog]);
   const addCandidates = useMemo(() => {
     const q = norm(addSearch);
     const existingIds = new Set((workoutData || []).map((e) => norm(e.id)));
-    return allLibraryExercises
-      .filter((ex) => ex?.id && !existingIds.has(norm(ex.id)) && (!q || norm(ex.name).includes(q) || norm(ex.id).includes(q)))
-      .slice(0, 50);
+    return allLibraryExercises.filter((ex) => ex?.id && !existingIds.has(norm(ex.id)) && (!q || norm(ex.name).includes(q) || norm(ex.id).includes(q))).slice(0, 50);
   }, [allLibraryExercises, addSearch, workoutData]);
 
   const handleAddExerciseToToday = (ex) => {
@@ -463,42 +396,26 @@ const HomePage = ({ openNumberPad }) => {
 
   return (
     <AppHeader
-  title="Log Workout"
-  subtitle={subtitle}
-  rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
-  actions={
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowAddDialog(true)}
-        >
-          <Plus className="w-4 h-4 mr-2" /> Add
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => loadRef.current?.()}
-          title="Reload today"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </Button>
-      </div>
-
-      {/* Small “next in sequence” hint on the right */}
-      <div className="text-xs text-white/90">
-        Next:{" "}
-        <span className="font-semibold text-white">
-          {nextInSequence ? String(nextInSequence) : "—"}
-        </span>
-      </div>
-    </div>
-  }
-/>
-
-      {/* Stats */}
+      title="Log Workout"
+      subtitle={subtitle}
+      rightIconSrc={`${process.env.PUBLIC_URL}/icons/icon-overlay-white-32-v1.png`}
+      actions={
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAddDialog(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Add
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => loadRef.current?.()} title="Reload today">
+              <RotateCcw className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="text-xs text-white/90">
+            Next: <span className="font-semibold text-white">{nextInSequence ? String(nextInSequence) : "—"}</span>
+          </div>
+        </div>
+      }
+    >
+{/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-muted/50 rounded-lg p-4 border border-border">
           <div className="flex items-center gap-2 mb-1">
@@ -514,7 +431,11 @@ const HomePage = ({ openNumberPad }) => {
             <span className="text-xs text-muted-foreground">Last Trained</span>
           </div>
           <div className="text-2xl font-bold text-foreground">
-            {daysSince === null ? "Never" : daysSince === 0 ? "Today" : `${daysSince}d ago`}
+            {daysSince === null
+              ? "Never"
+              : daysSince === 0
+              ? "Today"
+              : `${daysSince}d ago`}
           </div>
         </div>
       </div>
@@ -523,30 +444,41 @@ const HomePage = ({ openNumberPad }) => {
       <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mt-4">
         <div className="flex items-start justify-between">
           <div className="min-w-0 w-full">
-            <h2 className="text-xl font-bold text-foreground mb-1 truncate">{currentWorkout.name}</h2>
-            <Badge className="bg-primary/20 text-primary border-primary/50">{currentWorkout.focus}</Badge>
+            <h2 className="text-xl font-bold text-foreground mb-1 truncate">
+              {currentWorkout.name}
+            </h2>
+            <Badge className="bg-primary/20 text-primary border-primary/50">
+              {currentWorkout.focus}
+            </Badge>
 
             {/* Manual switcher */}
             <div className="mt-3 space-y-2">
               <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <select
-                    value={manualWorkoutType || ""}
-                    onChange={(e) => setManualWorkoutType(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
-                  >
-                    {getUsableProgrammes().map((p) => (
-                      <option key={p.type} value={p.type}>{p.name} ({p.type})</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <div className="flex-1">
+                  <div className="relative">
+                    <select
+                      value={manualWorkoutType || ""}
+                      onChange={(e) => setManualWorkoutType(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground appearance-none pr-10"
+                    >
+                      {getUsableProgrammes().map((p) => (
+                        <option key={p.type} value={p.type}>
+                          {p.name} ({p.type})
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
                 </div>
 
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleManualSwitchWorkout(manualWorkoutType)}
-                  disabled={!manualWorkoutType || upper(manualWorkoutType) === upper(currentWorkout.type)}
+                  disabled={
+                    !manualWorkoutType ||
+                    upper(manualWorkoutType) === upper(currentWorkout.type)
+                  }
                   className="shrink-0"
                 >
                   Switch
@@ -556,7 +488,10 @@ const HomePage = ({ openNumberPad }) => {
                   variant="outline"
                   size="sm"
                   onClick={handleReturnToSequence}
-                  disabled={!nextInSequence || upper(nextInSequence) === upper(currentWorkout.type)}
+                  disabled={
+                    !nextInSequence ||
+                    upper(nextInSequence) === upper(currentWorkout.type)
+                  }
                   className="shrink-0"
                 >
                   Next
@@ -575,32 +510,55 @@ const HomePage = ({ openNumberPad }) => {
             exercise={exercise}
             lastWorkoutData={exercise.lastWorkoutData}
             onSetComplete={handleSetComplete}
-            onWeightChange={(setsData) => handleWeightChange(exercise, setsData)}
-            onNotesChange={(notes) => handleNotesChange(exercise, notes)}
+            onWeightChange={handleWeightChange}
+            onNotesChange={handleNotesChange}
             onRestTimer={(duration) => setRestTimer(duration)}
-            onAddSet={() => handleAddSetToExercise(exercise)}
-            onOpenVideo={(url) => handleOpenVideo(exercise, url)}
+            onAddSet={handleAddSetToExercise}
+            onOpenVideo={(ex, url) => {
+              if (!url) {
+                toast.message("No video saved", {
+                  description: "Add a YouTube link for this exercise in your library.",
+                });
+                return;
+              }
+              setVideoModal({ open: true, title: ex?.name || "Exercise Video", url });
+            }}
             isFirst={index === 0}
-            readOnlyInputs={true}            // <-- prevent system keyboard
-            openNumberPad={openNumberPad}   // <-- attach your GymNumberPad
           />
         ))}
       </div>
 
       {/* Floating Save Button */}
-      <WorkoutActionBar onSaveFinish={handleSaveAndFinishWorkout} disableFinish={!currentWorkout || !canFinish} />
+      <WorkoutActionBar
+        onSaveFinish={handleSaveAndFinishWorkout}
+        disableFinish={!currentWorkout || !canFinish}
+      />
 
       {/* Add Exercise Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => { setShowAddDialog(open); if (!open) setAddSearch(""); }}>
+      <Dialog
+        open={showAddDialog}
+        onOpenChange={(open) => {
+          setShowAddDialog(open);
+          if (!open) setAddSearch("");
+        }}
+      >
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Add Exercise</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add Exercise</DialogTitle>
+          </DialogHeader>
 
           <div className="space-y-3">
-            <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="Search exercise library..." />
+            <Input
+              value={addSearch}
+              onChange={(e) => setAddSearch(e.target.value)}
+              placeholder="Search exercise library..."
+            />
 
             <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
               {addCandidates.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6 text-center">No matches (or already added).</div>
+                <div className="text-sm text-muted-foreground py-6 text-center">
+                  No matches (or already added).
+                </div>
               ) : (
                 addCandidates.map((ex) => (
                   <button
@@ -610,7 +568,9 @@ const HomePage = ({ openNumberPad }) => {
                     className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/40 transition p-3"
                   >
                     <div className="font-semibold text-foreground">{ex.name}</div>
-                    <div className="text-xs text-muted-foreground">{ex.sets ?? 3} sets • {ex.repScheme || "RPT"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {ex.sets ?? 3} sets • {ex.repScheme || "RPT"}
+                    </div>
                   </button>
                 ))
               )}
@@ -627,7 +587,10 @@ const HomePage = ({ openNumberPad }) => {
       {restTimer && (
         <RestTimer
           duration={restTimer}
-          onComplete={() => { setRestTimer(null); toast.success("Rest period complete! Ready for next set!"); }}
+          onComplete={() => {
+            setRestTimer(null);
+            toast.success("Rest period complete! Ready for next set!");
+          }}
           onClose={() => setRestTimer(null)}
         />
       )}
@@ -641,7 +604,12 @@ const HomePage = ({ openNumberPad }) => {
       />
 
       {/* PR Celebration */}
-      {prCelebration && <PRCelebration {...prCelebration} onClose={() => setPrCelebration(null)} />}
+      {prCelebration && (
+        <PRCelebration
+          {...prCelebration}
+          onClose={() => setPrCelebration(null)}
+        />
+      )}
     </AppHeader>
   );
 };
