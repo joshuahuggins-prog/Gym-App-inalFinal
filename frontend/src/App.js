@@ -39,7 +39,7 @@ const PAGES = {
 const App = () => {
   const gyroUpsideDown = useUpsideDown();
 
-  // ✅ manual flip override
+  // manual flip override
   const [manualFlip, setManualFlip] = useState(false);
 
   useEffect(() => {
@@ -51,10 +51,8 @@ const App = () => {
     localStorage.setItem("manualFlip", JSON.stringify(manualFlip));
   }, [manualFlip]);
 
-  // final flip state
   const upsideDown = gyroUpsideDown || manualFlip;
 
-  // ✅ Start on Welcome page
   const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
 
@@ -153,33 +151,34 @@ const App = () => {
   return (
     <SettingsProvider>
       <div
-        className={`fixed inset-0 transform-gpu transition-transform duration-350 ease-out ${
+        className={`fixed inset-0 transform-gpu transition-transform duration-300 ease-out ${
           upsideDown ? "rotate-180" : ""
         }`}
       >
         <div className="flex flex-col h-full bg-background text-foreground">
 
-          {/* ✅ Top-left Flip Button */}
-          <button
-            onClick={toggleFlip}
-            aria-label="Flip screen"
-            className={`
-              fixed top-3 left-3 z-50
-              w-10 h-10
-              flex items-center justify-center
-              rounded-full
-              transition-all duration-200
-              backdrop-blur-sm
-              active:scale-95
-              ${
-                manualFlip
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "bg-card text-primary border border-border hover:bg-muted"
-              }
-            `}
-          >
-            <RotateCcw className="w-5 h-5" />
-          </button>
+          {/* ✅ GUARANTEED VISIBLE FLIP BUTTON */}
+          <div className="fixed top-0 left-0 z-[9999] p-3 pointer-events-none">
+            <button
+              onClick={toggleFlip}
+              aria-label="Flip screen"
+              className={`
+                pointer-events-auto
+                w-10 h-10
+                flex items-center justify-center
+                rounded-full
+                transition-all duration-200
+                active:scale-95
+                ${
+                  manualFlip
+                    ? "bg-primary text-primary-foreground shadow-lg"
+                    : "bg-card text-primary border border-border shadow-md"
+                }
+              `}
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+          </div>
 
           {/* Main Content */}
           <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
@@ -205,7 +204,6 @@ const App = () => {
                   onClick={() => handleNavigate(navItems[1].key)}
                 />
 
-                {/* Centre + */}
                 <div className="flex items-center justify-center">
                   <PlusNavButton onClick={handlePlus} />
                 </div>
