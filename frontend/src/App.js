@@ -1,6 +1,5 @@
-// src/App.js
-import React, { useCallback, useMemo, useState } from "react";
-import { History, TrendingUp, Plus, Home, Wrench } from "lucide-react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
+import { History, TrendingUp, Plus, Home, Wrench, RotateCcw } from "lucide-react";
 
 import WelcomePage from "./pages/WelcomePage";
 import HomePage from "./pages/HomePage";
@@ -29,7 +28,6 @@ const PAGES = {
   PROGRESS: "progress",
   SETUP: "setup",
 
-  // setup destinations
   PROGRAMMES: "programmes",
   EXERCISES: "exercises",
   SETTINGS: "settings",
@@ -39,12 +37,25 @@ const PAGES = {
 };
 
 const App = () => {
-  const upsideDown = useUpsideDown();
+  const gyroUpsideDown = useUpsideDown();
+
+  // ✅ manual flip override
+  const [manualFlip, setManualFlip] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("manualFlip");
+    if (saved) setManualFlip(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("manualFlip", JSON.stringify(manualFlip));
+  }, [manualFlip]);
+
+  // final flip state
+  const upsideDown = gyroUpsideDown || manualFlip;
 
   // ✅ Start on Welcome page
   const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
-
-  // Edit workout page state
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
 
   const isEditMode = currentPage === PAGES.EDIT_WORKOUT;
@@ -54,7 +65,6 @@ const App = () => {
     if (page !== PAGES.EDIT_WORKOUT) setEditingWorkoutId(null);
   }, []);
 
-  // Called by HistoryPage pencil button
   const openEditWorkout = useCallback((workoutId) => {
     if (!workoutId) return;
     setEditingWorkoutId(workoutId);
@@ -74,7 +84,6 @@ const App = () => {
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
-  // ✅ Bottom nav: 4 icons + centre plus
   const navItems = useMemo(
     () => [
       { key: PAGES.WELCOME, label: "Overview", icon: <Home className="w-5 h-5" /> },
@@ -113,7 +122,6 @@ const App = () => {
       case PAGES.SETUP:
         return <SetupPage onNavigate={(k) => handleNavigate(k)} />;
 
-      // setup destinations
       case PAGES.PROGRAMMES:
         return <ProgrammesPage />;
 
@@ -135,9 +143,12 @@ const App = () => {
   };
 
   const handlePlus = useCallback(() => {
-    // ✅ Centre Plus = "Today / Log Workout"
     handleNavigate(PAGES.HOME);
   }, [handleNavigate]);
+
+  const toggleFlip = () => {
+    setManualFlip((prev) => !prev);
+  };
 
   return (
     <SettingsProvider>
@@ -147,22 +158,46 @@ const App = () => {
         }`}
       >
         <div className="flex flex-col h-full bg-background text-foreground">
-          {/* Main Content (ONLY scrolling area) */}
+
+          {/* ✅ Top-left Flip Button */}
+          <button
+            onClick={toggleFlip}
+            aria-label="Flip screen"
+            className={`
+              fixed top-3 left-3 z-50
+              w-10 h-10
+              flex items-center justify-center
+              rounded-full
+              transition-all duration-200
+              backdrop-blur-sm
+              active:scale-95
+              ${
+                manualFlip
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "bg-card text-primary border border-border hover:bg-muted"
+              }
+            `}
+          >
+            <RotateCcw className="w-5 h-5" />
+          </button>
+
+          {/* Main Content */}
           <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
             {renderPage()}
           </main>
 
-          {/* Bottom Navigation (hidden while editing a workout) */}
+          {/* Bottom Navigation */}
           {!isEditMode && (
-            <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
+            <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
               <div className="h-16 grid grid-cols-5 items-center px-2">
-                {/* Left 2 icons */}
+
                 <NavButton
                   icon={navItems[0].icon}
                   label={navItems[0].label}
                   active={currentPage === navItems[0].key}
                   onClick={() => handleNavigate(navItems[0].key)}
                 />
+
                 <NavButton
                   icon={navItems[1].icon}
                   label={navItems[1].label}
@@ -175,19 +210,20 @@ const App = () => {
                   <PlusNavButton onClick={handlePlus} />
                 </div>
 
-                {/* Right 2 icons */}
                 <NavButton
                   icon={navItems[2].icon}
                   label={navItems[2].label}
                   active={currentPage === navItems[2].key}
                   onClick={() => handleNavigate(navItems[2].key)}
                 />
+
                 <NavButton
                   icon={navItems[3].icon}
                   label={navItems[3].label}
                   active={currentPage === navItems[3].key}
                   onClick={() => handleNavigate(navItems[3].key)}
                 />
+
               </div>
             </nav>
           )}
@@ -199,12 +235,11 @@ const App = () => {
   );
 };
 
-// ✅ Centre button. Slightly larger, feels "app-like"
 const PlusNavButton = ({ onClick }) => (
   <button
     onClick={onClick}
     aria-label="Start workout"
-    className="flex items-center justify-center w-13 h-13 rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform"
+    className="flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform"
     style={{ width: 52, height: 52 }}
   >
     <Plus className="w-6 h-6" />
