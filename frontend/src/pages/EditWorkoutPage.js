@@ -1,6 +1,7 @@
+// src/pages/EditWorkoutPage.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "../components/AppHeader";
-import { X, Save, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { X, Save, AlertTriangle, Plus, Trash2, Calendar } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -37,6 +38,15 @@ const formatDateLong = (iso) => {
   }
 };
 
+const toInputDate = (iso) => {
+  try {
+    const d = new Date(iso);
+    return d.toISOString().split("T")[0]; // YYYY-MM-DD
+  } catch {
+    return "";
+  }
+};
+
 const norm = (s) => String(s || "").trim().toLowerCase();
 const clampInt = (n, min, max) => Math.max(min, Math.min(max, Math.trunc(n)));
 
@@ -55,6 +65,9 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
   const [isDirty, setIsDirty] = useState(false);
   const didHydrateRef = useRef(false);
 
+  // ✅ NEW: date state
+  const [workoutDate, setWorkoutDate] = useState("");
+
   // Add exercise UI
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addSearch, setAddSearch] = useState("");
@@ -71,6 +84,9 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       toast.error("Workout not found");
       return;
     }
+
+    // ✅ set initial date
+    setWorkoutDate(toInputDate(w.date));
 
     const programmes = getProgrammes() || [];
     const programme =
@@ -98,14 +114,16 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
       return;
     }
     setIsDirty(true);
-  }, [rows, originalWorkout]);
+  }, [rows, workoutDate, originalWorkout]); // ✅ include date
 
   const subtitle = useMemo(() => {
     if (!originalWorkout) return "Edit saved workout";
     const type = String(originalWorkout.type || "").toUpperCase();
-    const date = formatDateLong(originalWorkout.date);
+    const date = workoutDate
+      ? formatDateLong(workoutDate)
+      : formatDateLong(originalWorkout.date);
     return `${type}${date ? ` — ${date}` : ""}`;
-  }, [originalWorkout]);
+  }, [originalWorkout, workoutDate]);
 
   const handleWeightChange = (exercise, setsData) => {
     setRows((prev) =>
@@ -192,6 +210,7 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
 
     const ok = updateWorkout(originalWorkout.id, {
       exercises: nextExercises,
+      date: workoutDate ? new Date(workoutDate).toISOString() : originalWorkout.date, // ✅ NEW
     });
 
     if (!ok) {
@@ -243,25 +262,30 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
             <Plus className="w-4 h-4" />
           </Button>
 
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={!isDirty}
-          >
+          <Button size="sm" onClick={handleSave} disabled={!isDirty}>
             <Save className="w-4 h-4 mr-1" />
             Save
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCancel}
-          >
+          <Button variant="outline" size="sm" onClick={handleCancel}>
             <X className="w-4 h-4" />
           </Button>
         </div>
       }
     >
+      {/* ✅ NEW DATE PICKER */}
+      <div className="mb-4">
+        <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
+          <Calendar className="w-4 h-4" />
+          Workout Date
+        </div>
+        <Input
+          type="date"
+          value={workoutDate}
+          onChange={(e) => setWorkoutDate(e.target.value)}
+        />
+      </div>
+
       <div className="space-y-4">
         {rows.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card/40 p-4">
