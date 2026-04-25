@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from "react";
-import { History, TrendingUp, Plus, Home, Wrench, RotateCcw } from "lucide-react";
+import { History, TrendingUp, Plus, Home, Wrench } from "lucide-react";
 
 import WelcomePage from "./pages/WelcomePage";
 import HomePage from "./pages/HomePage";
@@ -18,8 +18,6 @@ import ThemeCreatorPage from "./pages/ThemeCreatorPage";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
 
-import useUpsideDown from "./hooks/useUpsideDown";
-
 const PAGES = {
   WELCOME: "welcome",
   HOME: "home",
@@ -37,21 +35,36 @@ const PAGES = {
 };
 
 const App = () => {
-  const gyroUpsideDown = useUpsideDown();
+  const [isUpsideDown, setIsUpsideDown] = useState(false);
 
-  // manual flip override
-  const [manualFlip, setManualFlip] = useState(false);
-
+  // ✅ Orientation detection (Screen Orientation API + fallback)
   useEffect(() => {
-    const saved = localStorage.getItem("manualFlip");
-    if (saved) setManualFlip(JSON.parse(saved));
+    const updateOrientation = () => {
+      // Preferred: Screen Orientation API
+      if (screen.orientation && typeof screen.orientation.angle === "number") {
+        const angle = screen.orientation.angle;
+        setIsUpsideDown(angle === 180);
+        return;
+      }
+
+      // Fallback: matchMedia (less precise, no upside-down detection)
+      const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+
+      // If we can't detect 180°, assume normal portrait
+      setIsUpsideDown(false);
+    };
+
+    updateOrientation();
+
+    // Events
+    window.addEventListener("orientationchange", updateOrientation);
+    window.addEventListener("resize", updateOrientation);
+
+    return () => {
+      window.removeEventListener("orientationchange", updateOrientation);
+      window.removeEventListener("resize", updateOrientation);
+    };
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem("manualFlip", JSON.stringify(manualFlip));
-  }, [manualFlip]);
-
-  const upsideDown = gyroUpsideDown || manualFlip;
 
   const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
@@ -144,41 +157,14 @@ const App = () => {
     handleNavigate(PAGES.HOME);
   }, [handleNavigate]);
 
-  const toggleFlip = () => {
-    setManualFlip((prev) => !prev);
-  };
-
   return (
     <SettingsProvider>
       <div
         className={`fixed inset-0 transform-gpu transition-transform duration-300 ease-out ${
-          upsideDown ? "rotate-180" : ""
+          isUpsideDown ? "rotate-180" : ""
         }`}
       >
         <div className="flex flex-col h-full bg-background text-foreground">
-
-          {/* ✅ GUARANTEED VISIBLE FLIP BUTTON */}
-          <div className="fixed top-0 left-0 z-[9999] p-3 pointer-events-none">
-            <button
-              onClick={toggleFlip}
-              aria-label="Flip screen"
-              className={`
-                pointer-events-auto
-                w-10 h-10
-                flex items-center justify-center
-                rounded-full
-                transition-all duration-200
-                active:scale-95
-                ${
-                  manualFlip
-                    ? "bg-primary text-primary-foreground shadow-lg"
-                    : "bg-card text-primary border border-border shadow-md"
-                }
-              `}
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-          </div>
 
           {/* Main Content */}
           <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
