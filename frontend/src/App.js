@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+// src/App.js
+import React, { useCallback, useMemo, useState } from "react";
 import { History, TrendingUp, Plus, Home, Wrench } from "lucide-react";
 
 import WelcomePage from "./pages/WelcomePage";
@@ -18,6 +19,8 @@ import ThemeCreatorPage from "./pages/ThemeCreatorPage";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/sonner";
 
+import useUpsideDown from "./hooks/useUpsideDown";
+
 const PAGES = {
   WELCOME: "welcome",
   HOME: "home",
@@ -26,6 +29,7 @@ const PAGES = {
   PROGRESS: "progress",
   SETUP: "setup",
 
+  // setup destinations
   PROGRAMMES: "programmes",
   EXERCISES: "exercises",
   SETTINGS: "settings",
@@ -35,38 +39,12 @@ const PAGES = {
 };
 
 const App = () => {
-  const [isUpsideDown, setIsUpsideDown] = useState(false);
+  const upsideDown = useUpsideDown();
 
-  // ✅ Orientation detection (Screen Orientation API + fallback)
-  useEffect(() => {
-    const updateOrientation = () => {
-      // Preferred: Screen Orientation API
-      if (screen.orientation && typeof screen.orientation.angle === "number") {
-        const angle = screen.orientation.angle;
-        setIsUpsideDown(angle === 180);
-        return;
-      }
-
-      // Fallback: matchMedia (less precise, no upside-down detection)
-      const isPortrait = window.matchMedia("(orientation: portrait)").matches;
-
-      // If we can't detect 180°, assume normal portrait
-      setIsUpsideDown(false);
-    };
-
-    updateOrientation();
-
-    // Events
-    window.addEventListener("orientationchange", updateOrientation);
-    window.addEventListener("resize", updateOrientation);
-
-    return () => {
-      window.removeEventListener("orientationchange", updateOrientation);
-      window.removeEventListener("resize", updateOrientation);
-    };
-  }, []);
-
+  // ✅ Start on Welcome page
   const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
+
+  // Edit workout page state
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
 
   const isEditMode = currentPage === PAGES.EDIT_WORKOUT;
@@ -76,6 +54,7 @@ const App = () => {
     if (page !== PAGES.EDIT_WORKOUT) setEditingWorkoutId(null);
   }, []);
 
+  // Called by HistoryPage pencil button
   const openEditWorkout = useCallback((workoutId) => {
     if (!workoutId) return;
     setEditingWorkoutId(workoutId);
@@ -95,6 +74,7 @@ const App = () => {
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
+  // ✅ Bottom nav: 4 icons + centre plus
   const navItems = useMemo(
     () => [
       { key: PAGES.WELCOME, label: "Overview", icon: <Home className="w-5 h-5" /> },
@@ -133,6 +113,7 @@ const App = () => {
       case PAGES.SETUP:
         return <SetupPage onNavigate={(k) => handleNavigate(k)} />;
 
+      // setup destinations
       case PAGES.PROGRAMMES:
         return <ProgrammesPage />;
 
@@ -154,35 +135,34 @@ const App = () => {
   };
 
   const handlePlus = useCallback(() => {
+    // ✅ Centre Plus = "Today / Log Workout"
     handleNavigate(PAGES.HOME);
   }, [handleNavigate]);
 
   return (
     <SettingsProvider>
       <div
-        className={`fixed inset-0 transform-gpu transition-transform duration-300 ease-out ${
-          isUpsideDown ? "rotate-180" : ""
+        className={`fixed inset-0 transform-gpu transition-transform duration-350 ease-out ${
+          upsideDown ? "rotate-180" : ""
         }`}
       >
         <div className="flex flex-col h-full bg-background text-foreground">
-
-          {/* Main Content */}
+          {/* Main Content (ONLY scrolling area) */}
           <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
             {renderPage()}
           </main>
 
-          {/* Bottom Navigation */}
+          {/* Bottom Navigation (hidden while editing a workout) */}
           {!isEditMode && (
-            <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
+            <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
               <div className="h-16 grid grid-cols-5 items-center px-2">
-
+                {/* Left 2 icons */}
                 <NavButton
                   icon={navItems[0].icon}
                   label={navItems[0].label}
                   active={currentPage === navItems[0].key}
                   onClick={() => handleNavigate(navItems[0].key)}
                 />
-
                 <NavButton
                   icon={navItems[1].icon}
                   label={navItems[1].label}
@@ -190,24 +170,24 @@ const App = () => {
                   onClick={() => handleNavigate(navItems[1].key)}
                 />
 
+                {/* Centre + */}
                 <div className="flex items-center justify-center">
                   <PlusNavButton onClick={handlePlus} />
                 </div>
 
+                {/* Right 2 icons */}
                 <NavButton
                   icon={navItems[2].icon}
                   label={navItems[2].label}
                   active={currentPage === navItems[2].key}
                   onClick={() => handleNavigate(navItems[2].key)}
                 />
-
                 <NavButton
                   icon={navItems[3].icon}
                   label={navItems[3].label}
                   active={currentPage === navItems[3].key}
                   onClick={() => handleNavigate(navItems[3].key)}
                 />
-
               </div>
             </nav>
           )}
@@ -219,11 +199,12 @@ const App = () => {
   );
 };
 
+// ✅ Centre button. Slightly larger, feels "app-like"
 const PlusNavButton = ({ onClick }) => (
   <button
     onClick={onClick}
     aria-label="Start workout"
-    className="flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform"
+    className="flex items-center justify-center w-13 h-13 rounded-full bg-primary text-primary-foreground shadow-sm active:scale-95 transition-transform"
     style={{ width: 52, height: 52 }}
   >
     <Plus className="w-6 h-6" />
