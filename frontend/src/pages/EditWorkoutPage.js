@@ -198,6 +198,41 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     });
   };
 
+  // ✅ NEW: Add exercise from catalogue to workout
+  const handleAddExerciseFromCatalogue = (catalogueExercise) => {
+    if (!catalogueExercise?.id) return;
+
+    // Check if exercise already exists in workout
+    const alreadyExists = rows.some((ex) => ex.id === catalogueExercise.id);
+    if (alreadyExists) {
+      toast.warning("Exercise already in workout", {
+        description: `"${catalogueExercise.name || catalogueExercise.id}" is already part of this workout.`,
+      });
+      return;
+    }
+
+    // Create new exercise row from catalogue
+    const newExerciseRow = {
+      id: catalogueExercise.id,
+      name: catalogueExercise.name,
+      sets: catalogueExercise.sets || 3,
+      setsData: buildExerciseDefaultSetsData(
+        catalogueExercise.sets || 3
+      ),
+      userNotes: "",
+      ...catalogueExercise,
+    };
+
+    setRows((prev) => [...prev, newExerciseRow]);
+    setShowAddDialog(false);
+    setAddSearch("");
+
+    toast.success("Exercise added", {
+      description: `Added "${catalogueExercise.name || catalogueExercise.id}" to workout.`,
+      duration: 1600,
+    });
+  };
+
   const handleSave = () => {
     if (!originalWorkout) return;
 
@@ -230,6 +265,19 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
     }
     onClose?.();
   };
+
+  // ✅ NEW: Compute filtered exercises
+  const filteredExercises = useMemo(() => {
+    const catalogueExercises = getExercises() || [];
+    const q = addSearch.trim().toLowerCase();
+
+    if (!q) return catalogueExercises;
+
+    return catalogueExercises.filter((ex) =>
+      String(ex.name || "").toLowerCase().includes(q) ||
+      String(ex.id || "").toLowerCase().includes(q)
+    );
+  }, [addSearch]);
 
   if (!originalWorkout) {
     return (
@@ -340,18 +388,29 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
               onChange={(e) => setAddSearch(e.target.value)}
               placeholder="Search exercise library..."
             />
-                const catalogueExercises = getExercises() || [];
-
-const filteredExercises = catalogueExercises.filter((ex) => {
-  const q = addSearch.trim().toLowerCase();
-
-  if (!q) return true;
-
-  return (
-    String(ex.name || "").toLowerCase().includes(q) ||
-    String(ex.id || "").toLowerCase().includes(q)
-  );
-});
+            {/* ✅ FIXED: Display filtered exercises with click handlers */}
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {filteredExercises.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">
+                  No exercises found
+                </div>
+              ) : (
+                filteredExercises.map((ex) => (
+                  <button
+                    key={ex.id}
+                    onClick={() => handleAddExerciseFromCatalogue(ex)}
+                    className="w-full text-left rounded-lg border border-border bg-card/40 p-3 hover:bg-card/60 transition"
+                  >
+                    <div className="font-medium text-sm">{ex.name}</div>
+                    {ex.sets && (
+                      <div className="text-xs text-muted-foreground">
+                        {ex.sets} sets
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
