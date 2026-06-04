@@ -340,6 +340,18 @@ const EditWorkoutPage = ({ workoutId, onClose }) => {
               onChange={(e) => setAddSearch(e.target.value)}
               placeholder="Search exercise library..."
             />
+                const catalogueExercises = getExercises() || [];
+
+const filteredExercises = catalogueExercises.filter((ex) => {
+  const q = addSearch.trim().toLowerCase();
+
+  if (!q) return true;
+
+  return (
+    String(ex.name || "").toLowerCase().includes(q) ||
+    String(ex.id || "").toLowerCase().includes(q)
+  );
+});
           </div>
         </DialogContent>
       </Dialog>
