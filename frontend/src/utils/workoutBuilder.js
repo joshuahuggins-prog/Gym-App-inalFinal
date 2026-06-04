@@ -75,10 +75,47 @@ const normalizeGoalReps = (goalReps, count) => {
 export const buildWorkoutExerciseRows = ({ workout, programme, catalogueExercises = [] }) => {
   if (!workout) return [];
 
-  const templateExercises =
-    programme?.exercises && Array.isArray(programme.exercises) && programme.exercises.length > 0
-      ? programme.exercises
-      : workout.exercises || [];
+// Merge programme exercises with saved workout exercises
+// so ad-hoc additions are preserved in history/edit mode
+
+const programmeExercises =
+  Array.isArray(programme?.exercises)
+    ? programme.exercises
+    : [];
+
+const savedExercises =
+  Array.isArray(workout?.exercises)
+    ? workout.exercises
+    : [];
+
+const mergedExercises = [...programmeExercises];
+
+savedExercises.forEach((saved) => {
+  const exists = mergedExercises.some((programmeExercise) => {
+    const pId = String(programmeExercise?.id || "");
+    const sId = String(saved?.id || "");
+
+    // Prefer ID matching
+    if (pId && sId) {
+      return pId === sId;
+    }
+
+    // Fallback to name matching
+    return (
+      String(programmeExercise?.name || "").toLowerCase() ===
+      String(saved?.name || "").toLowerCase()
+    );
+  });
+
+  if (!exists) {
+    mergedExercises.push(saved);
+  }
+});
+
+const templateExercises =
+  mergedExercises.length > 0
+    ? mergedExercises
+    : savedExercises;
 
   // saved workout map by id, fallback by name
   const savedById = new Map();
