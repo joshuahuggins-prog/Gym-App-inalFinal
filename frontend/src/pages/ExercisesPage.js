@@ -262,7 +262,6 @@ export default function ExercisesPage() {
 
     // Save exercise details ONLY (no assignedTo here)
     const ok = saveExercise(exerciseData);
-    updateExerciseInAllProgrammes(exerciseData);
     if (!ok) {
       toast.error("Failed to save exercise");
       return;
@@ -354,8 +353,7 @@ export default function ExercisesPage() {
           ? exercise.assignedTo
           : [],
       });
-      updateExerciseInAllProgrammes(def);
-      
+
       if (!ok) {
         toast.error("Reset failed");
         closeResetUI();
