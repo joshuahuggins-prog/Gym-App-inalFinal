@@ -68,62 +68,31 @@ const normalizeGoalReps = (goalReps, count) => {
 
 /**
  * Build editable exercise rows for a workout:
- * - Uses programme template for correct exercise list + correct set count
- * - Overlays saved workout values (weight/reps/completed/notes)
- * - Always returns setsData with EXACT number of sets (template sets)
+ * - For live workouts (no saved data): uses programme template for correct exercise list + correct set count
+ * - For editing saved workouts: uses ONLY the saved workout's exercises (no programme override)
+ * - Overlays catalogue data (template settings, goalReps) where available
+ * - Always returns setsData with EXACT number of sets
  */
 export const buildWorkoutExerciseRows = ({ workout, programme, catalogueExercises = [] }) => {
   if (!workout) return [];
 
-// Merge programme exercises with saved workout exercises
-// so ad-hoc additions are preserved in history/edit mode
+  const savedExercises =
+    Array.isArray(workout?.exercises)
+      ? workout.exercises
+      : [];
 
-const programmeExercises =
-  Array.isArray(programme?.exercises)
-    ? programme.exercises
-    : [];
+  // ✅ KEY FIX: If the workout has saved exercises, use ONLY those (don't merge with programme)
+  // This preserves the exact exercise list from history
+  let templateExercises = savedExercises;
 
-const savedExercises =
-  Array.isArray(workout?.exercises)
-    ? workout.exercises
-    : [];
-
-const mergedExercises = [...programmeExercises];
-
-savedExercises.forEach((saved) => {
-  const exists = mergedExercises.some((programmeExercise) => {
-    const pId = String(programmeExercise?.id || "");
-    const sId = String(saved?.id || "");
-
-    // Prefer ID matching
-    if (pId && sId) {
-      return pId === sId;
-    }
-
-    // Fallback to name matching
-    return (
-      String(programmeExercise?.name || "").toLowerCase() ===
-      String(saved?.name || "").toLowerCase()
-    );
-  });
-
-  if (!exists) {
-    mergedExercises.push(saved);
+  // If no saved exercises, fall back to programme (for live workout creation)
+  if (templateExercises.length === 0) {
+    const programmeExercises =
+      Array.isArray(programme?.exercises)
+        ? programme.exercises
+        : [];
+    templateExercises = programmeExercises;
   }
-});
-
-const templateExercises =
-  mergedExercises.length > 0
-    ? mergedExercises
-    : savedExercises;
-
-  // saved workout map by id, fallback by name
-  const savedById = new Map();
-  const savedByName = new Map();
-  (workout.exercises || []).forEach((ex) => {
-    if (ex?.id) savedById.set(String(ex.id), ex);
-    if (ex?.name) savedByName.set(String(ex.name).toLowerCase(), ex);
-  });
 
   // catalogue map (optional)
   const catById = new Map();
@@ -133,26 +102,23 @@ const templateExercises =
 
   return templateExercises.map((tmpl) => {
     const id = tmpl?.id ? String(tmpl.id) : "";
-    const nameKey = String(tmpl?.name || "").toLowerCase();
-
-    const saved = (id && savedById.get(id)) || savedByName.get(nameKey) || null;
     const cat = (id && catById.get(id)) || null;
 
     const setsCount = clampInt(
-      toNum(tmpl?.sets ?? cat?.sets ?? saved?.sets?.length ?? 3, 3),
+      toNum(tmpl?.sets ?? cat?.sets ?? 3, 3),
       1,
       12
     );
 
     const goalReps = normalizeGoalReps(tmpl?.goalReps ?? cat?.goalReps ?? [], setsCount);
 
-    const baseSetsData = saved ? savedSetsToSetsData(saved.sets) : [];
+    const baseSetsData = savedSetsToSetsData(tmpl.sets || []);
     const setsData = normalizeSetsData(baseSetsData, setsCount);
 
     return {
-      id: id || saved?.id || `exercise_${Date.now()}`,
-      name: tmpl?.name || saved?.name || cat?.name || id,
-      repScheme: tmpl?.repScheme || saved?.repScheme || cat?.repScheme || "RPT",
+      id: id || `exercise_${Date.now()}`,
+      name: tmpl?.name || cat?.name || id,
+      repScheme: tmpl?.repScheme || cat?.repScheme || "RPT",
       sets: setsCount,
       goalReps,
       restTime: tmpl?.restTime ?? cat?.restTime ?? 120,
@@ -160,7 +126,7 @@ const templateExercises =
       // what ExerciseCard reads/writes:
       setsData,
       // saved workout exercise notes:
-      userNotes: saved?.notes || "",
+      userNotes: tmpl?.notes || "",
       lastWorkoutData: null,
     };
   });
