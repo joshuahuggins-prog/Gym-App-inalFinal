@@ -600,6 +600,23 @@ const ExerciseCard = ({
     return mode === "assisted" ? "Assist" : "Weight";
   };
 
+  // ✅ NEW: Handle set completion with auto-start timer for non-final sets
+  const handleSetComplete = (setIndex) => {
+    const next = [...sets];
+    const wasCompleted = sets[setIndex].completed;
+    next[setIndex] = { ...sets[setIndex], completed: !wasCompleted };
+    pushUp(next);
+    onSetComplete?.(exercise, next[setIndex], false);
+
+    // Auto-start timer if completing a non-final set
+    if (!wasCompleted && setIndex < sets.length - 1) {
+      // Only auto-start if this set wasn't already completed and it's not the last set
+      setTimeout(() => {
+        onRestTimer?.(exercise?.restTime ?? 120);
+      }, 100);
+    }
+  };
+
   return (
     <div
       className={[
@@ -812,10 +829,7 @@ const ExerciseCard = ({
                   }
                   onClick={(e) => {
                     e.stopPropagation();
-                    const next = [...sets];
-                    next[i] = { ...s, completed: !s.completed };
-                    pushUp(next);
-                    onSetComplete?.(exercise, next[i], false);
+                    handleSetComplete(i);
                   }}
                 >
                   ✓
