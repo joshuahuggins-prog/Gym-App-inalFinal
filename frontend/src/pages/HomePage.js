@@ -86,6 +86,26 @@ const getNextWorkoutTypeFromHistoryAB = () => {
   return null;
 };
 
+// ✅ NEW: Find the most recent workout containing a specific exercise (by ID or name)
+const getLastWorkoutForExercise = (exerciseId, exerciseName) => {
+  const workouts = getWorkouts();
+  
+  // Search through all workouts (oldest to newest) to find the most recent one with this exercise
+  for (const workout of workouts) {
+    if (!workout.exercises) continue;
+    
+    const foundEx = workout.exercises.find(
+      (e) => e.id === exerciseId || e.name === exerciseName
+    );
+    
+    if (foundEx) {
+      return foundEx;
+    }
+  }
+  
+  return null;
+};
+
 // ---------------------------
 // HomePage
 // ---------------------------
@@ -183,9 +203,13 @@ const HomePage = () => {
 
       setWorkoutData(
         (workout.exercises || []).map((ex) => {
-          const lastExerciseData = lastSameWorkout?.exercises?.find(
-            (e) => e.id === ex.id || e.name === ex.name
-          );
+          // ✅ UPDATED: Try to find exercise from same workout type first,
+          // then fall back to ANY previous workout containing this exercise
+          const lastExerciseData = 
+            lastSameWorkout?.exercises?.find(
+              (e) => e.id === ex.id || e.name === ex.name
+            ) || getLastWorkoutForExercise(ex.id, ex.name);
+          
           const draftEx = draftById.get(ex.id);
 
           return {
@@ -207,9 +231,13 @@ const HomePage = () => {
     // No draft - start fresh
     setWorkoutData(
       (workout.exercises || []).map((ex) => {
-        const lastExerciseData = lastSameWorkout?.exercises?.find(
-          (e) => e.id === ex.id || e.name === ex.name
-        );
+        // ✅ UPDATED: Try to find exercise from same workout type first,
+        // then fall back to ANY previous workout containing this exercise
+        const lastExerciseData = 
+          lastSameWorkout?.exercises?.find(
+            (e) => e.id === ex.id || e.name === ex.name
+          ) || getLastWorkoutForExercise(ex.id, ex.name);
+        
         return {
           ...ex,
           userNotes: "",
@@ -589,7 +617,7 @@ const HomePage = () => {
             </Button>
           </div>
 
-          {/* Small “next in sequence” hint on the right */}
+          {/* Small "next in sequence" hint on the right */}
           <div className="text-xs text-white/90">
             Next:{" "}
             <span className="font-semibold text-white">
@@ -759,7 +787,7 @@ const HomePage = () => {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Added exercises only affect Today (they won’t be added into your
+              Added exercises only affect Today (they won't be added into your
               programme).
             </div>
           </div>
