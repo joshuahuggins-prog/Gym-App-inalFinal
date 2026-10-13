@@ -86,8 +86,24 @@ const getNextWorkoutTypeFromHistoryAB = () => {
   return null;
 };
 
-// ✅ NEW: Find the most recent workout containing a specific exercise (by ID or name)
-// but ignore entries with no meaningful load/reps product (weight * reps <= 0).
+const hasMeaningfulWorkoutSet = (exerciseItem) => {
+  if (!exerciseItem) return false;
+
+  const sets = Array.isArray(exerciseItem.sets)
+    ? exerciseItem.sets
+    : Array.isArray(exerciseItem.setsData)
+    ? exerciseItem.setsData
+    : [];
+
+  return sets.some((s) => {
+    const w =
+      Number(s?.weight ?? s?.w ?? s?.load ?? s?.kg ?? s?.lbs ?? s?.value ?? 0) || 0;
+    const r = Number(s?.reps ?? s?.r ?? s?.count ?? 0) || 0;
+    return Number.isFinite(w) && Number.isFinite(r) && w * r > 0;
+  });
+};
+
+// ✅ Prefer the newest workout that contains this exercise and has a meaningful result.
 const getLastWorkoutForExercise = (exerciseId, exerciseName) => {
   const workouts = getWorkouts() || [];
 
@@ -103,22 +119,7 @@ const getLastWorkoutForExercise = (exerciseId, exerciseName) => {
       );
     });
 
-    if (!foundEx) continue;
-
-    const sets = Array.isArray(foundEx.sets)
-      ? foundEx.sets
-      : Array.isArray(foundEx.setsData)
-      ? foundEx.setsData
-      : [];
-
-    const hasMeaningful = sets.some((s) => {
-      const w =
-        Number(s?.weight ?? s?.w ?? s?.load ?? s?.kg ?? s?.lbs ?? s?.value ?? 0) || 0;
-      const r = Number(s?.reps ?? s?.r ?? s?.count ?? 0) || 0;
-      return Number.isFinite(w) && Number.isFinite(r) && w * r > 0;
-    });
-
-    if (hasMeaningful) {
+    if (foundEx && hasMeaningfulWorkoutSet(foundEx)) {
       return foundEx;
     }
   }
@@ -223,13 +224,13 @@ const HomePage = () => {
 
       setWorkoutData(
         (workout.exercises || []).map((ex) => {
-          // ✅ UPDATED: Try to find exercise from same workout type first,
-          // then fall back to ANY previous workout containing this exercise
-          const lastExerciseData = 
+          const lastExerciseData =
+            getLastWorkoutForExercise(ex.id, ex.name) ||
             lastSameWorkout?.exercises?.find(
               (e) => e.id === ex.id || e.name === ex.name
-            ) || getLastWorkoutForExercise(ex.id, ex.name);
-          
+            ) ||
+            null;
+
           const draftEx = draftById.get(ex.id);
 
           return {
@@ -251,13 +252,13 @@ const HomePage = () => {
     // No draft - start fresh
     setWorkoutData(
       (workout.exercises || []).map((ex) => {
-        // ✅ UPDATED: Try to find exercise from same workout type first,
-        // then fall back to ANY previous workout containing this exercise
-        const lastExerciseData = 
+        const lastExerciseData =
+          getLastWorkoutForExercise(ex.id, ex.name) ||
           lastSameWorkout?.exercises?.find(
             (e) => e.id === ex.id || e.name === ex.name
-          ) || getLastWorkoutForExercise(ex.id, ex.name);
-        
+          ) ||
+          null;
+
         return {
           ...ex,
           userNotes: "",
