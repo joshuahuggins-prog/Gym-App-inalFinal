@@ -615,10 +615,27 @@ const ExerciseCard = ({
   };
 
   // ✅ NEW: Handle set completion with auto-start timer for non-final sets
+  // When marking a set complete, if reps is empty, auto-fill with goalReps for that set
   const handleSetComplete = (setIndex) => {
     const next = [...sets];
     const wasCompleted = sets[setIndex].completed;
-    next[setIndex] = { ...sets[setIndex], completed: !wasCompleted };
+
+    // If we're about to mark it completed and reps are empty, fill with goalReps
+    if (!wasCompleted) {
+      const current = { ...next[setIndex] };
+      if (current.reps === "" || current.reps == null) {
+        const gr = goalReps?.[setIndex];
+        if (Number.isFinite(Number(gr))) {
+          current.reps = Number(gr);
+        }
+      }
+      current.completed = true;
+      next[setIndex] = current;
+    } else {
+      // toggling off
+      next[setIndex] = { ...next[setIndex], completed: false };
+    }
+
     pushUp(next);
     onSetComplete?.(exercise, next[setIndex], false);
 
