@@ -74,6 +74,20 @@ const fmt1 = (n) => {
   return round1(x).toFixed(1);
 };
 
+const truncateToLength = (value, maxLen = 10) => {
+  if (value == null) return "";
+  const text = String(value);
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
+};
+
+const formatLastWorkoutSetSummary = (set) => {
+  const w = toNumOrNull(set?.weight);
+  const r = toNumOrNull(set?.reps);
+  if (!Number.isFinite(w) || !Number.isFinite(r)) return null;
+  return truncateToLength(`${fmt1(w)} × ${fmt1(r)}`, 10);
+};
+
 /**
  * PR from workout history: best weight, tie-break by reps
  */
@@ -617,6 +631,17 @@ const ExerciseCard = ({
     }
   };
 
+  const lastWorkoutSetSummary = useMemo(() => {
+    if (!lastWorkoutData || !Array.isArray(lastWorkoutData.sets)) return [];
+    return lastWorkoutData.sets
+      .map((s, idx) => {
+        const summary = formatLastWorkoutSetSummary(s);
+        if (!summary) return null;
+        return `${idx + 1}: ${summary}`;
+      })
+      .filter(Boolean);
+  }, [lastWorkoutData]);
+
   return (
     <div
       className={[
@@ -763,6 +788,19 @@ const ExerciseCard = ({
           {completeIncompleteLabel && (
             <div className="text-xs text-muted-foreground">
               <span className="text-muted-foreground">{completeIncompleteLabel}</span>
+            </div>
+          )}
+
+          {lastWorkoutSetSummary.length > 0 && (
+            <div className="text-[11px] text-muted-foreground border border-border rounded-lg p-2 bg-muted/20">
+              <div className="font-semibold text-foreground mb-1">Last time</div>
+              <div className="flex flex-wrap gap-x-2 gap-y-1">
+                {lastWorkoutSetSummary.map((line, idx) => (
+                  <span key={`${line}-${idx}`} className="whitespace-nowrap">
+                    {line}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -913,17 +951,6 @@ const ExerciseCard = ({
               Alternatives
             </Button>
           </div>
-
-          {lastWorkoutData && (
-            <div className="text-xs text-muted-foreground border border-border rounded-lg p-3 bg-muted/20">
-              <div className="font-semibold text-foreground mb-1">Last time</div>
-              {(lastWorkoutData.sets || []).map((s2, idx) => (
-                <div key={idx}>
-                  Set {idx + 1}: {s2.weight} × {s2.reps}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>
