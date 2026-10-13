@@ -87,22 +87,42 @@ const getNextWorkoutTypeFromHistoryAB = () => {
 };
 
 // ✅ NEW: Find the most recent workout containing a specific exercise (by ID or name)
+// but ignore entries with no meaningful load/reps product (weight * reps <= 0).
 const getLastWorkoutForExercise = (exerciseId, exerciseName) => {
-  const workouts = getWorkouts();
-  
-  // Search through all workouts (oldest to newest) to find the most recent one with this exercise
+  const workouts = getWorkouts() || [];
+
   for (const workout of workouts) {
-    if (!workout.exercises) continue;
-    
-    const foundEx = workout.exercises.find(
-      (e) => e.id === exerciseId || e.name === exerciseName
-    );
-    
-    if (foundEx) {
+    if (!workout?.exercises) continue;
+
+    const foundEx = workout.exercises.find((e) => {
+      return (
+        e?.id === exerciseId ||
+        e?.exerciseId === exerciseId ||
+        e?.name === exerciseName ||
+        e?.exerciseName === exerciseName
+      );
+    });
+
+    if (!foundEx) continue;
+
+    const sets = Array.isArray(foundEx.sets)
+      ? foundEx.sets
+      : Array.isArray(foundEx.setsData)
+      ? foundEx.setsData
+      : [];
+
+    const hasMeaningful = sets.some((s) => {
+      const w =
+        Number(s?.weight ?? s?.w ?? s?.load ?? s?.kg ?? s?.lbs ?? s?.value ?? 0) || 0;
+      const r = Number(s?.reps ?? s?.r ?? s?.count ?? 0) || 0;
+      return Number.isFinite(w) && Number.isFinite(r) && w * r > 0;
+    });
+
+    if (hasMeaningful) {
       return foundEx;
     }
   }
-  
+
   return null;
 };
 
