@@ -1,6 +1,6 @@
 // src/App.js
 import React, { useCallback, useMemo, useState } from "react";
-import { History, TrendingUp, Plus, Home, Wrench } from "lucide-react";
+import { History, TrendingUp, Plus, Home, Wrench, RotateCcw } from "lucide-react";
 
 import WelcomePage from "./pages/WelcomePage";
 import HomePage from "./pages/HomePage";
@@ -40,6 +40,10 @@ const PAGES = {
 
 const App = () => {
   const upsideDown = useUpsideDown();
+
+  // Manual flip toggle
+  const [manualFlip, setManualFlip] = useState(false);
+  const flipped = manualFlip || upsideDown;
 
   // ✅ Start on Welcome page
   const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
@@ -143,10 +147,29 @@ const App = () => {
     <SettingsProvider>
       <div
         className={`fixed inset-0 transform-gpu transition-transform duration-350 ease-out ${
-          upsideDown ? "rotate-180" : ""
+          flipped ? "rotate-180" : ""
         }`}
       >
         <div className="flex flex-col h-full bg-background text-foreground">
+          {/* App header (manual flip toggle placed here) */}
+          <header className="h-[var(--app-header-h)] flex items-center justify-between px-3 border-b border-border bg-card z-40">
+            <div className="flex items-center gap-3">
+              <div className="text-lg font-semibold leading-tight">GymItUp</div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setManualFlip((v) => !v)}
+                className="rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                title={manualFlip ? "Unflip screen" : "Flip screen"}
+              >
+                <RotateCcw className="w-5 h-5" />
+                <span className="sr-only">Toggle flip screen</span>
+              </button>
+            </div>
+          </header>
+
           {/* Main Content (ONLY scrolling area) */}
           <main className={`flex-1 overflow-y-auto ${isEditMode ? "" : "pb-20"}`}>
             {renderPage()}
