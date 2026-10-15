@@ -45,6 +45,9 @@ const App = () => {
   const [manualFlip, setManualFlip] = useState(false);
   const flipped = manualFlip || upsideDown;
 
+  // Theme edit target (id of a custom theme to edit)
+  const [themeToEditId, setThemeToEditId] = useState(null);
+
   // ✅ Start on Welcome page
   const [currentPage, setCurrentPage] = useState(PAGES.WELCOME);
 
@@ -70,11 +73,13 @@ const App = () => {
     setCurrentPage(PAGES.HISTORY);
   }, []);
 
-  const openThemeCreator = useCallback(() => {
+  const openThemeCreator = useCallback((themeId = null) => {
+    setThemeToEditId(themeId);
     setCurrentPage(PAGES.THEME_CREATOR);
   }, []);
 
   const closeThemeCreator = useCallback(() => {
+    setThemeToEditId(null);
     setCurrentPage(PAGES.SETTINGS);
   }, []);
 
@@ -128,7 +133,9 @@ const App = () => {
         return <SettingsPage onCreateTheme={openThemeCreator} />;
 
       case PAGES.THEME_CREATOR:
-        return <ThemeCreatorPage onBack={closeThemeCreator} />;
+        return (
+          <ThemeCreatorPage onBack={closeThemeCreator} themeId={themeToEditId} />
+        );
 
       case PAGES.IMPORT_EXPORT:
         return <ImportExportPage />;
