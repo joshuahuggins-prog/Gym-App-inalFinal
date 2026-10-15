@@ -269,7 +269,7 @@ export default function SettingsPage({ onCreateTheme }) {
 
   const handleForceUpdate = async () => {
     const ok = window.confirm(
-      "Update app data (keep data) will:\n\n1) Back up your data\n2) Rebuild local storage\n3) Restore your backup\n\nThis normally keeps all history.\nWe still recommend exporting a manual backup first (Data tab), just in case.\n\nContinue?"
+      "Update app data (keep data) will:\n\n1) Back up your data\n2) Rebuild local storage\n3) Restore your backup\n\nThis normally keeps all history.\nWe still recommend exporting a manual backu[...]"
     );
     if (!ok) return;
 
@@ -712,7 +712,7 @@ export default function SettingsPage({ onCreateTheme }) {
                   <div className="text-sm font-medium">{resetLabel}</div>
 
                   <div className="text-xs text-muted-foreground">
-                    Solve to confirm:{" "}
+                    Solve to confirm: {" "}
                     <span className="font-semibold text-foreground">{challenge.text}</span>
                   </div>
 
