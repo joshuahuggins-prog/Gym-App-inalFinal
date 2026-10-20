@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AimportrrowLeft, Check, MoonStar, Palette, Save, SunMedium, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, MoonStar, Palette, Save, SunMedium, Trash2 } from "lucide-react";
 import AppHeader from "../components/AppHeader";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
